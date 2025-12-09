@@ -1,0 +1,6 @@
+snapchat_memories/
+.venv/
+memories_history.html
+download_errors.json
+downloaded_files.json
+metadata.json

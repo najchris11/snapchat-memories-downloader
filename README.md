@@ -33,12 +33,12 @@ xattr -d com.apple.quarantine ./installer.sh
 ```
 
 5. request the download from snapchat
-5.1. go to [https://accounts.snapchat.com]()
-5.2. click on ``My Data```
-5.3. select ``Export your Memories`` and click ``Request Only Memories```
-5.4. select ``All Time``
-5.5. confirm email and click ``Submit``
-5.6. after some time you'll get a mail with the download link. Follow the instructions and download the data
+- go to [https://accounts.snapchat.com]()
+- click on ``My Data```
+- select ``Export your Memories`` and click ``Request Only Memories```
+- select ``All Time``
+- confirm email and click ``Submit``
+- after some time you'll get a mail with the download link. Follow the instructions and download the data
 
 6. paste the ``memories_history.html`` file in the project root (same folder as ``snapchat-downloader.py``)
 for some reason snapchat doesn't let you download all your memories in a single (or multiple) zip files, but just gives you a html file (which is buggy at least for me) which lets you download all your memories.

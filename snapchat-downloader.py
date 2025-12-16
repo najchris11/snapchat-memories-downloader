@@ -258,6 +258,7 @@ def process_files_in_folder(folder_path, date_str):
     
     if success_count > 0 or skip_count > 0:
         print(f"[ZIP-CONTENT] {success_count} files updated with metadata, {skip_count} skipped.")
+        print(f"[ZIP-CONTENT] {success_count} files updated with metadata, {skip_count} skipped.")
 
 def log_error(unique_id, url, date_str, error_message, index):
     """Store failed downloads in a separate JSON file."""
@@ -273,6 +274,7 @@ def log_error(unique_id, url, date_str, error_message, index):
             with open(ERROR_LOG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(error_log, f, indent=2, ensure_ascii=False)
         except Exception as e:
+            print(f"[ERROR LOG] Failed to save error list: {e}")
             print(f"[ERROR LOG] Failed to save error list: {e}")
 
 def download_file(url, is_get_request, date_str=None, index=None):
@@ -304,7 +306,6 @@ def download_file(url, is_get_request, date_str=None, index=None):
         r.raise_for_status()
         
         content_type = r.headers.get('Content-Type', '')
-
         # Generate filename (without suffix logic)
         filepath, filename = build_filename(unique_id, date_str, content_type, url)
         
@@ -362,6 +363,11 @@ if TEST_MODE:
     total_test_files = MAX_WORKERS * TEST_FILES_PER_THREAD
     download_tasks = download_tasks[:total_test_files]
     print(f"\n*** TEST MODE ACTIVE: only downloading {len(download_tasks)} files ({TEST_FILES_PER_THREAD} per thread) ***\n")
+ # Test mode: limit number of downloads
+ if TEST_MODE:
+     total_test_files = MAX_WORKERS * TEST_FILES_PER_THREAD
+     download_tasks = download_tasks[:total_test_files]
+     print(f"\n*** TEST MODE ACTIVE: only downloading {len(download_tasks)} files ({TEST_FILES_PER_THREAD} per thread) ***\n")
 
 # Statistics
 print(f"\nAlready downloaded: {len(downloaded_files)} files")

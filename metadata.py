@@ -65,7 +65,7 @@ def extract_locations_from_html(html_file):
                     'latitude': latitude,
                     'longitude': longitude
                 })
-                break  # Nur eine Location pro Zeile
+                break  # Only one location per line
     
     return locations
 
@@ -103,12 +103,12 @@ def write_gps_to_file(filepath, latitude, longitude):
         file_ext = os.path.splitext(filepath)[1].lower()
         filename = os.path.basename(filepath)
         
-        # Skip overlay/thumbnail helper files
+    # Skip overlay/thumbnail helper files
         if '-overlay' in filename.lower() or 'thumbnail' in filename.lower():
             return False
         
         # Convert to EXIF GPS format
-        # GPSLatitude and GPSLongitude need refs (N/S, E/W)
+    # GPSLatitude and GPSLongitude need refs (N/S, E/W)
         lat_ref = 'N' if latitude >= 0 else 'S'
         lon_ref = 'E' if longitude >= 0 else 'W'
         
@@ -198,13 +198,12 @@ def main():
     print(f"📍 Extracting GPS coordinates from '{HTML_FILE}'...")
     locations = extract_locations_from_html(HTML_FILE)
     print(f"✅ {len(locations)} GPS coordinates found")
-    
     # Extract URLs for mapping
     urls = extract_urls_from_html(HTML_FILE)
     print(f"✅ {len(urls)} URLs found")
     print()
     
-    # Erstelle Metadata
+    # Create Metadata
     metadata = {}
     files_with_location = 0
     files_without_location = 0
@@ -214,14 +213,14 @@ def main():
     for i, url in enumerate(urls):
         unique_id = extract_unique_id_from_url(url)
         
-        # Ensure the file was downloaded
+    # Ensure the file was downloaded
         if unique_id not in downloaded_files:
             continue
         
         file_info = downloaded_files[unique_id]
         filename = file_info.get('filename')
         
-        # Add GPS coordinates when available
+    # Add GPS coordinates when available
         location = locations[i] if i < len(locations) else None
         
         metadata[unique_id] = {

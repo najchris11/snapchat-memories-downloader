@@ -132,7 +132,6 @@ def process_folders(directory, dry_run=True):
             for delete_file in dup['delete']:
                 delete_filename = os.path.basename(delete_file)
                 print(f"   🗑️  DELETE:  {delete_filename}")
-                
                 if not dry_run:
                     try:
                         os.remove(delete_file)

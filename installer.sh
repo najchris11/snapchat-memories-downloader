@@ -29,11 +29,11 @@ if [[ "$OSTYPE" != "darwin"* ]]; then
     exit 1
 fi
 
-print_info "Installation startet..."
+print_info "Installation starting..."
 echo ""
 
 # 1. Install Homebrew if missing
-echo "Step 1/4: Checking Homebrew..."
+echo "Step 1/5: Checking Homebrew..."
 if ! command -v brew &> /dev/null; then
     print_info "Installing Homebrew..."
     print_info "You might be asked for your password."
@@ -52,7 +52,7 @@ fi
 echo ""
 
 # 2. Install Python3
-echo "Step 2/4: Checking Python3..."
+echo "Step 2/5: Check Python3..."
 if ! command -v python3 &> /dev/null; then
     print_info "Installing Python3..."
     brew install python3
@@ -64,7 +64,7 @@ fi
 echo ""
 
 # 3. Install ExifTool
-echo "Step 3/4: Checking ExifTool..."
+echo "Step 3/5: Check ExifTool..."
 if ! command -v exiftool &> /dev/null; then
     print_info "Installing ExifTool..."
     brew install exiftool
@@ -75,8 +75,8 @@ fi
 echo ""
 
 # 4. Install Python libraries
-echo "Step 4/4: Installing Python libraries..."
-print_info "Installing: requests, beautifulsoup4..."
+echo "Step 4/5: Install Python libraries..."
+print_info "Installing: requests, beautifulsoup4, Pillow..."
 
 # Ensure pip3 is available
 if ! command -v pip3 &> /dev/null; then
@@ -85,28 +85,45 @@ if ! command -v pip3 &> /dev/null; then
 fi
 
 pip3 install --upgrade pip --quiet
-pip3 install requests beautifulsoup4 --quiet
+pip3 install requests beautifulsoup4 Pillow --quiet
 
 print_success "Python libraries installed!"
 echo ""
 
-# Installation abgeschlossen
+# 5. Optional: Install FFmpeg for video overlay combining
+echo "Step 5/5: Check FFmpeg (optional, for video overlays)..."
+if ! command -v ffmpeg &> /dev/null; then
+    print_info "FFmpeg not found. This is optional but needed for combining video overlays."
+    read -p "Install FFmpeg? (y/n): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        brew install ffmpeg
+        print_success "FFmpeg installed!"
+    else
+        print_info "Skipped FFmpeg installation. Videos with overlays won't be combined."
+    fi
+else
+    print_success "FFmpeg is already installed!"
+fi
+echo ""
+
+# Installation completed
 echo "=========================================="
 print_success "Installation completed successfully!"
 echo "=========================================="
 echo ""
-echo "📝 Next steps:"
+echo "📝 Next Steps:"
 echo ""
 echo "1. Download your Snapchat Memories HTML file"
-echo "   (From Snapchat: Settings → My Data → Download My Data)"
+echo "   (from Snapchat: Settings → My Data → Download Data)"
 echo ""
-echo "2. Place the HTML file in the same folder as"
-echo "   the 'snapchat_downloader.py' script"
+echo "2. Place the HTML file in the same folder as the"
+echo "   'snapchat_downloader.py' script"
 echo ""
 echo "3. Rename the HTML file to: memories_history.html"
 echo ""
 echo "4. Open Terminal and navigate to the folder:"
-echo "   cd /Pfad/zum/Ordner"
+echo "   cd /Path/to/folder"
 echo ""
 echo "5. Run the script:"
 echo "   python3 snapchat_downloader.py"
@@ -114,14 +131,14 @@ echo ""
 echo "=========================================="
 echo ""
 
-# Optional: open the script folder
-read -p "Open the downloads folder now? (y/n): " -n 1 -r
+# Optional: Open script folder
+read -p "Do you want to open the downloads folder now? (y/n): " -n 1 -r
 echo
-if [[ $REPLY =~ ^[JjYy]$ ]]; then
-    # Open the folder containing the script
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    # Open the folder where the script is located
     SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
     open "$SCRIPT_DIR"
 fi
 
 echo ""
-print_success "Happy downloading! 📸"
+print_success "Good luck downloading your memories! 📸"

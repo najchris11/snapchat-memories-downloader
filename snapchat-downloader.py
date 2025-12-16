@@ -363,11 +363,6 @@ if TEST_MODE:
     total_test_files = MAX_WORKERS * TEST_FILES_PER_THREAD
     download_tasks = download_tasks[:total_test_files]
     print(f"\n*** TEST MODE ACTIVE: only downloading {len(download_tasks)} files ({TEST_FILES_PER_THREAD} per thread) ***\n")
- # Test mode: limit number of downloads
- if TEST_MODE:
-     total_test_files = MAX_WORKERS * TEST_FILES_PER_THREAD
-     download_tasks = download_tasks[:total_test_files]
-     print(f"\n*** TEST MODE ACTIVE: only downloading {len(download_tasks)} files ({TEST_FILES_PER_THREAD} per thread) ***\n")
 
 # Statistics
 print(f"\nAlready downloaded: {len(downloaded_files)} files")

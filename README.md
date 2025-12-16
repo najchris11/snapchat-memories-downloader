@@ -27,14 +27,31 @@ which python
 Get-Command python
 ```
 
-4. run install script (mac/linux)
+4. Install dependencies
+
+**For Mac/Linux:**
 ```bash
 chmod +x ./installer.sh
-./install.sh
+./installer.sh
 ```
+
 helper if operation not permitted (mac):
 ```bash
 xattr -d com.apple.quarantine ./installer.sh
+```
+
+**For Windows:**
+```powershell
+# Install Python packages
+pip install requests beautifulsoup4
+
+# Install exiftool via Chocolatey (if installed)
+choco install exiftool
+
+# Or install exiftool via WinGet
+winget install exiftool
+
+# Or install exiftool manually from https://exiftool.org/
 ```
 
 5. request the download from snapchat

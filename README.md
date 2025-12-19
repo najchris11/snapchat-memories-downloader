@@ -5,30 +5,46 @@ Since snapchat wants you to pay for more than 5gb of snapchat memories, I made a
 
 This is a fork of [ManuelPuchner/snapchat-memories-downloader](https://github.com/ManuelPuchner/snapchat-memories-downloader) with improvements for zero-setup usage and test mode. Thanks to Manuel and [Nick](https://github.com/nrc2358) for the original implementation! 🙏
 
-# How to run
+# How to Run
 
-## Quick Start (macOS)
+## GUI (Recommended)
+
+The GUI provides a one‑click setup and an easy workflow runner.
 
 ```bash
-chmod +x ./installer.sh
-./installer.sh
+cd gui
+npm install
+npm run electron-dev
 ```
 
-This script will:
-1. Install Homebrew (if needed)
-2. Install Python 3, exiftool, and optionally FFmpeg
-3. Create a Python virtual environment
-4. Install Python dependencies
-5. Launch the downloader orchestrator
+- Click "Setup Environment" to install all required tools.
+- Then select your `memories_history.html` and click "Start Download".
 
-## Manual Setup (macOS/Linux/Windows)
+### Requirements (GUI enforces these)
+- Python 3.10+ with `pip`
+- `exiftool` (required for writing GPS metadata to files)
+- `ffmpeg` (required for combining video overlays)
 
-1. Create a Python venv:
+### OS‑Specific Setup
+- **macOS:** The GUI runs `installer.sh` which uses Homebrew to install Python, ExifTool, and FFmpeg, sets up `.venv`, and installs `requirements.txt`.
+- **Windows:** The GUI runs `installer.ps1` which uses `winget` to install Python, ExifTool, and FFmpeg, sets up `.venv`, and installs `requirements.txt`.
+- **Linux:** The GUI shows a modal with exact commands. Install the required packages manually:
+	- `sudo apt update && sudo apt install python3 python3-pip python3-venv exiftool ffmpeg`
+	- `python3 -m venv .venv && source .venv/bin/activate`
+	- `pip install -r requirements.txt`
+
+The installers prepare the environment only; the GUI handles running workflows.
+
+## CLI (Alternative)
+
+Manual setup for CLI usage (outside the GUI):
+
+1) Create a Python venv:
 ```bash
 python3 -m venv .venv
 ```
 
-2. Activate the venv:
+2) Activate the venv:
 ```bash
 # macOS/Linux
 source .venv/bin/activate
@@ -37,20 +53,22 @@ source .venv/bin/activate
 .\.venv\Scripts\Activate.ps1
 ```
 
-3. Install dependencies:
+3) Install Python dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-4. (Optional) Install system tools:
+4) Install required system tools:
 ```bash
 # macOS
 brew install exiftool ffmpeg
 
 # Linux
-apt install exiftool ffmpeg
+sudo apt install exiftool ffmpeg
 
-# Windows: use Chocolatey or manual install from exiftool.org
+# Windows: install via winget or use Chocolatey/manual installers
+#   winget install -e --id PhilHarvey.ExifTool
+#   winget install -e --id FFmpeg.FFmpeg
 ```
 
 ## Request & Download Data
@@ -62,7 +80,7 @@ apt install exiftool ffmpeg
 5. Download and extract the HTML file
 6. Place `memories_history.html` in the project root
 
-## Run the Orchestrator
+## Run the Orchestrator (CLI)
 
 ```bash
 python3 run_all.py              # Interactive menu
@@ -76,7 +94,7 @@ Or use individual scripts:
 - `python3 combine_overlays.py` – Merge overlays (set `DRY_RUN=False` first)
 - `python3 delete-dupes.py` – Remove duplicates (set `DRY_RUN=False` first)
 
-### Optional: Parallel Workers
+### Parallel Workers
 
 Pass `--workers=N` to any script to control concurrency:
 ```bash

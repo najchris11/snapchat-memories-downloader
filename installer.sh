@@ -90,20 +90,14 @@ pip3 install requests beautifulsoup4 Pillow --quiet
 print_success "Python libraries installed!"
 echo ""
 
-# 5. Optional: Install FFmpeg for video overlay combining
-echo "Step 5/5: Check FFmpeg (optional, for video overlays)..."
+# 5. Install FFmpeg (required for video overlays)
+echo "Step 5/5: Check FFmpeg (required)..."
 if ! command -v ffmpeg &> /dev/null; then
-    print_info "FFmpeg not found. This is optional but needed for combining video overlays."
-    read -p "Install FFmpeg? (y/n): " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        brew install ffmpeg
-        print_success "FFmpeg installed!"
-    else
-        print_info "Skipped FFmpeg installation. Videos with overlays won't be combined."
-    fi
+    print_info "Installing FFmpeg..."
+    brew install ffmpeg
+    print_success "FFmpeg installed!"
 else
-    print_success "FFmpeg is already installed!"
+    print_success "FFmpeg already installed!"
 fi
 echo ""
 
@@ -137,6 +131,6 @@ print_success "Environment ready!"
 echo "=========================================="
 echo ""
 
-# Run the orchestrator with any passed arguments
-print_info "Starting downloader..."
-python3 run_all.py "$@"
+# In GUI mode, the app will handle running workflows.
+# This installer prepares the environment only.
+exit 0

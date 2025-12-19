@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Snapchat Memories Downloader - macOS installer
-# This script installs all required dependencies
+# Snapchat Memories Downloader - macOS installer & runner
+# This script installs dependencies and runs the orchestrator
 
 set -e  # Exit on any error
 
@@ -108,37 +108,35 @@ fi
 echo ""
 
 # Installation completed
-echo "=========================================="
 print_success "Installation completed successfully!"
-echo "=========================================="
-echo ""
-echo "📝 Next Steps:"
-echo ""
-echo "1. Download your Snapchat Memories HTML file"
-echo "   (from Snapchat: Settings → My Data → Download Data)"
-echo ""
-echo "2. Place the HTML file in the same folder as the"
-echo "   'snapchat_downloader.py' script"
-echo ""
-echo "3. Rename the HTML file to: memories_history.html"
-echo ""
-echo "4. Open Terminal and navigate to the folder:"
-echo "   cd /Path/to/folder"
-echo ""
-echo "5. Run the script:"
-echo "   python3 snapchat_downloader.py"
-echo ""
-echo "=========================================="
 echo ""
 
-# Optional: Open script folder
-read -p "Do you want to open the downloads folder now? (y/n): " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    # Open the folder where the script is located
-    SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-    open "$SCRIPT_DIR"
+# Now set up Python venv and run orchestrator
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$SCRIPT_DIR"
+
+# Create/activate venv for orchestrator if needed
+if [ ! -d ".venv" ]; then
+    print_info "Setting up Python virtual environment..."
+    python3 -m venv .venv
+fi
+
+print_info "Activating virtual environment..."
+source .venv/bin/activate
+
+# Install Python requirements
+print_info "Installing Python dependencies..."
+pip install -q --upgrade pip
+if [ -f "requirements.txt" ]; then
+    pip install -q -r requirements.txt
 fi
 
 echo ""
-print_success "Good luck downloading your memories! 📸"
+echo "=========================================="
+print_success "Environment ready!"
+echo "=========================================="
+echo ""
+
+# Run the orchestrator with any passed arguments
+print_info "Starting downloader..."
+python3 run_all.py "$@"

@@ -4,12 +4,15 @@ Script to detect and remove duplicates in extracted ZIP folders.
 """
 
 import os
+import sys
 import hashlib
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Configuration
 DOWNLOAD_FOLDER = 'snapchat_memories'
 DRY_RUN = True  # Set to False to actually delete files
+MAX_WORKERS = max(2, (os.cpu_count() or 4))
 
 def calculate_file_hash(filepath):
     """Calculate SHA256 hash for a file."""
@@ -80,55 +83,46 @@ def find_duplicates_in_folder(folder_path):
     return duplicates
 
 def process_folders(directory, dry_run=True):
-    """Process all folders and find duplicates."""
+    """Process all folders and find duplicates (parallelize scanning)."""
     if not os.path.exists(directory):
         print(f"❌ Folder '{directory}' does not exist!")
         return
-    
-    folders_with_duplicates = []
-    total_duplicates = 0
-    deleted_count = 0
-    
-    # Iterate through all subfolders
-    for item in os.listdir(directory):
-        item_path = os.path.join(directory, item)
-        
-        if os.path.isdir(item_path):
-            duplicates = find_duplicates_in_folder(item_path)
-            
-            if duplicates:
-                folders_with_duplicates.append({
-                    'folder': item,
-                    'path': item_path,
-                    'duplicates': duplicates
-                })
-                
-                # Count all files to delete
-                for dup in duplicates:
-                    total_duplicates += len(dup['delete'])
-    
+
+    subfolders = [f for f in os.listdir(directory) if os.path.isdir(os.path.join(directory, f))]
+    results = []
+
+    def _scan_one(folder_name):
+        folder_path = os.path.join(directory, folder_name)
+        duplicates = find_duplicates_in_folder(folder_path)
+        return {'folder': folder_name, 'path': folder_path, 'duplicates': duplicates}
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
+        futures = [ex.submit(_scan_one, f) for f in subfolders]
+        for fut in as_completed(futures):
+            results.append(fut.result())
+
+    folders_with_duplicates = [r for r in results if r['duplicates']]
     if not folders_with_duplicates:
         print("✅ No duplicates found!")
         return
-    
+
+    total_duplicates = sum(len(dup['delete']) for r in folders_with_duplicates for dup in r['duplicates'])
+    deleted_count = 0
+
     print(f"📊 Found {len(folders_with_duplicates)} folder(s) with duplicates")
     print(f"🗑️  Total duplicates to delete: {total_duplicates}\n")
     print("=" * 80)
     print()
-    
-    # Process each folder
+
     for folder_info in folders_with_duplicates:
         folder_name = folder_info['folder']
         duplicates = folder_info['duplicates']
-        
         print(f"📁 {folder_name}/")
         print(f"   Found: {len(duplicates)} duplicate group(s)")
         print()
-        
         for dup in duplicates:
             keep_file = os.path.basename(dup['keep'])
             print(f"   ✅ KEEP: {keep_file}")
-            
             for delete_file in dup['delete']:
                 delete_filename = os.path.basename(delete_file)
                 print(f"   🗑️  DELETE:  {delete_filename}")
@@ -139,17 +133,14 @@ def process_folders(directory, dry_run=True):
                         print(f"      → Deleted!")
                     except Exception as e:
                         print(f"      ❌ Error: {e}")
-            
             print()
-        
         print("-" * 80)
         print()
-    
-    # Summary
+
     print("=" * 80)
     print("SUMMARY")
     print("=" * 80)
-    
+
     if dry_run:
         print("⚠️  DRY RUN MODE - No files deleted!")
         print()
@@ -169,6 +160,13 @@ def main():
     print("=" * 80)
     print()
     
+    for a in sys.argv[1:]:
+        if a.startswith('--workers='):
+            try:
+                MAX_WORKERS = max(1, int(a.split('=', 1)[1]))
+            except ValueError:
+                pass
+
     if DRY_RUN:
         print("⚠️  DRY RUN MODE - Preview only, no changes")
         print()

@@ -1,4 +1,5 @@
 import os
+import sys
 import re
 import json
 import requests
@@ -20,9 +21,35 @@ MAX_WORKERS = 5  # Number of parallel downloads
 TEST_MODE = False  # Set to True to enable test mode
 TEST_FILES_PER_THREAD = 5  # Number of files per thread when test mode is enabled
 USE_EXIFTOOL = True  # Set to False if exiftool is not available
+# Optional test limit when called with --test N
+TEST_LIMIT = None
 # ----------------------------------------
 
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
+# Simple CLI parsing for test mode and optional worker override
+def _parse_args():
+    global TEST_MODE, TEST_FILES_PER_THREAD, MAX_WORKERS, TEST_LIMIT
+    args = sys.argv[1:]
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == '--test':
+            TEST_MODE = True
+            if i + 1 < len(args) and args[i + 1].isdigit():
+                try:
+                    TEST_LIMIT = int(args[i + 1])
+                    i += 1
+                except ValueError:
+                    pass
+        elif a.startswith('--workers='):
+            try:
+                MAX_WORKERS = int(a.split('=', 1)[1])
+            except ValueError:
+                pass
+        i += 1
+
+_parse_args()
+
 
 # Thread lock for JSON writes
 json_lock = threading.Lock()
@@ -360,9 +387,13 @@ for i, (url, is_get) in enumerate(matches):
 
 # Test mode: limit number of downloads
 if TEST_MODE:
-    total_test_files = MAX_WORKERS * TEST_FILES_PER_THREAD
-    download_tasks = download_tasks[:total_test_files]
-    print(f"\n*** TEST MODE ACTIVE: only downloading {len(download_tasks)} files ({TEST_FILES_PER_THREAD} per thread) ***\n")
+    if TEST_LIMIT is not None:
+        download_tasks = download_tasks[:TEST_LIMIT]
+        print(f"\n*** TEST MODE ACTIVE: only downloading {len(download_tasks)} files ***\n")
+    else:
+        total_test_files = MAX_WORKERS * TEST_FILES_PER_THREAD
+        download_tasks = download_tasks[:total_test_files]
+        print(f"\n*** TEST MODE ACTIVE: only downloading {len(download_tasks)} files ({TEST_FILES_PER_THREAD} per thread) ***\n")
 
 # Statistics
 print(f"\nAlready downloaded: {len(downloaded_files)} files")

@@ -6,9 +6,11 @@ For videos, it uses FFmpeg to overlay the PNG.
 """
 
 import os
+import sys
 import shutil
 import subprocess
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
     from PIL import Image
@@ -25,6 +27,7 @@ DELETE_FOLDER_AFTER = True  # Delete the folder after combining (keeps only the 
 KEEP_ORIGINALS = False  # Keep original main and overlay files in the folder
 USE_EXIFTOOL = True  # Copy metadata from main image to combined image
 PROCESS_VIDEOS = True  # Process video files with FFmpeg
+MAX_WORKERS = max(2, (os.cpu_count() or 4))
 
 def check_exiftool():
     """Checks if exiftool is installed"""
@@ -218,116 +221,111 @@ def copy_metadata(source_path, dest_path):
 def process_folders(directory, dry_run=True):
     """Processes all overlay folders and combines images/videos"""
     overlay_folders = find_overlay_folders(directory)
-    
     if not overlay_folders:
         print("✅ No overlay folders found to process!")
         return
-    
-    # Separate images and videos
+
     image_folders = [f for f in overlay_folders if is_image_file(f['main'])]
     video_folders = [f for f in overlay_folders if is_video_file(f['main'])]
-    
+
     print(f"📊 Found {len(overlay_folders)} folders with overlays")
     print(f"   📷 Images: {len(image_folders)}")
     print(f"   🎬 Videos: {len(video_folders)}")
     print()
-    
+
     if video_folders and not ffmpeg_available:
         print("⚠️  FFmpeg not found - video overlays will be skipped")
         print("   Install FFmpeg: brew install ffmpeg (mac) or apt install ffmpeg (linux)")
         print()
-    
+
     if image_folders and not PILLOW_AVAILABLE:
         print("⚠️  Pillow not found - image overlays will be skipped")
         print("   Install Pillow: pip install Pillow")
         print()
-    
+
     print("=" * 80)
     print()
-    
-    success_count = 0
-    error_count = 0
-    skipped_count = 0
-    
-    for folder_info in overlay_folders:
+
+    def _process_one(folder_info):
         folder_name = folder_info['folder']
         folder_path = folder_info['path']
         main_file = folder_info['main']
         overlay_file = folder_info['overlay']
-        
-        # Determine output filename
+
         main_ext = os.path.splitext(main_file)[1]
         output_filename = folder_name + main_ext
         output_path = os.path.join(directory, output_filename)
-        
+
         is_video = is_video_file(main_file)
         file_type = "🎬" if is_video else "📷"
-        
-        print(f"{file_type} {folder_name}/")
-        print(f"   Main:    {os.path.basename(main_file)}")
-        print(f"   Overlay: {os.path.basename(overlay_file)}")
-        print(f"   Output:  {output_filename}")
-        
+
+        # Collect output logs per task to avoid interleaved printing
+        logs = []
+        logs.append(f"{file_type} {folder_name}/")
+        logs.append(f"   Main:    {os.path.basename(main_file)}")
+        logs.append(f"   Overlay: {os.path.basename(overlay_file)}")
+        logs.append(f"   Output:  {output_filename}")
+
         if dry_run:
             if is_video and not ffmpeg_available:
-                print("   ⏭️  [DRY RUN] Would skip (FFmpeg not available)")
-                skipped_count += 1
+                logs.append("   ⏭️  [DRY RUN] Would skip (FFmpeg not available)")
+                return (0, 1, 0, logs)
             elif not is_video and not PILLOW_AVAILABLE:
-                print("   ⏭️  [DRY RUN] Would skip (Pillow not available)")
-                skipped_count += 1
+                logs.append("   ⏭️  [DRY RUN] Would skip (Pillow not available)")
+                return (0, 1, 0, logs)
             else:
-                print("   ⏭️  [DRY RUN] Would combine and create output")
-                success_count += 1
+                logs.append("   ⏭️  [DRY RUN] Would combine and create output")
+                return (1, 0, 0, logs)
         else:
-            # Determine which combine function to use
-            combine_success = False
-            
             if is_video:
                 if ffmpeg_available:
-                    combine_success = combine_video_with_overlay(main_file, overlay_file, output_path)
+                    ok = combine_video_with_overlay(main_file, overlay_file, output_path)
                 else:
-                    print("   ⏭️  Skipped (FFmpeg not available)")
-                    skipped_count += 1
-                    print()
-                    continue
+                    logs.append("   ⏭️  Skipped (FFmpeg not available)")
+                    return (0, 1, 0, logs)
             else:
                 if PILLOW_AVAILABLE:
-                    combine_success = combine_images(main_file, overlay_file, output_path)
+                    ok = combine_images(main_file, overlay_file, output_path)
                 else:
-                    print("   ⏭️  Skipped (Pillow not available)")
-                    skipped_count += 1
-                    print()
-                    continue
-            
-            if combine_success:
-                print("   ✅ Combined successfully!")
-                
-                # Copy metadata from main file
+                    logs.append("   ⏭️  Skipped (Pillow not available)")
+                    return (0, 1, 0, logs)
+
+            if ok:
+                logs.append("   ✅ Combined successfully!")
                 if exiftool_available:
                     if copy_metadata(main_file, output_path):
-                        print("   📋 Metadata copied")
+                        logs.append("   📋 Metadata copied")
                     else:
-                        print("   ⚠️  Could not copy metadata")
-                
-                # Delete the folder if configured
+                        logs.append("   ⚠️  Could not copy metadata")
                 if DELETE_FOLDER_AFTER and not KEEP_ORIGINALS:
                     try:
                         shutil.rmtree(folder_path)
-                        print("   🗑️  Folder deleted")
+                        logs.append("   🗑️  Folder deleted")
                     except Exception as e:
-                        print(f"   ⚠️  Could not delete folder: {e}")
-                
-                success_count += 1
+                        logs.append(f"   ⚠️  Could not delete folder: {e}")
+                return (1, 0, 0, logs)
             else:
-                error_count += 1
-        
-        print()
-    
-    # Summary
+                logs.append("   ❌ Error while combining")
+                return (0, 0, 1, logs)
+
+    success_count = 0
+    error_count = 0
+    skipped_count = 0
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
+        futures = [ex.submit(_process_one, f) for f in overlay_folders]
+        for fut in as_completed(futures):
+            s, sk, e, logs = fut.result()
+            success_count += s
+            skipped_count += sk
+            error_count += e
+            for line in logs:
+                print(line)
+            print()
+
     print("=" * 80)
     print("SUMMARY")
     print("=" * 80)
-    
     if dry_run:
         print("⚠️  DRY RUN MODE - No changes made!")
         print()
@@ -375,6 +373,15 @@ def main():
         print("   Install at least one: pip install Pillow  or  brew install ffmpeg")
         return
     
+    # Optional workers flag
+    for i, a in enumerate(sys.argv[1:]):
+        if a.startswith('--workers='):
+            try:
+                val = int(a.split('=', 1)[1])
+                globals()['MAX_WORKERS'] = max(1, val)
+            except ValueError:
+                pass
+
     if DRY_RUN:
         print("⚠️  DRY RUN MODE - Preview only, no changes")
         print()

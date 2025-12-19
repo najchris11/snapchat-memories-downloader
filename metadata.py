@@ -4,11 +4,13 @@ Script to extract GPS coordinates from HTML and write them to files.
 """
 
 import os
+import sys
 import re
 import json
 import subprocess
 from bs4 import BeautifulSoup
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Configuration
 HTML_FILE = 'memories_history.html'
@@ -16,6 +18,7 @@ DOWNLOADED_FILES_JSON = 'downloaded_files.json'
 METADATA_JSON = 'metadata.json'
 DOWNLOAD_FOLDER = 'snapchat_memories'
 USE_EXIFTOOL = True
+MAX_WORKERS = max(2, (os.cpu_count() or 4))
 
 def check_exiftool():
     """Check whether exiftool is installed."""
@@ -170,6 +173,13 @@ def main():
     print("Location Metadata Extractor & Writer")
     print("=" * 60)
     print()
+
+    for a in sys.argv[1:]:
+        if a.startswith('--workers='):
+            try:
+                MAX_WORKERS = max(1, int(a.split('=', 1)[1]))
+            except ValueError:
+                pass
     
     # Check exiftool
     if USE_EXIFTOOL and not exiftool_available:
@@ -210,50 +220,54 @@ def main():
     gps_written_count = 0
     gps_failed_count = 0
     
+    tasks = []
     for i, url in enumerate(urls):
         unique_id = extract_unique_id_from_url(url)
-        
-    # Ensure the file was downloaded
         if unique_id not in downloaded_files:
             continue
-        
         file_info = downloaded_files[unique_id]
         filename = file_info.get('filename')
-        
-    # Add GPS coordinates when available
         location = locations[i] if i < len(locations) else None
-        
+
         metadata[unique_id] = {
             'filename': filename,
             'date': file_info.get('date'),
             'content_type': file_info.get('content_type'),
             'location': location
         }
-        
+
         if location:
             files_with_location += 1
-            
-            # Write GPS into file
             if exiftool_available:
                 filepath = os.path.join(DOWNLOAD_FOLDER, filename)
-                
-                # Check whether it's a file or an extracted ZIP folder
                 if os.path.isfile(filepath):
-                    if write_gps_to_file(filepath, location['latitude'], location['longitude']):
-                        gps_written_count += 1
-                        print(f"✅ GPS written: {filename}")
-                    else:
-                        gps_failed_count += 1
-                        print(f"⚠️  GPS failed: {filename}")
-                
+                    tasks.append(('file', filepath, location['latitude'], location['longitude']))
                 elif os.path.isdir(filepath.replace('.zip', '')):
-                    # Extracted ZIP folder
                     folder_path = filepath.replace('.zip', '')
-                    count = process_files_in_folder(folder_path, location['latitude'], location['longitude'])
-                    gps_written_count += count
-                    print(f"✅ GPS written for {count} files in: {os.path.basename(folder_path)}/")
+                    # Collect all eligible files inside folder for parallel writing
+                    for root, dirs, files in os.walk(folder_path):
+                        for f in files:
+                            fp = os.path.join(root, f)
+                            if fp.lower().endswith(('.jpg', '.jpeg', '.png', '.mp4', '.mov', '.avi')):
+                                tasks.append(('file', fp, location['latitude'], location['longitude']))
         else:
             files_without_location += 1
+
+    if exiftool_available and tasks:
+        def _do_gps(t):
+            _, path, lat, lon = t
+            ok = write_gps_to_file(path, lat, lon)
+            return (path, ok)
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
+            futures = [ex.submit(_do_gps, t) for t in tasks]
+            for fut in as_completed(futures):
+                path, ok = fut.result()
+                if ok:
+                    gps_written_count += 1
+                    print(f"✅ GPS written: {os.path.basename(path)}")
+                else:
+                    gps_failed_count += 1
+                    print(f"⚠️  GPS failed: {os.path.basename(path)}")
     
     # Save metadata.json
     print()

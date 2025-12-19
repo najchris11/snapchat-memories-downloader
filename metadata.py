@@ -13,12 +13,29 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Configuration
+import argparse
+
+# Configuration
 HTML_FILE = 'memories_history.html'
 DOWNLOADED_FILES_JSON = 'downloaded_files.json'
 METADATA_JSON = 'metadata.json'
 DOWNLOAD_FOLDER = 'snapchat_memories'
 USE_EXIFTOOL = True
 MAX_WORKERS = max(2, (os.cpu_count() or 4))
+
+def parse_args():
+    global HTML_FILE, MAX_WORKERS
+    parser = argparse.ArgumentParser(description="Location Metadata Extractor")
+    parser.add_argument('input', nargs='?', help='Path to memories_history.html')
+    parser.add_argument('--workers', type=int, help='Number of parallel workers')
+    args = parser.parse_args()
+    
+    if args.input:
+        HTML_FILE = args.input
+    if args.workers:
+        MAX_WORKERS = args.workers
+
+parse_args()
 
 def check_exiftool():
     """Check whether exiftool is installed."""

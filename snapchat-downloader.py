@@ -13,6 +13,9 @@ from datetime import datetime
 from pathlib import Path
 
 # ---------------- CONFIG ----------------
+import argparse
+
+# ---------------- CONFIG ----------------
 HTML_FILE = 'memories_history.html'
 DOWNLOAD_FOLDER = 'snapchat_memories'
 LOG_FILE = 'downloaded_files.json'
@@ -26,27 +29,25 @@ TEST_LIMIT = None
 # ----------------------------------------
 
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
-# Simple CLI parsing for test mode and optional worker override
+
 def _parse_args():
-    global TEST_MODE, TEST_FILES_PER_THREAD, MAX_WORKERS, TEST_LIMIT
-    args = sys.argv[1:]
-    i = 0
-    while i < len(args):
-        a = args[i]
-        if a == '--test':
-            TEST_MODE = True
-            if i + 1 < len(args) and args[i + 1].isdigit():
-                try:
-                    TEST_LIMIT = int(args[i + 1])
-                    i += 1
-                except ValueError:
-                    pass
-        elif a.startswith('--workers='):
-            try:
-                MAX_WORKERS = int(a.split('=', 1)[1])
-            except ValueError:
-                pass
-        i += 1
+    global TEST_MODE, MAX_WORKERS, TEST_LIMIT, HTML_FILE
+    parser = argparse.ArgumentParser(description="Snapchat Memories Downloader")
+    parser.add_argument('input', nargs='?', help='Path to memories_history.html')
+    parser.add_argument('--test', nargs='?', const=0, type=int, help='Test mode: limit downloads to N files (default: 0)')
+    parser.add_argument('--workers', type=int, help='Number of parallel workers')
+    
+    args = parser.parse_args()
+    
+    if args.input:
+        HTML_FILE = args.input
+    
+    if args.test is not None:
+        TEST_MODE = True
+        TEST_LIMIT = args.test
+        
+    if args.workers:
+        MAX_WORKERS = args.workers
 
 _parse_args()
 

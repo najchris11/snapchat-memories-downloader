@@ -4,9 +4,7 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'gui/**'
-      - '.github/workflows/release.yml'
+  workflow_dispatch:
 
 permissions:
   contents: write

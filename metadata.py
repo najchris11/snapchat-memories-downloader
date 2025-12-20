@@ -114,66 +114,85 @@ def extract_unique_id_from_url(url):
         import hashlib
         return hashlib.md5(url.encode()).hexdigest()
 
-def write_gps_to_file(filepath, latitude, longitude):
-    """Write GPS coordinates into the file's EXIF data."""
+def parse_date_string(date_str):
+    """Parse a date string into EXIF-friendly components."""
+    if not date_str:
+        return None
+    try:
+        date_cleaned = date_str.strip()
+        for fmt in [
+            '%Y-%m-%d %H:%M:%S %Z',
+            '%Y-%m-%d %H:%M:%S',
+            '%Y-%m-%d',
+            '%d.%m.%Y %H:%M:%S',
+            '%d.%m.%Y'
+        ]:
+            try:
+                dt = datetime.strptime(date_cleaned.replace('UTC', '').strip(), fmt.replace(' %Z', ''))
+                return dt
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return None
+
+def format_exif_datetime(dt):
+    return dt.strftime('%Y:%m:%d %H:%M:%S') if dt else None
+
+def write_metadata_to_file(filepath, latitude, longitude, date_str=None):
+    """Write GPS (and when available date) into the file's metadata via exiftool."""
     if not exiftool_available:
         return False
-    
+
     if not os.path.exists(filepath):
         return False
-    
+
     try:
         file_ext = os.path.splitext(filepath)[1].lower()
         filename = os.path.basename(filepath)
-        
-    # Skip overlay/thumbnail helper files
+
+        # Skip overlay/thumbnail helper files
         if '-overlay' in filename.lower() or 'thumbnail' in filename.lower():
             return False
-        
+
         # Convert to EXIF GPS format
-    # GPSLatitude and GPSLongitude need refs (N/S, E/W)
         lat_ref = 'N' if latitude >= 0 else 'S'
         lon_ref = 'E' if longitude >= 0 else 'W'
-        
         abs_lat = abs(latitude)
         abs_lon = abs(longitude)
-        
-        if file_ext in ['.jpg', '.jpeg', '.png']:
-            result = subprocess.run([
-                'exiftool',
-                '-overwrite_original',
-                '-q',
-                f'-GPSLatitude={abs_lat}',
-                f'-GPSLatitudeRef={lat_ref}',
-                f'-GPSLongitude={abs_lon}',
-                f'-GPSLongitudeRef={lon_ref}',
-                filepath
-            ], capture_output=True)
-            
-            return result.returncode == 0
-            
-        elif file_ext in ['.mp4', '.mov', '.avi']:
-            result = subprocess.run([
-                'exiftool',
-                '-overwrite_original',
-                '-q',
-                f'-GPSLatitude={abs_lat}',
-                f'-GPSLatitudeRef={lat_ref}',
-                f'-GPSLongitude={abs_lon}',
-                f'-GPSLongitudeRef={lon_ref}',
-                filepath
-            ], capture_output=True)
-            
-            return result.returncode == 0
-        
-        return False
-        
+
+        exif_dt = format_exif_datetime(parse_date_string(date_str)) if date_str else None
+
+        # Build exiftool args once, applicable to both images and videos
+        args = [
+            'exiftool',
+            '-overwrite_original',
+            '-q',
+            f'-GPSLatitude={abs_lat}',
+            f'-GPSLatitudeRef={lat_ref}',
+            f'-GPSLongitude={abs_lon}',
+            f'-GPSLongitudeRef={lon_ref}',
+        ]
+
+        if exif_dt:
+            args.extend([
+                f'-DateTimeOriginal={exif_dt}',
+                f'-CreateDate={exif_dt}',
+                f'-ModifyDate={exif_dt}',
+            ])
+
+        # For videos, ExifTool will map these tags appropriately (QuickTime/MP4)
+        args.append(filepath)
+
+        result = subprocess.run(args, capture_output=True)
+        return result.returncode == 0
+
     except Exception as e:
         print(f"[GPS ERROR] Failed to write for {os.path.basename(filepath)}: {e}")
         return False
 
-def process_files_in_folder(folder_path, latitude, longitude):
-    """Write GPS data for all files in a folder (extracted ZIPs)."""
+def process_files_in_folder(folder_path, latitude, longitude, date_str=None):
+    """Write GPS/date data for all files in a folder (extracted ZIPs)."""
     if not os.path.isdir(folder_path):
         return 0
     
@@ -183,7 +202,7 @@ def process_files_in_folder(folder_path, latitude, longitude):
         for file in files:
             file_path = os.path.join(root, file)
             if file_path.lower().endswith(('.jpg', '.jpeg', '.png', '.mp4', '.mov', '.avi')):
-                if write_gps_to_file(file_path, latitude, longitude):
+                if write_metadata_to_file(file_path, latitude, longitude, date_str=date_str):
                     success_count += 1
     
     return success_count
@@ -248,6 +267,7 @@ def main():
             continue
         file_info = downloaded_files[unique_id]
         filename = file_info.get('filename')
+        date_str = file_info.get('date')
         location = locations[i] if i < len(locations) else None
 
         metadata[unique_id] = {
@@ -262,7 +282,7 @@ def main():
             if exiftool_available:
                 filepath = os.path.join(DOWNLOAD_FOLDER, filename)
                 if os.path.isfile(filepath):
-                    tasks.append(('file', filepath, location['latitude'], location['longitude']))
+                    tasks.append(('file', filepath, location['latitude'], location['longitude'], date_str))
                 elif os.path.isdir(filepath.replace('.zip', '')):
                     folder_path = filepath.replace('.zip', '')
                     # Collect all eligible files inside folder for parallel writing
@@ -270,14 +290,14 @@ def main():
                         for f in files:
                             fp = os.path.join(root, f)
                             if fp.lower().endswith(('.jpg', '.jpeg', '.png', '.mp4', '.mov', '.avi')):
-                                tasks.append(('file', fp, location['latitude'], location['longitude']))
+                                tasks.append(('file', fp, location['latitude'], location['longitude'], date_str))
         else:
             files_without_location += 1
 
     if exiftool_available and tasks:
         def _do_gps(t):
-            _, path, lat, lon = t
-            ok = write_gps_to_file(path, lat, lon)
+            _, path, lat, lon, date_str = t
+            ok = write_metadata_to_file(path, lat, lon, date_str=date_str)
             return (path, ok)
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
             futures = [ex.submit(_do_gps, t) for t in tasks]

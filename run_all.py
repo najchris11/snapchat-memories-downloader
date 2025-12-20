@@ -3,10 +3,10 @@
 Snapchat Memories Downloader - Orchestrator
 
 This lightweight `run_all.py` only orchestrates the existing scripts:
-- snapchat-downloader.py     → downloads memories
-- metadata.py                → writes GPS/location metadata
-- combine_overlays.py        → merges overlays for images/videos
-- delete-dupes.py            → removes duplicates in extracted folders
+- snapchat-downloader.py     -> downloads memories
+- metadata.py                -> writes GPS/location metadata
+- combine_overlays.py        -> merges overlays for images/videos
+- delete-dupes.py            -> removes duplicates in extracted folders
 
 Usage:
     python3 run_all.py              # Interactive menu
@@ -32,7 +32,7 @@ SCRIPTS = {
 def run_script(path: str, args: list[str] | None = None) -> int:
     """Run a Python script with the current interpreter and return exit code."""
     if not os.path.exists(path):
-        print(f"❌ Script not found: {os.path.basename(path)}")
+        print(f"[ERROR] Script not found: {os.path.basename(path)}")
         return 1
     cmd = [sys.executable, path] + (args or [])
     result = subprocess.run(cmd)
@@ -86,9 +86,9 @@ def prompt_dry_run(default: bool | None = None) -> bool:
 
 def menu() -> str:
     print()
-    print("╔══════════════════════════════════════════════════════════════════════╗")
-    print("║          SNAPCHAT MEMORIES DOWNLOADER - Orchestrator                 ║")
-    print("╚══════════════════════════════════════════════════════════════════════╝")
+    print("======================================================================")
+    print(" SNAPCHAT MEMORIES DOWNLOADER - Orchestrator")
+    print("======================================================================")
     print()
     print("What would you like to do?")
     print()
@@ -103,7 +103,7 @@ def menu() -> str:
 
 def run_all_steps(cfg: dict) -> int:
     if not os.path.exists(HTML_FILE):
-        print(f"❌ '{os.path.basename(HTML_FILE)}' not found!")
+        print(f"[ERROR] '{os.path.basename(HTML_FILE)}' not found!")
         print("   Place your Snapchat 'memories_history.html' in the project root.")
         return 1
     output_dir = cfg.get('output') or DEFAULT_OUTPUT
@@ -146,7 +146,7 @@ def main():
 
     choice = menu()
     if choice == '0':
-        print("\nGoodbye! 👋")
+        print("\nGoodbye!")
         sys.exit(0)
     elif choice == '1':
         sys.exit(run_all_steps(cfg))
@@ -178,7 +178,7 @@ def main():
         args = (['--dry-run'] if dry_run else ['--no-dry-run']) + ['--output', output_dir] + workers_arg
         sys.exit(run_script(SCRIPTS['dedupes'], args))
     else:
-        print("\n❌ Invalid choice!")
+        print("\n[ERROR] Invalid choice!")
         sys.exit(1)
 
 if __name__ == '__main__':

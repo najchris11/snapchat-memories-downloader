@@ -6,6 +6,7 @@ const { spawn } = require('child_process');
 let mainWindow;
 let isQuitting = false;
 const activeProcesses = new Set();
+let stopRequested = false;
 
 function trackProcess(proc) {
   activeProcesses.add(proc);
@@ -145,6 +146,7 @@ ipcMain.handle('select-folder', async () => {
 
 // 2. Run Python Scripts (single or workflow)
 ipcMain.on('run-script', async (event, payload) => {
+  stopRequested = false;
   // Determine api.py path
   let scriptPath;
   let pythonCommand;
@@ -252,8 +254,19 @@ ipcMain.on('run-script', async (event, payload) => {
     }
 
     for (const step of steps) {
+      if (stopRequested) {
+        event.reply('script-log', { type: 'info', message: 'Stop requested; aborting remaining steps.' });
+        return;
+      }
+
       event.reply('script-log', { type: 'info', message: `=== ${step.label} ===` });
       const code = await runApi(step.command, step.args);
+
+      if (stopRequested) {
+        event.reply('script-log', { type: 'info', message: 'Stop requested; remaining steps skipped.' });
+        return;
+      }
+
       if (code !== 0) {
         event.reply('script-exit', code);
         return;
@@ -268,12 +281,15 @@ ipcMain.on('run-script', async (event, payload) => {
   const { command, args = [], downloadFolder } = payload;
   const scriptArgs = downloadFolder ? [...args, '--output', downloadFolder] : args;
   const code = await runApi(command, scriptArgs);
-  event.reply('script-exit', code);
+  if (!stopRequested) {
+    event.reply('script-exit', code);
+  }
 });
 
 // 2b. Stop Running Script
 ipcMain.on('stop-script', (event) => {
     event.reply('script-log', { type: 'info', message: 'Stopping process...' });
+    stopRequested = true;
     terminateActiveProcesses();
     event.reply('script-exit', -1); // Signal stopped
 });

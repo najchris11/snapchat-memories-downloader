@@ -50,7 +50,7 @@ def calculate_file_hash(filepath):
                 sha256_hash.update(byte_block)
         return sha256_hash.hexdigest()
     except Exception as e:
-        print(f"❌ Error while computing hash for {filepath}: {e}")
+        print(f"[ERROR] Error while computing hash for {filepath}: {e}")
         return None
 
 def find_duplicates_in_folder(folder_path):
@@ -112,7 +112,7 @@ def find_duplicates_in_folder(folder_path):
 def process_folders(directory, dry_run=True):
     """Process all folders and find duplicates (parallelize scanning)."""
     if not os.path.exists(directory):
-        print(f"❌ Folder '{directory}' does not exist!")
+        print(f"[ERROR] Folder '{directory}' does not exist!")
         return
 
     subfolders = [f for f in os.listdir(directory) if os.path.isdir(os.path.join(directory, f))]
@@ -130,36 +130,36 @@ def process_folders(directory, dry_run=True):
 
     folders_with_duplicates = [r for r in results if r['duplicates']]
     if not folders_with_duplicates:
-        print("✅ No duplicates found!")
+        print("[OK] No duplicates found!")
         return
 
     total_duplicates = sum(len(dup['delete']) for r in folders_with_duplicates for dup in r['duplicates'])
     deleted_count = 0
 
-    print(f"📊 Found {len(folders_with_duplicates)} folder(s) with duplicates")
-    print(f"🗑️  Total duplicates to delete: {total_duplicates}\n")
+    print(f"[STATS] Found {len(folders_with_duplicates)} folder(s) with duplicates")
+    print(f"[INFO] Total duplicates to delete: {total_duplicates}\n")
     print("=" * 80)
     print()
 
     for folder_info in folders_with_duplicates:
         folder_name = folder_info['folder']
         duplicates = folder_info['duplicates']
-        print(f"📁 {folder_name}/")
+        print(f"[FOLDER] {folder_name}/")
         print(f"   Found: {len(duplicates)} duplicate group(s)")
         print()
         for dup in duplicates:
             keep_file = os.path.basename(dup['keep'])
-            print(f"   ✅ KEEP: {keep_file}")
+            print(f"   [KEEP] {keep_file}")
             for delete_file in dup['delete']:
                 delete_filename = os.path.basename(delete_file)
-                print(f"   🗑️  DELETE:  {delete_filename}")
+                print(f"   [DELETE] {delete_filename}")
                 if not dry_run:
                     try:
                         os.remove(delete_file)
                         deleted_count += 1
-                        print(f"      → Deleted!")
+                        print(f"      -> Deleted!")
                     except Exception as e:
-                        print(f"      ❌ Error: {e}")
+                        print(f"      [ERROR] {e}")
             print()
         print("-" * 80)
         print()
@@ -169,17 +169,17 @@ def process_folders(directory, dry_run=True):
     print("=" * 80)
 
     if dry_run:
-        print("⚠️  DRY RUN MODE - No files deleted!")
+        print("[WARN] DRY RUN MODE - No files deleted!")
         print()
-        print(f"📊 Folders with duplicates: {len(folders_with_duplicates)}")
-        print(f"🗑️  Files to delete: {total_duplicates}")
+        print(f"[STATS] Folders with duplicates: {len(folders_with_duplicates)}")
+        print(f"[INFO] Files to delete: {total_duplicates}")
         print()
-        print("💡 To delete the duplicates:")
+        print("[TIP] To delete the duplicates:")
         print("   Set DRY_RUN = False in the script")
     else:
-        print(f"✅ Successfully deleted: {deleted_count} files")
+        print(f"[OK] Successfully deleted: {deleted_count} files")
         if deleted_count < total_duplicates:
-            print(f"⚠️  Errors on: {total_duplicates - deleted_count} files")
+            print(f"[WARN] Errors on: {total_duplicates - deleted_count} files")
 
 def main():
     print("=" * 80)
@@ -188,10 +188,10 @@ def main():
     print()
     
     if DRY_RUN:
-        print("⚠️  DRY RUN MODE - Preview only, no changes")
+        print("[WARN] DRY RUN MODE - Preview only, no changes")
         print()
     else:
-        print("⚠️  WARNING: Duplicates will actually be deleted!")
+        print("[WARN] WARNING: Duplicates will actually be deleted!")
         response = input("Continue? (y/n): ")
         if response.lower() not in ['j', 'y', 'ja', 'yes']:
             print("Cancelled.")

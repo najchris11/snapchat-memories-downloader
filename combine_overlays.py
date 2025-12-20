@@ -17,7 +17,7 @@ try:
     PILLOW_AVAILABLE = True
 except ImportError:
     PILLOW_AVAILABLE = False
-    print("⚠️  Pillow not installed - image combining disabled")
+    print("[WARN] Pillow not installed - image combining disabled")
     print("   Run: pip install Pillow")
 
 # Configuration
@@ -87,7 +87,7 @@ def find_overlay_folders(directory):
     overlay_folders = []
     
     if not os.path.exists(directory):
-        print(f"❌ Directory '{directory}' does not exist!")
+        print(f"[ERROR] Directory '{directory}' does not exist!")
         return overlay_folders
     
     for item in os.listdir(directory):
@@ -128,7 +128,7 @@ def is_image_file(filepath):
 def combine_images(main_path, overlay_path, output_path):
     """Combines main image with overlay PNG"""
     if not PILLOW_AVAILABLE:
-        print("   ❌ Pillow not available for image combining")
+        print("   [ERROR] Pillow not available for image combining")
         return False
     
     try:
@@ -163,13 +163,13 @@ def combine_images(main_path, overlay_path, output_path):
         return True
         
     except Exception as e:
-        print(f"   ❌ Error combining images: {e}")
+        print(f"   [ERROR] Error combining images: {e}")
         return False
 
 def combine_video_with_overlay(video_path, overlay_path, output_path):
     """Combines video with overlay PNG using FFmpeg"""
     if not ffmpeg_available:
-        print("   ❌ FFmpeg not available for video combining")
+        print("   [ERROR] FFmpeg not available for video combining")
         return False
     
     try:
@@ -202,11 +202,11 @@ def combine_video_with_overlay(video_path, overlay_path, output_path):
             stderr = result.stderr
             if len(stderr) > 300:
                 stderr = stderr[:300] + "..."
-            print(f"   ❌ FFmpeg error: {stderr}")
+            print(f"   [ERROR] FFmpeg error: {stderr}")
             return False
         
     except Exception as e:
-        print(f"   ❌ Error combining video: {e}")
+        print(f"   [ERROR] Error combining video: {e}")
         return False
 
 def copy_metadata(source_path, dest_path):
@@ -231,24 +231,24 @@ def process_folders(directory, dry_run=True):
     """Processes all overlay folders and combines images/videos"""
     overlay_folders = find_overlay_folders(directory)
     if not overlay_folders:
-        print("✅ No overlay folders found to process!")
+        print("[OK] No overlay folders found to process!")
         return
 
     image_folders = [f for f in overlay_folders if is_image_file(f['main'])]
     video_folders = [f for f in overlay_folders if is_video_file(f['main'])]
 
-    print(f"📊 Found {len(overlay_folders)} folders with overlays")
-    print(f"   📷 Images: {len(image_folders)}")
-    print(f"   🎬 Videos: {len(video_folders)}")
+    print(f"[STATS] Found {len(overlay_folders)} folders with overlays")
+    print(f"   [IMAGE] Images: {len(image_folders)}")
+    print(f"   [VIDEO] Videos: {len(video_folders)}")
     print()
 
     if video_folders and not ffmpeg_available:
-        print("⚠️  FFmpeg not found - video overlays will be skipped")
+        print("[WARN] FFmpeg not found - video overlays will be skipped")
         print("   Install FFmpeg: brew install ffmpeg (mac) or apt install ffmpeg (linux)")
         print()
 
     if image_folders and not PILLOW_AVAILABLE:
-        print("⚠️  Pillow not found - image overlays will be skipped")
+        print("[WARN] Pillow not found - image overlays will be skipped")
         print("   Install Pillow: pip install Pillow")
         print()
 
@@ -266,7 +266,7 @@ def process_folders(directory, dry_run=True):
         output_path = os.path.join(directory, output_filename)
 
         is_video = is_video_file(main_file)
-        file_type = "🎬" if is_video else "📷"
+        file_type = "[VIDEO]" if is_video else "[IMAGE]"
 
         # Collect output logs per task to avoid interleaved printing
         logs = []
@@ -277,44 +277,44 @@ def process_folders(directory, dry_run=True):
 
         if dry_run:
             if is_video and not ffmpeg_available:
-                logs.append("   ⏭️  [DRY RUN] Would skip (FFmpeg not available)")
+                logs.append("   [SKIP] [DRY RUN] Would skip (FFmpeg not available)")
                 return (0, 1, 0, logs)
             elif not is_video and not PILLOW_AVAILABLE:
-                logs.append("   ⏭️  [DRY RUN] Would skip (Pillow not available)")
+                logs.append("   [SKIP] [DRY RUN] Would skip (Pillow not available)")
                 return (0, 1, 0, logs)
             else:
-                logs.append("   ⏭️  [DRY RUN] Would combine and create output")
+                logs.append("   [SKIP] [DRY RUN] Would combine and create output")
                 return (1, 0, 0, logs)
         else:
             if is_video:
                 if ffmpeg_available:
                     ok = combine_video_with_overlay(main_file, overlay_file, output_path)
                 else:
-                    logs.append("   ⏭️  Skipped (FFmpeg not available)")
+                    logs.append("   [SKIP] Skipped (FFmpeg not available)")
                     return (0, 1, 0, logs)
             else:
                 if PILLOW_AVAILABLE:
                     ok = combine_images(main_file, overlay_file, output_path)
                 else:
-                    logs.append("   ⏭️  Skipped (Pillow not available)")
+                    logs.append("   [SKIP] Skipped (Pillow not available)")
                     return (0, 1, 0, logs)
 
             if ok:
-                logs.append("   ✅ Combined successfully!")
+                logs.append("   [OK] Combined successfully!")
                 if exiftool_available:
                     if copy_metadata(main_file, output_path):
-                        logs.append("   📋 Metadata copied")
+                        logs.append("   [INFO] Metadata copied")
                     else:
-                        logs.append("   ⚠️  Could not copy metadata")
+                        logs.append("   [WARN] Could not copy metadata")
                 if DELETE_FOLDER_AFTER and not KEEP_ORIGINALS:
                     try:
                         shutil.rmtree(folder_path)
-                        logs.append("   🗑️  Folder deleted")
+                        logs.append("   [INFO] Folder deleted")
                     except Exception as e:
-                        logs.append(f"   ⚠️  Could not delete folder: {e}")
+                        logs.append(f"   [WARN] Could not delete folder: {e}")
                 return (1, 0, 0, logs)
             else:
-                logs.append("   ❌ Error while combining")
+                logs.append("   [ERROR] Error while combining")
                 return (0, 0, 1, logs)
 
     success_count = 0
@@ -336,22 +336,22 @@ def process_folders(directory, dry_run=True):
     print("SUMMARY")
     print("=" * 80)
     if dry_run:
-        print("⚠️  DRY RUN MODE - No changes made!")
+        print("[WARN] DRY RUN MODE - No changes made!")
         print()
-        print(f"📊 Folders to process: {len(overlay_folders)}")
-        print(f"   📷 Images: {len(image_folders)}")
-        print(f"   🎬 Videos: {len(video_folders)}")
+        print(f"[STATS] Folders to process: {len(overlay_folders)}")
+        print(f"   [IMAGE] Images: {len(image_folders)}")
+        print(f"   [VIDEO] Videos: {len(video_folders)}")
         if skipped_count > 0:
-            print(f"   ⏭️  Would skip: {skipped_count}")
+            print(f"   [SKIP] Would skip: {skipped_count}")
         print()
-        print("💡 To combine the overlays:")
+        print("[TIP] To combine the overlays:")
         print("   Set DRY_RUN = False in the script")
     else:
-        print(f"✅ Successfully combined: {success_count} files")
+        print(f"[OK] Successfully combined: {success_count} files")
         if skipped_count > 0:
-            print(f"⏭️  Skipped: {skipped_count} files")
+            print(f"[SKIP] Skipped: {skipped_count} files")
         if error_count > 0:
-            print(f"❌ Errors: {error_count} files")
+            print(f"[ERROR] Errors: {error_count} files")
 
 def main():
     print("=" * 80)
@@ -362,31 +362,31 @@ def main():
     # Show tool availability
     print("Tool Status:")
     if PILLOW_AVAILABLE:
-        print("  ✅ Pillow - Image combining enabled")
+        print("  [OK] Pillow - Image combining enabled")
     else:
-        print("  ❌ Pillow - Image combining disabled (pip install Pillow)")
+        print("  [ERROR] Pillow - Image combining disabled (pip install Pillow)")
     
     if ffmpeg_available:
-        print("  ✅ FFmpeg - Video combining enabled")
+        print("  [OK] FFmpeg - Video combining enabled")
     else:
-        print("  ❌ FFmpeg - Video combining disabled (brew install ffmpeg)")
+        print("  [ERROR] FFmpeg - Video combining disabled (brew install ffmpeg)")
     
     if exiftool_available:
-        print("  ✅ exiftool - Metadata will be preserved")
+        print("  [OK] exiftool - Metadata will be preserved")
     else:
-        print("  ⚠️  exiftool - Metadata will not be copied")
+        print("  [WARN] exiftool - Metadata will not be copied")
     print()
     
     if not PILLOW_AVAILABLE and not ffmpeg_available:
-        print("❌ No combining tools available!")
+        print("[ERROR] No combining tools available!")
         print("   Install at least one: pip install Pillow  or  brew install ffmpeg")
         return
     
     if DRY_RUN:
-        print("⚠️  DRY RUN MODE - Preview only, no changes")
+        print("[WARN] DRY RUN MODE - Preview only, no changes")
         print()
     else:
-        print("⚠️  WARNING: This will combine files and delete original folders!")
+        print("[WARN] WARNING: This will combine files and delete original folders!")
         response = input("Continue? (y/n): ")
         if response.lower() not in ['y', 'yes']:
             print("Cancelled.")

@@ -53,7 +53,7 @@ exiftool_available = check_exiftool() if USE_EXIFTOOL else False
 def extract_locations_from_html(html_file):
     """Extract GPS coordinates from the HTML table."""
     if not os.path.exists(html_file):
-        print(f"❌ '{html_file}' not found!")
+        print(f"[ERROR] '{html_file}' not found!")
         return []
     
     with open(html_file, 'r', encoding='utf-8') as f:
@@ -65,7 +65,7 @@ def extract_locations_from_html(html_file):
     # Find the table
     table = soup.select_one('body > div.rightpanel > table > tbody')
     if not table:
-        print("⚠️  Table not found in the HTML!")
+        print("[WARN] Table not found in the HTML!")
         return locations
     
     rows = table.find_all('tr')
@@ -223,7 +223,7 @@ def main():
     
     # Check exiftool
     if USE_EXIFTOOL and not exiftool_available:
-        print("❌ exiftool not found!")
+        print("[ERROR] exiftool not found!")
         print("Install from https://exiftool.org/")
         print("Metadata will only be stored in JSON, not in files.")
         response = input("\nContinue anyway? (y/n): ")
@@ -231,26 +231,26 @@ def main():
             return
         print()
     elif exiftool_available:
-        print("✅ exiftool found - GPS data will be written to files")
+        print("[OK] exiftool found - GPS data will be written to files")
         print()
     
     # Load downloaded_files.json
     if not os.path.exists(DOWNLOADED_FILES_JSON):
-        print(f"❌ '{DOWNLOADED_FILES_JSON}' not found!")
+        print(f"[ERROR] '{DOWNLOADED_FILES_JSON}' not found!")
         return
     
     with open(DOWNLOADED_FILES_JSON, 'r', encoding='utf-8') as f:
         downloaded_files = json.load(f)
     
-    print(f"📄 Found {len(downloaded_files)} entries in downloaded_files.json")
+    print(f"[INFO] Found {len(downloaded_files)} entries in downloaded_files.json")
     
     # Extract locations from HTML
-    print(f"📍 Extracting GPS coordinates from '{HTML_FILE}'...")
+    print(f"[INFO] Extracting GPS coordinates from '{HTML_FILE}'...")
     locations = extract_locations_from_html(HTML_FILE)
-    print(f"✅ {len(locations)} GPS coordinates found")
+    print(f"[OK] {len(locations)} GPS coordinates found")
     # Extract URLs for mapping
     urls = extract_urls_from_html(HTML_FILE)
-    print(f"✅ {len(urls)} URLs found")
+    print(f"[OK] {len(urls)} URLs found")
     print()
     
     # Create Metadata
@@ -308,7 +308,7 @@ def main():
                 if ok:
                     gps_written_count += 1
                     completed_uids.add(uid)
-                    print(f"✅ GPS written: {os.path.basename(path)}")
+                    print(f"[OK] GPS written: {os.path.basename(path)}")
                 else:
                     gps_failed_count += 1
 
@@ -320,13 +320,13 @@ def main():
         try:
             with open(DOWNLOADED_FILES_JSON, 'w', encoding='utf-8') as f:
                 json.dump(downloaded_files, f, indent=2, ensure_ascii=False)
-            print(f"💾 Updated '{DOWNLOADED_FILES_JSON}' with metadata_written flags")
+            print(f"[INFO] Updated '{DOWNLOADED_FILES_JSON}' with metadata_written flags")
         except Exception as e:
-            print(f"⚠️  Could not update '{DOWNLOADED_FILES_JSON}': {e}")
+            print(f"[WARN] Could not update '{DOWNLOADED_FILES_JSON}': {e}")
     
     # Save metadata.json
     print()
-    print(f"💾 Saving '{METADATA_JSON}'...")
+    print(f"[INFO] Saving '{METADATA_JSON}'...")
     
     with open(METADATA_JSON, 'w', encoding='utf-8') as f:
         json.dump(metadata, f, indent=2, ensure_ascii=False)
@@ -336,18 +336,18 @@ def main():
     print("=" * 60)
     print("SUMMARY")
     print("=" * 60)
-    print(f"📊 Total processed: {len(metadata)} files")
-    print(f"📍 With GPS coordinates: {files_with_location} files")
-    print(f"❌ Without GPS coordinates: {files_without_location} files")
+    print(f"[STATS] Total processed: {len(metadata)} files")
+    print(f"[INFO] With GPS coordinates: {files_with_location} files")
+    print(f"[WARN] Without GPS coordinates: {files_without_location} files")
     
     if exiftool_available:
         print()
-        print(f"✅ GPS written to files: {gps_written_count}")
+        print(f"[OK] GPS written to files: {gps_written_count}")
         if gps_failed_count > 0:
-            print(f"⚠️  GPS write errors: {gps_failed_count}")
+            print(f"[WARN] GPS write errors: {gps_failed_count}")
     
     print()
-    print(f"✅ '{METADATA_JSON}' created successfully!")
+    print(f"[OK] '{METADATA_JSON}' created successfully!")
 
 if __name__ == '__main__':
     try:

@@ -166,40 +166,32 @@ ipcMain.on('install-dependencies', (event) => {
   const projectRoot = path.join(__dirname, '..');
 
   if (process.platform === 'darwin') {
-    const scriptPath = path.join(projectRoot, 'installer.sh');
+    // Resolve script path based on environment
+    let scriptPath;
+    if (app.isPackaged) {
+      scriptPath = path.join(process.resourcesPath, 'installer.sh');
+    } else {
+      scriptPath = path.join(projectRoot, 'installer.sh');
+    }
+
     // Ensure executable
     const chmod = spawn('chmod', ['+x', scriptPath]);
-    trackProcess(chmod);
-
+    
     chmod.on('close', (code) => {
       if (code !== 0) {
-        event.reply('script-log', { type: 'error', message: 'Failed to make installer executable.' });
+        event.reply('script-log', { type: 'error', message: 'Failed to make installer executable. Please try running manually.' });
         event.reply('script-exit', code);
         return;
       }
 
-      const installProcess = spawn(scriptPath, [], { cwd: projectRoot });
-      trackProcess(installProcess);
+      event.reply('script-log', { type: 'info', message: 'Launching installer in Terminal...' });
+      event.reply('script-log', { type: 'info', message: 'Please follow the instructions in the new Terminal window.' });
 
-      installProcess.stdout.on('data', (data) => {
-        const lines = data.toString().split('\n');
-        lines.forEach(line => {
-          if(line.trim()) event.reply('script-log', { type: 'log', message: line });
-        });
-      });
-
-      installProcess.stderr.on('data', (data) => {
-         event.reply('script-log', { type: 'log', message: data.toString() });
-      });
-
-      installProcess.on('close', (code) => {
-        if (code === 0) {
-           event.reply('script-log', { type: 'success', message: 'Installation completed successfully!' });
-        } else {
-           event.reply('script-log', { type: 'error', message: `Installer exited with code ${code}` });
-        }
-        event.reply('script-exit', code);
-      });
+      // Open a new Terminal window to run the script
+      // This allows for user interaction (sudo password, homebrew prompt)
+      spawn('open', ['-a', 'Terminal', scriptPath]);
+      
+      event.reply('script-exit', 0);
     });
     return;
   }

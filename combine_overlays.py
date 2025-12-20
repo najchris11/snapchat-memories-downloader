@@ -13,7 +13,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
-    from PIL import Image
+    from PIL import Image, ImageOps
     PILLOW_AVAILABLE = True
 except ImportError:
     PILLOW_AVAILABLE = False
@@ -29,7 +29,7 @@ DELETE_FOLDER_AFTER = True  # Delete the folder after combining (keeps only the 
 KEEP_ORIGINALS = False  # Keep original main and overlay files in the folder
 USE_EXIFTOOL = True  # Copy metadata from main image to combined image
 PROCESS_VIDEOS = True  # Process video files with FFmpeg
-MAX_WORKERS = max(2, (os.cpu_count() or 4))
+MAX_WORKERS = max(2, (os.cpu_count() or 4) // 2)
 
 def parse_args():
     global DOWNLOAD_FOLDER, DRY_RUN
@@ -117,24 +117,20 @@ def combine_images(main_path, overlay_path, output_path):
         return False
     
     try:
-        # Open the main image
-        main_img = Image.open(main_path)
-        
-        # Convert to RGBA if needed
+        # Open and orient the main image according to EXIF (prevents overlay misalignment)
+        main_img = ImageOps.exif_transpose(Image.open(main_path))
         if main_img.mode != 'RGBA':
             main_img = main_img.convert('RGBA')
-        
-        # Open the overlay
-        overlay_img = Image.open(overlay_path)
-        
-        # Ensure overlay is RGBA
+
+        # Open and orient the overlay
+        overlay_img = ImageOps.exif_transpose(Image.open(overlay_path))
         if overlay_img.mode != 'RGBA':
             overlay_img = overlay_img.convert('RGBA')
-        
+
         # Resize overlay to match main image if needed
         if overlay_img.size != main_img.size:
             overlay_img = overlay_img.resize(main_img.size, Image.Resampling.LANCZOS)
-        
+
         # Composite the images
         combined = Image.alpha_composite(main_img, overlay_img)
         
@@ -162,35 +158,14 @@ def combine_video_with_overlay(video_path, overlay_path, output_path):
         return False
     
     try:
-        # FFmpeg command to overlay PNG on video
-        # Scale the overlay to match video dimensions, then overlay
-        # [1:v]scale=W:H scales overlay to match video size
-        # Then overlay at position 0:0
+        # Use scale2ref to force the overlay to match the displayed video dimensions
+        # Ensure overlay keeps alpha (format=rgba) before overlaying
         filter_complex = (
-            '[1:v]scale=iw:ih[scaled];'  # Scale overlay (will be resized to video dims below)
-            '[0:v][scaled]overlay=0:0:format=auto'
+            '[1:v]format=rgba[ov];'
+            '[ov][0:v]scale2ref=main_w:main_h[ovr][base];'
+            '[base][ovr]overlay=0:0:format=auto'
         )
-        
-        # First, get video dimensions to scale overlay properly
-        probe_result = subprocess.run([
-            'ffprobe',
-            '-v', 'error',
-            '-select_streams', 'v:0',
-            '-show_entries', 'stream=width,height',
-            '-of', 'csv=p=0',
-            video_path
-        ], capture_output=True, text=True)
-        
-        if probe_result.returncode == 0 and probe_result.stdout.strip():
-            dims = probe_result.stdout.strip().split(',')
-            if len(dims) == 2:
-                width, height = dims[0], dims[1]
-                # Scale overlay to exact video dimensions
-                filter_complex = (
-                    f'[1:v]scale={width}:{height}[scaled];'
-                    '[0:v][scaled]overlay=0:0:format=auto'
-                )
-        
+
         result = subprocess.run([
             'ffmpeg',
             '-y',  # Overwrite output
@@ -415,5 +390,9 @@ def main():
     process_folders(DOWNLOAD_FOLDER, dry_run=DRY_RUN)
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nCancelled by user.")
+        sys.exit(130)
 

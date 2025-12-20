@@ -40,7 +40,7 @@ def run_script(path: str, args: list[str] | None = None) -> int:
 
 def parse_args():
     args = sys.argv[1:]
-    cfg = {'full': False, 'test': None, 'dry_run': None, 'output': None}
+    cfg = {'full': False, 'test': None, 'dry_run': None, 'output': None, 'workers': None}
     if '--help' in args or '-h' in args:
         print(__doc__)
         sys.exit(0)
@@ -62,6 +62,12 @@ def parse_args():
             cfg['dry_run'] = False
         elif a == '--output' and i + 1 < len(args):
             cfg['output'] = args[i + 1]
+            i += 1
+        elif a == '--workers' and i + 1 < len(args):
+            try:
+                cfg['workers'] = max(1, int(args[i + 1]))
+            except ValueError:
+                pass
             i += 1
         i += 1
     return cfg
@@ -103,27 +109,32 @@ def run_all_steps(cfg: dict) -> int:
     output_dir = cfg.get('output') or DEFAULT_OUTPUT
     os.makedirs(output_dir, exist_ok=True)
     dry_run = prompt_dry_run(cfg.get('dry_run'))
+    
+    workers_arg = []
+    if cfg.get('workers'):
+        workers_arg = ['--workers', str(cfg['workers'])]
+    
     print("\n== Step 1/4: Download Memories ==")
-    dl_args = ['--output', output_dir]
+    dl_args = ['--output', output_dir] + workers_arg
     if cfg.get('test') is not None:
         if cfg['test'] > 0:
-            dl_args = ['--test', str(cfg['test'])]
+            dl_args.extend(['--test', str(cfg['test'])])
         else:
-            dl_args = ['--test']
+            dl_args.append('--test')
     rc = run_script(SCRIPTS['downloader'], dl_args)
     if rc != 0:
         return rc
     print("\n== Step 2/4: Add GPS Metadata ==")
-    rc = run_script(SCRIPTS['metadata'], ['--output', output_dir])
+    rc = run_script(SCRIPTS['metadata'], ['--output', output_dir] + workers_arg)
     if rc != 0:
         return rc
     print("\n== Step 3/4: Combine Overlays ==")
-    combine_args = (['--dry-run'] if dry_run else ['--no-dry-run']) + ['--output', output_dir]
+    combine_args = (['--dry-run'] if dry_run else ['--no-dry-run']) + ['--output', output_dir] + workers_arg
     rc = run_script(SCRIPTS['combine'], combine_args)
     if rc != 0:
         return rc
     print("\n== Step 4/4: Delete Duplicates ==")
-    dedupe_args = (['--dry-run'] if dry_run else ['--no-dry-run']) + ['--output', output_dir]
+    dedupe_args = (['--dry-run'] if dry_run else ['--no-dry-run']) + ['--output', output_dir] + workers_arg
     rc = run_script(SCRIPTS['dedupes'], dedupe_args)
     return rc
 
@@ -145,27 +156,35 @@ def main():
             dl_args = ['--test', str(cfg['test'])] if cfg['test'] > 0 else ['--test']
         output_dir = cfg.get('output') or DEFAULT_OUTPUT
         os.makedirs(output_dir, exist_ok=True)
-        sys.exit(run_script(SCRIPTS['downloader'], dl_args + ['--output', output_dir]))
+        workers_arg = ['--workers', str(cfg['workers'])] if cfg.get('workers') else []
+        sys.exit(run_script(SCRIPTS['downloader'], dl_args + ['--output', output_dir] + workers_arg))
     elif choice == '3':
         output_dir = cfg.get('output') or DEFAULT_OUTPUT
         os.makedirs(output_dir, exist_ok=True)
-        sys.exit(run_script(SCRIPTS['metadata'], ['--output', output_dir]))
+        workers_arg = ['--workers', str(cfg['workers'])] if cfg.get('workers') else []
+        sys.exit(run_script(SCRIPTS['metadata'], ['--output', output_dir] + workers_arg))
     elif choice == '4':
         dry_run = prompt_dry_run(cfg.get('dry_run'))
         output_dir = cfg.get('output') or DEFAULT_OUTPUT
         os.makedirs(output_dir, exist_ok=True)
-        args = (['--dry-run'] if dry_run else ['--no-dry-run']) + ['--output', output_dir]
+        workers_arg = ['--workers', str(cfg['workers'])] if cfg.get('workers') else []
+        args = (['--dry-run'] if dry_run else ['--no-dry-run']) + ['--output', output_dir] + workers_arg
         sys.exit(run_script(SCRIPTS['combine'], args))
     elif choice == '5':
         dry_run = prompt_dry_run(cfg.get('dry_run'))
         output_dir = cfg.get('output') or DEFAULT_OUTPUT
         os.makedirs(output_dir, exist_ok=True)
-        args = (['--dry-run'] if dry_run else ['--no-dry-run']) + ['--output', output_dir]
+        workers_arg = ['--workers', str(cfg['workers'])] if cfg.get('workers') else []
+        args = (['--dry-run'] if dry_run else ['--no-dry-run']) + ['--output', output_dir] + workers_arg
         sys.exit(run_script(SCRIPTS['dedupes'], args))
     else:
         print("\n❌ Invalid choice!")
         sys.exit(1)
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nCancelled by user.")
+        sys.exit(130)
 

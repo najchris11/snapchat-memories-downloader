@@ -21,7 +21,7 @@ DOWNLOADED_FILES_JSON = 'downloaded_files.json'
 METADATA_JSON = 'metadata.json'
 DOWNLOAD_FOLDER = os.path.join(os.path.expanduser('~'), 'Downloads', 'snapchat_memories')
 USE_EXIFTOOL = True
-MAX_WORKERS = max(2, (os.cpu_count() or 4))
+MAX_WORKERS = max(2, (os.cpu_count() or 4) // 2)
 
 def parse_args():
     global HTML_FILE, MAX_WORKERS, DOWNLOAD_FOLDER
@@ -201,7 +201,7 @@ def process_files_in_folder(folder_path, latitude, longitude, date_str=None):
     for root, dirs, files in os.walk(folder_path):
         for file in files:
             file_path = os.path.join(root, file)
-            if file_path.lower().endswith(('.jpg', '.jpeg', '.png', '.mp4', '.mov', '.avi')):
+            if file_path.lower().endswith(('.jpg', '.jpeg', '.mp4', '.mov', '.avi')):
                 if write_metadata_to_file(file_path, latitude, longitude, date_str=date_str):
                     success_count += 1
     
@@ -261,6 +261,7 @@ def main():
     gps_failed_count = 0
     
     tasks = []
+    completed_uids = set()
     for i, url in enumerate(urls):
         unique_id = extract_unique_id_from_url(url)
         if unique_id not in downloaded_files:
@@ -269,6 +270,7 @@ def main():
         filename = file_info.get('filename')
         date_str = file_info.get('date')
         location = locations[i] if i < len(locations) else None
+        already_written = file_info.get('metadata_written') is True
 
         metadata[unique_id] = {
             'filename': filename,
@@ -279,36 +281,48 @@ def main():
 
         if location:
             files_with_location += 1
-            if exiftool_available:
+            if exiftool_available and not already_written:
                 filepath = os.path.join(DOWNLOAD_FOLDER, filename)
-                if os.path.isfile(filepath):
-                    tasks.append(('file', filepath, location['latitude'], location['longitude'], date_str))
+                if os.path.isfile(filepath) and not filepath.lower().endswith('.png'):
+                    tasks.append((unique_id, filepath, location['latitude'], location['longitude'], date_str))
                 elif os.path.isdir(filepath.replace('.zip', '')):
                     folder_path = filepath.replace('.zip', '')
                     # Collect all eligible files inside folder for parallel writing
                     for root, dirs, files in os.walk(folder_path):
                         for f in files:
                             fp = os.path.join(root, f)
-                            if fp.lower().endswith(('.jpg', '.jpeg', '.png', '.mp4', '.mov', '.avi')):
-                                tasks.append(('file', fp, location['latitude'], location['longitude'], date_str))
+                            if fp.lower().endswith(('.jpg', '.jpeg', '.mp4', '.mov', '.avi')):
+                                tasks.append((unique_id, fp, location['latitude'], location['longitude'], date_str))
         else:
             files_without_location += 1
 
     if exiftool_available and tasks:
         def _do_gps(t):
-            _, path, lat, lon, date_str = t
+            uid, path, lat, lon, date_str = t
             ok = write_metadata_to_file(path, lat, lon, date_str=date_str)
-            return (path, ok)
+            return (uid, path, ok)
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
             futures = [ex.submit(_do_gps, t) for t in tasks]
             for fut in as_completed(futures):
-                path, ok = fut.result()
+                uid, path, ok = fut.result()
                 if ok:
                     gps_written_count += 1
+                    completed_uids.add(uid)
                     print(f"✅ GPS written: {os.path.basename(path)}")
                 else:
                     gps_failed_count += 1
-                    print(f"⚠️  GPS failed: {os.path.basename(path)}")
+
+    # Mark completed items so future runs can skip
+    if completed_uids:
+        for uid in completed_uids:
+            if uid in downloaded_files:
+                downloaded_files[uid]['metadata_written'] = True
+        try:
+            with open(DOWNLOADED_FILES_JSON, 'w', encoding='utf-8') as f:
+                json.dump(downloaded_files, f, indent=2, ensure_ascii=False)
+            print(f"💾 Updated '{DOWNLOADED_FILES_JSON}' with metadata_written flags")
+        except Exception as e:
+            print(f"⚠️  Could not update '{DOWNLOADED_FILES_JSON}': {e}")
     
     # Save metadata.json
     print()
@@ -336,4 +350,8 @@ def main():
     print(f"✅ '{METADATA_JSON}' created successfully!")
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nCancelled by user.")
+        sys.exit(130)

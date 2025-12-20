@@ -14,7 +14,7 @@ import argparse
 
 DOWNLOAD_FOLDER = os.path.join(os.path.expanduser('~'), 'Downloads', 'snapchat_memories')
 DRY_RUN = True  # Set to False to actually delete files
-MAX_WORKERS = max(2, (os.cpu_count() or 4))
+MAX_WORKERS = max(2, (os.cpu_count() or 4) // 2)
 
 def parse_args():
     global DOWNLOAD_FOLDER, DRY_RUN
@@ -200,4 +200,8 @@ def main():
     process_folders(DOWNLOAD_FOLDER, dry_run=DRY_RUN)
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nCancelled by user.")
+        sys.exit(130)

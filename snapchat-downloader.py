@@ -391,6 +391,16 @@ def save_progress():
             print(f"[JSON ERROR] Failed to save: {e}")
             return False
 
+# Graceful Ctrl+C handling
+import signal
+
+def _handle_sigint(signum, frame):
+    print("\nCancelled by user.")
+    save_progress()
+    sys.exit(130)
+
+signal.signal(signal.SIGINT, _handle_sigint)
+
 # Prepare download list
 download_tasks = []
 for i, (url, is_get) in enumerate(matches):

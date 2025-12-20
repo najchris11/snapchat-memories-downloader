@@ -12,17 +12,32 @@ function trackProcess(proc) {
   proc.on('close', () => {
     activeProcesses.delete(proc);
   });
+  proc.on('exit', () => {
+    activeProcesses.delete(proc);
+  });
 }
 
 function terminateActiveProcesses() {
   for (const proc of Array.from(activeProcesses)) {
     try {
-      // Try graceful stop first
-      proc.kill('SIGINT');
-      setTimeout(() => {
-        // Ensure termination if still alive
-        try { proc.kill('SIGTERM'); } catch (e) {}
-      }, 1500);
+      if (process.platform === 'win32') {
+        // On Windows, send a hard kill to the entire tree to ensure Python + children exit
+        const pid = proc.pid;
+        if (pid) {
+          try {
+            spawn('taskkill', ['/PID', String(pid), '/T', '/F']);
+          } catch (e) {
+            // Fallback to direct kill if taskkill fails
+            try { proc.kill('SIGTERM'); } catch (_) {}
+          }
+        }
+      } else {
+        // Try graceful stop first on POSIX
+        proc.kill('SIGINT');
+        setTimeout(() => {
+          try { proc.kill('SIGTERM'); } catch (e) {}
+        }, 1500);
+      }
     } catch (e) {
       // Ignore errors during shutdown
     }
@@ -198,14 +213,18 @@ ipcMain.on('run-script', async (event, payload) => {
       pythonProcess.on('close', (code) => {
         resolve(code);
       });
+      pythonProcess.on('exit', (code) => {
+        resolve(code);
+      });
     });
   };
 
   // Workflow mode: run selected steps in sequence
   if (payload.workflow) {
-    const { htmlFile, downloadFolder, runDownload, runMetadata, runCombine, runDedupe, dryRun } = payload;
+    const { htmlFile, downloadFolder, runDownload, runMetadata, runCombine, runDedupe, dryRun, workerCount } = payload;
 
     const dryRunArgs = dryRun ? ['--dry-run'] : ['--no-dry-run'];
+    const workerArgs = workerCount ? ['--workers', String(workerCount)] : [];
     const withOutput = (args = []) => (downloadFolder ? [...args, '--output', downloadFolder] : args);
 
     const steps = [];
@@ -215,7 +234,7 @@ ipcMain.on('run-script', async (event, payload) => {
         event.reply('script-exit', 1);
         return;
       }
-      steps.push({ label: 'Download Memories', command: 'download', args: withOutput([htmlFile]) });
+      steps.push({ label: 'Download Memories', command: 'download', args: withOutput([htmlFile, ...workerArgs]) });
     }
     if (runMetadata) {
       if (!htmlFile) {
@@ -223,13 +242,13 @@ ipcMain.on('run-script', async (event, payload) => {
         event.reply('script-exit', 1);
         return;
       }
-      steps.push({ label: 'Add GPS Metadata', command: 'metadata', args: withOutput([htmlFile]) });
+      steps.push({ label: 'Add GPS Metadata', command: 'metadata', args: withOutput([htmlFile, ...workerArgs]) });
     }
     if (runCombine) {
-      steps.push({ label: 'Combine Overlays', command: 'combine', args: withOutput([...dryRunArgs]) });
+      steps.push({ label: 'Combine Overlays', command: 'combine', args: withOutput([...dryRunArgs, ...workerArgs]) });
     }
     if (runDedupe) {
-      steps.push({ label: 'Delete Duplicates', command: 'dedupe', args: withOutput([...dryRunArgs]) });
+      steps.push({ label: 'Delete Duplicates', command: 'dedupe', args: withOutput([...dryRunArgs, ...workerArgs]) });
     }
 
     for (const step of steps) {

@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { FolderOpen, Download, Terminal, Settings, MapPin, Layers, Copy, Trash2 } from 'lucide-react';
+import { Slider } from '@/components/ui/slider';
+import { FolderOpen, Download, Terminal, Settings, MapPin, Layers, Copy, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface LogMessage {
   type: 'info' | 'error' | 'success' | 'log' | 'raw';
@@ -26,12 +27,16 @@ export default function Home() {
   const [runMetadata, setRunMetadata] = useState(true);
   const [runCombine, setRunCombine] = useState(true);
   const [runDedupe, setRunDedupe] = useState(true);
-    const [dryRun, setDryRun] = useState(false);
+  const [dryRun, setDryRun] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [workerCount, setWorkerCount] = useState(
+    typeof navigator !== 'undefined' ? Math.max(2, Math.floor((navigator.hardwareConcurrency || 4) / 2)) : 2
+  );
 
   // Auto-scroll logs
   useEffect(() => {
     if (scrollRef.current) {
-        scrollRef.current.scrollIntoView({ behavior: 'smooth' });
+      scrollRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [logs]);
 
@@ -124,6 +129,7 @@ export default function Home() {
                 runCombine,
                 runDedupe,
                 dryRun,
+                workerCount,
             });
         }
     };
@@ -260,6 +266,41 @@ export default function Home() {
                             </label>
                         </div>
                     </CardContent>
+                </Card>
+
+                {/* Advanced Options */}
+                <Card className="border-2 border-border shadow-[4px_4px_0px_0px_hsl(var(--foreground))] rounded-xl">
+                    <CardHeader 
+                        className="bg-muted border-b-2 border-dashed border-muted-foreground/20 cursor-pointer hover:bg-muted/80 transition-colors"
+                        onClick={() => setShowAdvanced(!showAdvanced)}
+                    >
+                        <div className="flex items-center justify-between">
+                            <CardTitle className="text-lg font-bold">Advanced Settings</CardTitle>
+                            {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </div>
+                    </CardHeader>
+                    {showAdvanced && (
+                        <CardContent className="space-y-4 pt-6">
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm font-bold">
+                                        Worker Threads: {workerCount}
+                                    </label>
+                                </div>
+                                <Slider
+                                    value={[workerCount]}
+                                    onValueChange={(vals) => setWorkerCount(vals[0])}
+                                    min={1}
+                                    max={typeof navigator !== 'undefined' ? (navigator.hardwareConcurrency || 8) : 8}
+                                    step={1}
+                                    className="w-full"
+                                />
+                                <p className="text-xs text-muted-foreground italic">
+                                    ⚠️ Controls parallel processing threads. Only adjust if you understand the performance implications. Higher values may improve speed but increase CPU usage.
+                                </p>
+                            </div>
+                        </CardContent>
+                    )}
                 </Card>
 
                 <Button 

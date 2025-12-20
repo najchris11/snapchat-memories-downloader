@@ -18,16 +18,17 @@ def log(message, type="info", progress=None):
     print(json.dumps(data), flush=True)
 
 def handle_signal(signum, frame):
-    """Handle kill signals by terminating the child process."""
+    """Handle kill signals by terminating the child process group."""
     global current_process
     if current_process:
-        log(f"Received signal {signum}, stopping subprocess...", "info")
+        log(f"Received signal {signum}, stopping subprocess group...", "info")
         try:
-            current_process.terminate()
+            # Kill the entire process group
+            os.killpg(os.getpgid(current_process.pid), signal.SIGTERM)
             try:
                 current_process.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                current_process.kill()
+                os.killpg(os.getpgid(current_process.pid), signal.SIGKILL)
         except Exception as e:
             log(f"Error stopping process: {e}", "error")
     sys.exit(0)
@@ -49,13 +50,15 @@ def run_script(script_name, args):
     log(f"Starting {script_name}...", "info")
     
     try:
-        # We use Popen to read stdout in real-time
+        # We use Popen with start_new_session=True to create a new process group
+        # This allows us to kill the process and all its children/threads
         current_process = subprocess.Popen(
             cmd, 
             stdout=subprocess.PIPE, 
             stderr=subprocess.STDOUT,
             text=True,
-            bufsize=1
+            bufsize=1,
+            start_new_session=True
         )
         
         for line in current_process.stdout:

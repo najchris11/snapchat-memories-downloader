@@ -1,0 +1,103 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'gui/**'
+      - '.github/workflows/release.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.version.outputs.new_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Automated Version Bump
+        id: version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Get the last commit message
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          echo "Commit message: $COMMIT_MSG"
+          
+          # Determine version bump
+          if [[ "$COMMIT_MSG" == *"MAJOR:"* ]]; then
+            BUMP="major"
+          elif [[ "$COMMIT_MSG" == *"MINOR:"* ]] || [[ "$COMMIT_MSG" == *"FEAT:"* ]]; then
+            BUMP="minor"
+          else
+            BUMP="patch"
+          fi
+          
+          echo "Bumping version ($BUMP)..."
+          
+          cd gui
+          npm version $BUMP --no-git-tag-version
+          
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          NEW_TAG="v$NEW_VERSION"
+          echo "New Version: $NEW_VERSION"
+          echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
+          
+          # Commit and Push
+          git add package.json
+          git commit -m "chore: release $NEW_TAG [skip ci]"
+          git tag $NEW_TAG
+          
+          # Push changes (skip ci for the commit, but the tag triggers releases if configured, 
+          # but here we trigger build-release via 'needs')
+          git push origin main
+          git push origin $NEW_TAG
+
+  build-release:
+    needs: bump-version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump-version.outputs.new_tag }}
+      
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          
+      - name: Install Dependencies
+        run: |
+          cd gui
+          npm install
+          
+      # Install Linux dependencies if running on Ubuntu
+      - name: Install Linux Deps
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libarchive-tools
+          
+      - name: Build & Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd gui
+          npm run electron-build -- --publish always

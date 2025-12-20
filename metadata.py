@@ -19,7 +19,7 @@ import argparse
 HTML_FILE = 'memories_history.html'
 DOWNLOADED_FILES_JSON = 'downloaded_files.json'
 METADATA_JSON = 'metadata.json'
-DOWNLOAD_FOLDER = 'snapchat_memories'
+DOWNLOAD_FOLDER = os.path.join(os.path.expanduser('~'), 'Downloads', 'snapchat_memories')
 USE_EXIFTOOL = True
 MAX_WORKERS = max(2, (os.cpu_count() or 4))
 

@@ -17,7 +17,7 @@ import argparse
 
 # ---------------- CONFIG ----------------
 HTML_FILE = 'memories_history.html'
-DOWNLOAD_FOLDER = 'snapchat_memories'
+DOWNLOAD_FOLDER = os.path.join(os.path.expanduser('~'), 'Downloads', 'snapchat_memories')
 LOG_FILE = 'downloaded_files.json'
 ERROR_LOG_FILE = 'download_errors.json'
 MAX_WORKERS = 5  # Number of parallel downloads
@@ -28,7 +28,7 @@ USE_EXIFTOOL = True  # Set to False if exiftool is not available
 TEST_LIMIT = None
 # ----------------------------------------
 
-os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
+# Directory creation moved after argument parsing
 
 def _parse_args():
     global TEST_MODE, MAX_WORKERS, TEST_LIMIT, HTML_FILE, DOWNLOAD_FOLDER
@@ -54,6 +54,13 @@ def _parse_args():
         DOWNLOAD_FOLDER = args.output
 
 _parse_args()
+
+try:
+    os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
+except Exception as e:
+    print(f"[CRITICAL ERROR] Could not create download folder at '{DOWNLOAD_FOLDER}': {e}")
+    print("Please select a different folder using the --output argument or the GUI.")
+    sys.exit(1)
 
 
 # Thread lock for JSON writes

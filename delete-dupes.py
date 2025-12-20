@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Configuration
 import argparse
 
-DOWNLOAD_FOLDER = 'snapchat_memories'
+DOWNLOAD_FOLDER = os.path.join(os.path.expanduser('~'), 'Downloads', 'snapchat_memories')
 DRY_RUN = True  # Set to False to actually delete files
 MAX_WORKERS = max(2, (os.cpu_count() or 4))
 

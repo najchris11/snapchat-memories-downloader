@@ -23,7 +23,7 @@ except ImportError:
 # Configuration
 import argparse
 
-DOWNLOAD_FOLDER = 'snapchat_memories'
+DOWNLOAD_FOLDER = os.path.join(os.path.expanduser('~'), 'Downloads', 'snapchat_memories')
 DRY_RUN = False  # Set to True for preview only
 DELETE_FOLDER_AFTER = True  # Delete the folder after combining (keeps only the combined image/video)
 KEEP_ORIGINALS = False  # Keep original main and overlay files in the folder

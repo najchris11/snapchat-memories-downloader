@@ -5,6 +5,10 @@ import json
 import subprocess
 import threading
 import time
+import signal
+
+# Global variable to track the current child process
+current_process = None
 
 # Helper to print JSON messages
 def log(message, type="info", progress=None):
@@ -13,8 +17,28 @@ def log(message, type="info", progress=None):
         data["progress"] = progress
     print(json.dumps(data), flush=True)
 
+def handle_signal(signum, frame):
+    """Handle kill signals by terminating the child process."""
+    global current_process
+    if current_process:
+        log(f"Received signal {signum}, stopping subprocess...", "info")
+        try:
+            current_process.terminate()
+            try:
+                current_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                current_process.kill()
+        except Exception as e:
+            log(f"Error stopping process: {e}", "error")
+    sys.exit(0)
+
+# Register signal handlers
+signal.signal(signal.SIGINT, handle_signal)
+signal.signal(signal.SIGTERM, handle_signal)
+
 def run_script(script_name, args):
     """Runs a script and captures its output to stream back as JSON logs."""
+    global current_process
     script_path = os.path.join(os.path.dirname(__file__), script_name)
     
     if not os.path.exists(script_path):
@@ -26,7 +50,7 @@ def run_script(script_name, args):
     
     try:
         # We use Popen to read stdout in real-time
-        process = subprocess.Popen(
+        current_process = subprocess.Popen(
             cmd, 
             stdout=subprocess.PIPE, 
             stderr=subprocess.STDOUT,
@@ -34,22 +58,25 @@ def run_script(script_name, args):
             bufsize=1
         )
         
-        for line in process.stdout:
+        for line in current_process.stdout:
             line = line.strip()
             if line:
                 log(line, "log")
                 
-        process.wait()
+        current_process.wait()
+        return_code = current_process.returncode
+        current_process = None
         
-        if process.returncode == 0:
+        if return_code == 0:
             log(f"Finished {script_name}", "success")
             return True
         else:
-            log(f"{script_name} failed with code {process.returncode}", "error")
+            log(f"{script_name} failed with code {return_code}", "error")
             return False
             
     except Exception as e:
         log(f"Error running {script_name}: {str(e)}", "error")
+        current_process = None
         return False
 
 def main():

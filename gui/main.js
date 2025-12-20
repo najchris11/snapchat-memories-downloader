@@ -128,83 +128,128 @@ ipcMain.handle('select-folder', async () => {
   return result.filePaths[0];
 });
 
-// 2. Run Python Scripts
-ipcMain.on('run-script', (event, { command, args, downloadFolder }) => {
-    // Determine api.py path
-    // In dev: ../api.py. In prod: resources/app.asar.unpacked/api.py or similar
-    // For now, let's assume we are running relative to the project root in dev
-    // and we'll need to handle prod path logic later.
-    
-    let scriptPath;
-    let pythonCommand;
-    let baseDir;
-    
-    if (app.isPackaged) {
-        scriptPath = path.join(process.resourcesPath, 'api.py');
-        baseDir = process.resourcesPath;
-    } else {
-        scriptPath = path.join(__dirname, '..', 'api.py');
-        baseDir = path.join(__dirname, '..');
-    }
+// 2. Run Python Scripts (single or workflow)
+ipcMain.on('run-script', async (event, payload) => {
+  // Determine api.py path
+  let scriptPath;
+  let pythonCommand;
+  let baseDir;
 
-    // Check for venv in user's home directory first (where installer creates it)
-    const homeVenvPath = path.join(process.env.USERPROFILE || process.env.HOME, 'snapchat-memories-downloader', '.venv');
-    const projectVenvPath = path.join(baseDir, '.venv');
-    
-    if (process.platform === 'win32') {
-        const homeVenvPython = path.join(homeVenvPath, 'Scripts', 'python.exe');
-        const projectVenvPython = path.join(projectVenvPath, 'Scripts', 'python.exe');
-        
-        if (fs.existsSync(homeVenvPython)) {
-            pythonCommand = homeVenvPython;
-        } else if (fs.existsSync(projectVenvPython)) {
-            pythonCommand = projectVenvPython;
-        } else {
-            pythonCommand = 'python';
-        }
+  if (app.isPackaged) {
+    scriptPath = path.join(process.resourcesPath, 'api.py');
+    baseDir = process.resourcesPath;
+  } else {
+    scriptPath = path.join(__dirname, '..', 'api.py');
+    baseDir = path.join(__dirname, '..');
+  }
+
+  // Check for venv in user's home directory first (where installer creates it)
+  const homeVenvPath = path.join(process.env.USERPROFILE || process.env.HOME, 'snapchat-memories-downloader', '.venv');
+  const projectVenvPath = path.join(baseDir, '.venv');
+
+  if (process.platform === 'win32') {
+    const homeVenvPython = path.join(homeVenvPath, 'Scripts', 'python.exe');
+    const projectVenvPython = path.join(projectVenvPath, 'Scripts', 'python.exe');
+
+    if (fs.existsSync(homeVenvPython)) {
+      pythonCommand = homeVenvPython;
+    } else if (fs.existsSync(projectVenvPython)) {
+      pythonCommand = projectVenvPython;
     } else {
-        const homeVenvPython = path.join(homeVenvPath, 'bin', 'python3');
-        const projectVenvPython = path.join(projectVenvPath, 'bin', 'python3');
-        
-        if (fs.existsSync(homeVenvPython)) {
-            pythonCommand = homeVenvPython;
-        } else if (fs.existsSync(projectVenvPython)) {
-            pythonCommand = projectVenvPython;
-        } else {
-            pythonCommand = 'python3';
-        }
+      pythonCommand = 'python';
     }
-    
-    // Add download folder to args if provided
+  } else {
+    const homeVenvPython = path.join(homeVenvPath, 'bin', 'python3');
+    const projectVenvPython = path.join(projectVenvPath, 'bin', 'python3');
+
+    if (fs.existsSync(homeVenvPython)) {
+      pythonCommand = homeVenvPython;
+    } else if (fs.existsSync(projectVenvPython)) {
+      pythonCommand = projectVenvPython;
+    } else {
+      pythonCommand = 'python3';
+    }
+  }
+
+  const runApi = (command, args = []) => {
     const scriptArgs = [scriptPath, command, ...args];
-    if (downloadFolder) {
-        scriptArgs.push('--output', downloadFolder);
-    }
-    
     const pythonProcess = spawn(pythonCommand, scriptArgs);
     trackProcess(pythonProcess);
 
     pythonProcess.stdout.on('data', (data) => {
-        const lines = data.toString().split('\n');
-        lines.forEach(line => {
-            if (line.trim()) {
-                try {
-                    const jsonLog = JSON.parse(line);
-                    event.reply('script-log', jsonLog);
-                } catch (e) {
-                    event.reply('script-log', { type: 'raw', message: line });
-                }
-            }
-        });
+      const lines = data.toString().split('\n');
+      lines.forEach(line => {
+        if (line.trim()) {
+          try {
+            const jsonLog = JSON.parse(line);
+            event.reply('script-log', jsonLog);
+          } catch (e) {
+            event.reply('script-log', { type: 'raw', message: line });
+          }
+        }
+      });
     });
 
     pythonProcess.stderr.on('data', (data) => {
-        event.reply('script-log', { type: 'error', message: data.toString() });
+      event.reply('script-log', { type: 'error', message: data.toString() });
     });
 
-    pythonProcess.on('close', (code) => {
-        event.reply('script-exit', code);
+    return new Promise((resolve) => {
+      pythonProcess.on('close', (code) => {
+        resolve(code);
+      });
     });
+  };
+
+  // Workflow mode: run selected steps in sequence
+  if (payload.workflow) {
+    const { htmlFile, downloadFolder, runDownload, runMetadata, runCombine, runDedupe, dryRun } = payload;
+
+    const dryRunArgs = dryRun ? ['--dry-run'] : ['--no-dry-run'];
+    const withOutput = (args = []) => (downloadFolder ? [...args, '--output', downloadFolder] : args);
+
+    const steps = [];
+    if (runDownload) {
+      if (!htmlFile) {
+        event.reply('script-log', { type: 'error', message: 'HTML file required to download memories.' });
+        event.reply('script-exit', 1);
+        return;
+      }
+      steps.push({ label: 'Download Memories', command: 'download', args: withOutput([htmlFile]) });
+    }
+    if (runMetadata) {
+      if (!htmlFile) {
+        event.reply('script-log', { type: 'error', message: 'HTML file required to add metadata.' });
+        event.reply('script-exit', 1);
+        return;
+      }
+      steps.push({ label: 'Add GPS Metadata', command: 'metadata', args: withOutput([htmlFile]) });
+    }
+    if (runCombine) {
+      steps.push({ label: 'Combine Overlays', command: 'combine', args: withOutput([...dryRunArgs]) });
+    }
+    if (runDedupe) {
+      steps.push({ label: 'Delete Duplicates', command: 'dedupe', args: withOutput([...dryRunArgs]) });
+    }
+
+    for (const step of steps) {
+      event.reply('script-log', { type: 'info', message: `=== ${step.label} ===` });
+      const code = await runApi(step.command, step.args);
+      if (code !== 0) {
+        event.reply('script-exit', code);
+        return;
+      }
+    }
+
+    event.reply('script-exit', 0);
+    return;
+  }
+
+  // Single command mode (legacy)
+  const { command, args = [], downloadFolder } = payload;
+  const scriptArgs = downloadFolder ? [...args, '--output', downloadFolder] : args;
+  const code = await runApi(command, scriptArgs);
+  event.reply('script-exit', code);
 });
 
 // 2b. Stop Running Script

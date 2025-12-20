@@ -189,6 +189,7 @@ def process_files_in_folder(folder_path, latitude, longitude):
     return success_count
 
 def main():
+    global MAX_WORKERS
     print("=" * 60)
     print("Location Metadata Extractor & Writer")
     print("=" * 60)

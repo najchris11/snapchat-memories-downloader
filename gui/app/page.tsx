@@ -26,6 +26,7 @@ export default function Home() {
   const [runMetadata, setRunMetadata] = useState(true);
   const [runCombine, setRunCombine] = useState(true);
   const [runDedupe, setRunDedupe] = useState(true);
+    const [dryRun, setDryRun] = useState(false);
 
   // Auto-scroll logs
   useEffect(() => {
@@ -98,21 +99,34 @@ export default function Home() {
     }
   }
 
-  const startProcess = () => {
-    if (!htmlFile) return;
-    setIsRunning(true);
-    setLogs([]);
-    setLogs([{ type: 'info', message: 'Starting process...' }]);
+    const startProcess = () => {
+        const nothingSelected = !runDownload && !runMetadata && !runCombine && !runDedupe;
+        if (nothingSelected) {
+            setLogs(prev => [...prev, { type: 'error', message: 'Select at least one step to run.' }]);
+            return;
+        }
+        if (!htmlFile && (runDownload || runMetadata)) {
+            setLogs(prev => [...prev, { type: 'error', message: 'Please choose memories_history.html before running download/metadata.' }]);
+            return;
+        }
 
-    if (typeof window !== 'undefined' && window.require) {
-      const { ipcRenderer } = window.require('electron');
-      ipcRenderer.send('run-script', { 
-        command: 'download', 
-        args: [htmlFile],
-        downloadFolder: downloadFolder 
-      });
-    }
-  };
+        setIsRunning(true);
+        setLogs([{ type: 'info', message: 'Starting process...' }]);
+
+        if (typeof window !== 'undefined' && window.require) {
+            const { ipcRenderer } = window.require('electron');
+            ipcRenderer.send('run-script', { 
+                workflow: true,
+                htmlFile,
+                downloadFolder,
+                runDownload,
+                runMetadata,
+                runCombine,
+                runDedupe,
+                dryRun,
+            });
+        }
+    };
 
   const stopProcess = () => {
     if (typeof window !== 'undefined' && window.require) {
@@ -237,6 +251,12 @@ export default function Home() {
                             <Checkbox id="dedupe" checked={runDedupe} onCheckedChange={(c) => setRunDedupe(!!c)} />
                             <label htmlFor="dedupe" className="text-sm font-bold cursor-pointer">
                                 Delete Duplicates
+                            </label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <Checkbox id="dryRun" checked={dryRun} onCheckedChange={(c) => setDryRun(!!c)} />
+                            <label htmlFor="dryRun" className="text-sm font-bold cursor-pointer">
+                                Dry run (preview only)
                             </label>
                         </div>
                     </CardContent>

@@ -32,13 +32,19 @@ PROCESS_VIDEOS = True  # Process video files with FFmpeg
 MAX_WORKERS = max(2, (os.cpu_count() or 4))
 
 def parse_args():
-    global DOWNLOAD_FOLDER
+    global DOWNLOAD_FOLDER, DRY_RUN
     parser = argparse.ArgumentParser(description="Combine overlays with memories")
     parser.add_argument('--output', type=str, help='Folder containing memories')
+    parser.add_argument('--dry-run', action='store_true', help='Preview only, do not write files or delete folders')
+    parser.add_argument('--no-dry-run', action='store_true', help='Force actual combine even if DRY_RUN is True')
     args = parser.parse_args()
     
     if args.output:
         DOWNLOAD_FOLDER = args.output
+    if args.dry_run:
+        DRY_RUN = True
+    elif args.no_dry_run:
+        DRY_RUN = False
 
 parse_args()
 

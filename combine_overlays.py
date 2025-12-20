@@ -38,6 +38,7 @@ def parse_args():
     parser.add_argument('--dry-run', action='store_true', help='Preview only, do not write files or delete folders')
     parser.add_argument('--no-dry-run', action='store_true', help='Force actual combine even if DRY_RUN is True')
     parser.add_argument('--workers', type=int, help='Number of parallel workers (threads)')
+    parser.add_argument('--auto-confirm', action='store_true', help='Skip confirmation prompts (for automated runs)')
     args = parser.parse_args()
 
     # Start from module-level defaults
@@ -58,12 +59,14 @@ def parse_args():
         "download_folder": download_folder,
         "dry_run": dry_run,
         "max_workers": max_workers,
+        "auto_confirm": args.auto_confirm,
     }
 
 config = parse_args()
 DOWNLOAD_FOLDER = config["download_folder"]
 DRY_RUN = config["dry_run"]
 MAX_WORKERS = config["max_workers"]
+AUTO_CONFIRM = config["auto_confirm"]
 
 exiftool_available = check_exiftool() if USE_EXIFTOOL else False
 ffmpeg_available = check_ffmpeg() if PROCESS_VIDEOS else False
@@ -373,10 +376,11 @@ def main():
         print()
     else:
         print("[WARN] WARNING: This will combine files and delete original folders!")
-        response = input("Continue? (y/n): ")
-        if response.lower() not in ['y', 'yes']:
-            print("Cancelled.")
-            return
+        if not AUTO_CONFIRM:
+            response = input("Continue? (y/n): ")
+            if response.lower() not in ['y', 'yes']:
+                print("Cancelled.")
+                return
         print()
     
     process_folders(DOWNLOAD_FOLDER, dry_run=DRY_RUN)

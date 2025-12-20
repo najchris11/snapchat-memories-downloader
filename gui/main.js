@@ -19,25 +19,29 @@ function trackProcess(proc) {
 }
 
 function terminateActiveProcesses() {
+  const { execSync } = require('child_process');
   for (const proc of Array.from(activeProcesses)) {
     try {
       if (process.platform === 'win32') {
-        // On Windows, send a hard kill to the entire tree to ensure Python + children exit
+        // On Windows, kill the process tree synchronously
         const pid = proc.pid;
         if (pid) {
           try {
-            spawn('taskkill', ['/PID', String(pid), '/T', '/F']);
+            execSync(`taskkill /PID ${pid} /T /F`, { windowsHide: true });
           } catch (e) {
-            // Fallback to direct kill if taskkill fails
-            try { proc.kill('SIGTERM'); } catch (_) {}
+            // Fallback to proc.kill if taskkill fails
+            try { proc.kill('SIGKILL'); } catch (_) {}
           }
         }
       } else {
         // Try graceful stop first on POSIX
-        proc.kill('SIGINT');
+        try {
+          proc.kill('SIGINT');
+        } catch (_) {}
+        // Force kill after timeout
         setTimeout(() => {
-          try { proc.kill('SIGTERM'); } catch (e) {}
-        }, 1500);
+          try { proc.kill('SIGKILL'); } catch (e) {}
+        }, 2000);
       }
     } catch (e) {
       // Ignore errors during shutdown
@@ -61,8 +65,8 @@ function confirmQuitSync(browserWindow) {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 900,
+    width: 1000,
+    height: 800,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false, // For easier prototyping; secure apps should use preload
@@ -227,6 +231,7 @@ ipcMain.on('run-script', async (event, payload) => {
 
     const dryRunArgs = dryRun ? ['--dry-run'] : ['--no-dry-run'];
     const workerArgs = workerCount ? ['--workers', String(workerCount)] : [];
+    const autoConfirmArgs = ['--auto-confirm'];
     const withOutput = (args = []) => (downloadFolder ? [...args, '--output', downloadFolder] : args);
 
     const steps = [];
@@ -244,13 +249,13 @@ ipcMain.on('run-script', async (event, payload) => {
         event.reply('script-exit', 1);
         return;
       }
-      steps.push({ label: 'Add GPS Metadata', command: 'metadata', args: withOutput([htmlFile, ...workerArgs]) });
+      steps.push({ label: 'Add GPS Metadata', command: 'metadata', args: withOutput([htmlFile, ...workerArgs, ...autoConfirmArgs]) });
     }
     if (runCombine) {
-      steps.push({ label: 'Combine Overlays', command: 'combine', args: withOutput([...dryRunArgs, ...workerArgs]) });
+      steps.push({ label: 'Combine Overlays', command: 'combine', args: withOutput([...dryRunArgs, ...workerArgs, ...autoConfirmArgs]) });
     }
     if (runDedupe) {
-      steps.push({ label: 'Delete Duplicates', command: 'dedupe', args: withOutput([...dryRunArgs, ...workerArgs]) });
+      steps.push({ label: 'Delete Duplicates', command: 'dedupe', args: withOutput([...dryRunArgs, ...workerArgs, ...autoConfirmArgs]) });
     }
 
     for (const step of steps) {

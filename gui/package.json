@@ -91,6 +91,10 @@
       {
         "from": "../run_all.py",
         "to": "run_all.py"
+      },
+      {
+        "from": "../utils.py",
+        "to": "utils.py"
       }
     ],
     "mac": {

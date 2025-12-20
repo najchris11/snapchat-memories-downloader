@@ -30,6 +30,7 @@ def parse_args():
     parser.add_argument('input', nargs='?', help='Path to memories_history.html')
     parser.add_argument('--workers', type=int, help='Number of parallel workers')
     parser.add_argument('--output', type=str, help='Output folder for memories')
+    parser.add_argument('--auto-confirm', action='store_true', help='Skip confirmation prompts (for automated runs)')
     args = parser.parse_args()
     
     if args.input:
@@ -38,8 +39,9 @@ def parse_args():
         MAX_WORKERS = args.workers
     if args.output:
         DOWNLOAD_FOLDER = args.output
+    return args.auto_confirm
 
-parse_args()
+auto_confirm = parse_args()
 
 exiftool_available = check_exiftool() if USE_EXIFTOOL else False
 
@@ -174,9 +176,10 @@ def main():
         print("[ERROR] exiftool not found!")
         print("Install from https://exiftool.org/")
         print("Metadata will only be stored in JSON, not in files.")
-        response = input("\nContinue anyway? (y/n): ")
-        if response.lower() not in ['j', 'y', 'ja', 'yes']:
-            return
+        if not auto_confirm:
+            response = input("\nContinue anyway? (y/n): ")
+            if response.lower() not in ['j', 'y', 'ja', 'yes']:
+                return
         print()
     elif exiftool_available:
         print("[OK] exiftool found - GPS data will be written to files")

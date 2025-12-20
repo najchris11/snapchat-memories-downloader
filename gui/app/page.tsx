@@ -2,11 +2,11 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Slider } from '@/components/ui/slider';
-import { FolderOpen, Download, Terminal, Settings, MapPin, Layers, Copy, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { FolderOpen, Download, Terminal, ChevronDown, ChevronUp, Settings } from 'lucide-react';
 
 interface LogMessage {
   type: 'info' | 'error' | 'success' | 'log' | 'raw';
@@ -20,7 +20,6 @@ export default function Home() {
   const [isRunning, setIsRunning] = useState(false);
   const [logs, setLogs] = useState<LogMessage[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   // Steps state
   const [runDownload, setRunDownload] = useState(true);
@@ -46,11 +45,11 @@ export default function Home() {
     if (typeof window !== 'undefined' && window.require) {
       const { ipcRenderer } = window.require('electron');
       
-      const handleLog = (event: any, log: LogMessage) => {
+      const handleLog = (_event: any, log: LogMessage) => {
         setLogs(prev => [...prev, log]);
       };
       
-      const handleExit = (event: any, code: number) => {
+      const handleExit = (_event: any, code: number) => {
         setLogs(prev => [...prev, { type: code === 0 ? 'success' : 'error', message: `Process exited with code ${code}` }]);
         setIsRunning(false);
       };
@@ -328,13 +327,13 @@ export default function Home() {
             {/* Right Column: Logs */}
             <div className="md:col-span-2">
                 <Card className="h-full border-2 border-border shadow-[4px_4px_0px_0px_hsl(var(--foreground))] bg-foreground text-background flex flex-col rounded-xl overflow-hidden">
-                    <CardHeader className="pb-3 border-b border-background/10 bg-foreground/90">
+                    <CardHeader className="pb-3 border-b border-background/10 bg-foreground/90 flex items-center justify-between">
                         <CardTitle className="text-sm font-mono text-background/60 flex items-center gap-2">
                             <Terminal className="w-4 h-4" /> Terminal Output
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="flex-1 p-0 min-h-[500px] relative">
-                        <ScrollArea className="h-[500px] w-full p-4 font-mono text-xs">
+                    <CardContent className="flex-1 p-0 min-h-125 relative">
+                        <ScrollArea className="h-125 w-full p-4 font-mono text-xs">
                             <div className="space-y-1">
                                 {logs.length === 0 && (
                                     <div className="text-background/40 italic"> waiting for command...</div>

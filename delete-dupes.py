@@ -22,6 +22,7 @@ def parse_args():
     parser.add_argument('--dry-run', action='store_true', help='Preview only, do not delete files')
     parser.add_argument('--no-dry-run', action='store_true', help='Force deletion even if DRY_RUN is True')
     parser.add_argument('--workers', type=int, help='Number of parallel workers (threads)')
+    parser.add_argument('--auto-confirm', action='store_true', help='Skip confirmation prompts (for automated runs)')
     args = parser.parse_args()
 
     # Start from module defaults
@@ -38,9 +39,9 @@ def parse_args():
     if args.workers:
         max_workers = max(1, args.workers)
 
-    return download_folder, dry_run, max_workers
+    return download_folder, dry_run, max_workers, args.auto_confirm
 
-DOWNLOAD_FOLDER, DRY_RUN, MAX_WORKERS = parse_args()
+DOWNLOAD_FOLDER, DRY_RUN, MAX_WORKERS, AUTO_CONFIRM = parse_args()
 def calculate_file_hash(filepath):
     """Calculate SHA256 hash for a file."""
     sha256_hash = hashlib.sha256()
@@ -192,10 +193,11 @@ def main():
         print()
     else:
         print("[WARN] WARNING: Duplicates will actually be deleted!")
-        response = input("Continue? (y/n): ")
-        if response.lower() not in ['j', 'y', 'ja', 'yes']:
-            print("Cancelled.")
-            return
+        if not AUTO_CONFIRM:
+            response = input("Continue? (y/n): ")
+            if response.lower() not in ['j', 'y', 'ja', 'yes']:
+                print("Cancelled.")
+                return
         print()
     
     process_folders(DOWNLOAD_FOLDER, dry_run=DRY_RUN)

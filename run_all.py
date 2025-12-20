@@ -11,6 +11,7 @@ This lightweight `run_all.py` only orchestrates the existing scripts:
 Usage:
     python3 run_all.py              # Interactive menu
     python3 run_all.py --full       # Run all steps sequentially
+    python3 run_all.py --workers    # Sets num of threads
     python3 run_all.py --help       # Show help
 """
 

@@ -11,6 +11,7 @@ import subprocess
 from bs4 import BeautifulSoup
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from utils import check_exiftool, extract_unique_id_from_url, parse_date_string, format_exif_datetime
 
 # Configuration
 import argparse
@@ -39,14 +40,6 @@ def parse_args():
         DOWNLOAD_FOLDER = args.output
 
 parse_args()
-
-def check_exiftool():
-    """Check whether exiftool is installed."""
-    try:
-        subprocess.run(['exiftool', '-ver'], capture_output=True, check=True)
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return False
 
 exiftool_available = check_exiftool() if USE_EXIFTOOL else False
 
@@ -105,42 +98,8 @@ def extract_urls_from_html(html_file):
     
     return [url for url, _ in matches]
 
-def extract_unique_id_from_url(url):
-    """Extract the unique ID (mid) from the URL."""
-    mid_match = re.search(r'mid=([a-zA-Z0-9\-]+)', url)
-    if mid_match:
-        return mid_match.group(1)
-    else:
-        import hashlib
-        return hashlib.md5(url.encode()).hexdigest()
-
-def parse_date_string(date_str):
-    """Parse a date string into EXIF-friendly components."""
-    if not date_str:
-        return None
-    try:
-        date_cleaned = date_str.strip()
-        for fmt in [
-            '%Y-%m-%d %H:%M:%S %Z',
-            '%Y-%m-%d %H:%M:%S',
-            '%Y-%m-%d',
-            '%d.%m.%Y %H:%M:%S',
-            '%d.%m.%Y'
-        ]:
-            try:
-                dt = datetime.strptime(date_cleaned.replace('UTC', '').strip(), fmt.replace(' %Z', ''))
-                return dt
-            except Exception:
-                continue
-    except Exception:
-        pass
-    return None
-
-def format_exif_datetime(dt):
-    return dt.strftime('%Y:%m:%d %H:%M:%S') if dt else None
-
 def write_metadata_to_file(filepath, latitude, longitude, date_str=None):
-    """Write GPS (and when available date) into the file's metadata via exiftool."""
+    """Write GPS data into the file's metadata via exiftool."""
     if not exiftool_available:
         return False
 
@@ -161,9 +120,7 @@ def write_metadata_to_file(filepath, latitude, longitude, date_str=None):
         abs_lat = abs(latitude)
         abs_lon = abs(longitude)
 
-        exif_dt = format_exif_datetime(parse_date_string(date_str)) if date_str else None
-
-        # Build exiftool args once, applicable to both images and videos
+        # Build exiftool args for GPS only
         args = [
             'exiftool',
             '-overwrite_original',
@@ -172,17 +129,8 @@ def write_metadata_to_file(filepath, latitude, longitude, date_str=None):
             f'-GPSLatitudeRef={lat_ref}',
             f'-GPSLongitude={abs_lon}',
             f'-GPSLongitudeRef={lon_ref}',
+            filepath
         ]
-
-        if exif_dt:
-            args.extend([
-                f'-DateTimeOriginal={exif_dt}',
-                f'-CreateDate={exif_dt}',
-                f'-ModifyDate={exif_dt}',
-            ])
-
-        # For videos, ExifTool will map these tags appropriately (QuickTime/MP4)
-        args.append(filepath)
 
         result = subprocess.run(args, capture_output=True)
         return result.returncode == 0

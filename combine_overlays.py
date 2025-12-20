@@ -11,6 +11,7 @@ import shutil
 import subprocess
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from utils import check_exiftool, check_ffmpeg
 
 try:
     from PIL import Image, ImageOps
@@ -63,21 +64,6 @@ config = parse_args()
 DOWNLOAD_FOLDER = config["download_folder"]
 DRY_RUN = config["dry_run"]
 MAX_WORKERS = config["max_workers"]
-def check_exiftool():
-    """Checks if exiftool is installed"""
-    try:
-        subprocess.run(['exiftool', '-ver'], capture_output=True, check=True)
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return False
-
-def check_ffmpeg():
-    """Checks if ffmpeg is installed"""
-    try:
-        subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return False
 
 exiftool_available = check_exiftool() if USE_EXIFTOOL else False
 ffmpeg_available = check_ffmpeg() if PROCESS_VIDEOS else False

@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from bs4 import BeautifulSoup
 from datetime import datetime
 from pathlib import Path
+from utils import check_exiftool, extract_unique_id_from_url, parse_date_string
 
 # ---------------- CONFIG ----------------
 import argparse
@@ -109,14 +110,6 @@ dates = extract_dates_from_table()
 print(f"{len(matches)} files found, {len(dates)} date entries found.")
 
 # Check whether exiftool is available
-def check_exiftool():
-    """Check whether exiftool is installed."""
-    try:
-        subprocess.run(['exiftool', '-ver'], capture_output=True, check=True)
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return False
-
 exiftool_available = check_exiftool() if USE_EXIFTOOL else False
 if USE_EXIFTOOL and not exiftool_available:
     print("WARNING: exiftool not found. Metadata will not be written.")
@@ -124,15 +117,7 @@ if USE_EXIFTOOL and not exiftool_available:
 elif exiftool_available:
     print("exiftool found - metadata will be written to files.")
 
-def extract_unique_id_from_url(url):
-    """Extract the unique ID (mid) from the URL."""
-    mid_match = re.search(r'mid=([a-zA-Z0-9\-]+)', url)
-    if mid_match:
-        return mid_match.group(1)
-    else:
-        # Fallback: Hash der gesamten URL
-        import hashlib
-        return hashlib.md5(url.encode()).hexdigest()
+
 
 def get_file_extension_from_url(url):
     """Determine file extension from the URL or Content-Type."""
@@ -195,23 +180,6 @@ def extract_and_cleanup_zip(zip_path):
         print(f"[ZIP ERROR] Failed to extract {os.path.basename(zip_path)}: {e}")
         return None
 
-def parse_date_string(date_str):
-    """Parse a date string into a datetime object."""
-    if not date_str:
-        return None
-    
-    try:
-        date_cleaned = date_str.strip()
-        for fmt in ['%Y-%m-%d %H:%M:%S %Z', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d', 
-                    '%d.%m.%Y %H:%M:%S', '%d.%m.%Y']:
-            try:
-                dt = datetime.strptime(date_cleaned.replace('UTC', '').strip(), fmt.replace(' %Z', ''))
-                return dt
-            except:
-                continue
-    except:
-        pass
-    return None
 
 def write_metadata_to_file(filepath, date_str, silent=False):
     """Write capture date into the file metadata."""
@@ -297,7 +265,7 @@ def process_files_in_folder(folder_path, date_str):
     
     if success_count > 0 or skip_count > 0:
         print(f"[ZIP-CONTENT] {success_count} files updated with metadata, {skip_count} skipped.")
-        print(f"[ZIP-CONTENT] {success_count} files updated with metadata, {skip_count} skipped.")
+
 
 def log_error(unique_id, url, date_str, error_message, index):
     """Store failed downloads in a separate JSON file."""
@@ -314,12 +282,11 @@ def log_error(unique_id, url, date_str, error_message, index):
                 json.dump(error_log, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"[ERROR LOG] Failed to save error list: {e}")
-            print(f"[ERROR LOG] Failed to save error list: {e}")
 
 def download_file(url, is_get_request, date_str=None, index=None):
     """Download a file with the correct extension."""
     unique_id = extract_unique_id_from_url(url)
-    
+
     # Check if already downloaded (by unique_id)
     if unique_id in downloaded_files:
         print(f"[SKIP] {unique_id} already downloaded.")

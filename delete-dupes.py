@@ -10,9 +10,22 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Configuration
+import argparse
+
 DOWNLOAD_FOLDER = 'snapchat_memories'
 DRY_RUN = True  # Set to False to actually delete files
 MAX_WORKERS = max(2, (os.cpu_count() or 4))
+
+def parse_args():
+    global DOWNLOAD_FOLDER
+    parser = argparse.ArgumentParser(description="Remove duplicate files in memories")
+    parser.add_argument('--output', type=str, help='Folder containing memories')
+    args = parser.parse_args()
+    
+    if args.output:
+        DOWNLOAD_FOLDER = args.output
+
+parse_args()
 
 def calculate_file_hash(filepath):
     """Calculate SHA256 hash for a file."""

@@ -59,29 +59,56 @@ def main():
 
     command = sys.argv[1]
     
+    # Extract --output argument if present
+    output_folder = None
+    args_list = list(sys.argv[2:])
+    if '--output' in args_list:
+        idx = args_list.index('--output')
+        if idx + 1 < len(args_list):
+            output_folder = args_list[idx + 1]
+            # Remove --output and its value from args
+            args_list.pop(idx)
+            args_list.pop(idx)
+    
     if command == "download":
-        # Usage: api.py download <html_file> [workers] [test_mode]
-        html_file = sys.argv[2]
-        args = [html_file]
+        # Usage: api.py download <html_file> [--output folder] [workers] [test_mode]
+        if not args_list:
+            log("Missing HTML file argument", "error")
+            return
+        html_file = args_list[0]
+        script_args = [html_file]
         
-        # Parse optional args
-        # We expect JSON stringified options or just positional args
-        # Simplified: just passthrough for now
-        if len(sys.argv) > 3:
-            args.extend(sys.argv[3:])
+        # Add output folder if specified
+        if output_folder:
+            script_args.extend(['--output', output_folder])
+        
+        # Parse remaining optional args
+        if len(args_list) > 1:
+            script_args.extend(args_list[1:])
             
-        run_script("snapchat-downloader.py", args)
+        run_script("snapchat-downloader.py", script_args)
         
     elif command == "metadata":
-        html_file = sys.argv[2]
-        args = [html_file]
-        run_script("metadata.py", args)
+        if not args_list:
+            log("Missing HTML file argument", "error")
+            return
+        html_file = args_list[0]
+        script_args = [html_file]
+        if output_folder:
+            script_args.extend(['--output', output_folder])
+        run_script("metadata.py", script_args)
         
     elif command == "combine":
-        run_script("combine_overlays.py", [])
+        script_args = []
+        if output_folder:
+            script_args.extend(['--output', output_folder])
+        run_script("combine_overlays.py", script_args)
         
     elif command == "dedupe":
-        run_script("delete-dupes.py", [])
+        script_args = []
+        if output_folder:
+            script_args.extend(['--output', output_folder])
+        run_script("delete-dupes.py", script_args)
         
     else:
         log(f"Unknown command: {command}", "error")

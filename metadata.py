@@ -24,16 +24,19 @@ USE_EXIFTOOL = True
 MAX_WORKERS = max(2, (os.cpu_count() or 4))
 
 def parse_args():
-    global HTML_FILE, MAX_WORKERS
+    global HTML_FILE, MAX_WORKERS, DOWNLOAD_FOLDER
     parser = argparse.ArgumentParser(description="Location Metadata Extractor")
     parser.add_argument('input', nargs='?', help='Path to memories_history.html')
     parser.add_argument('--workers', type=int, help='Number of parallel workers')
+    parser.add_argument('--output', type=str, help='Output folder for memories')
     args = parser.parse_args()
     
     if args.input:
         HTML_FILE = args.input
     if args.workers:
         MAX_WORKERS = args.workers
+    if args.output:
+        DOWNLOAD_FOLDER = args.output
 
 parse_args()
 

@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { spawn } = require('child_process');
 
 let mainWindow;
@@ -44,15 +45,13 @@ function confirmQuitSync(browserWindow) {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1000,
-    height: 800,
+    width: 1200,
+    height: 900,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false, // For easier prototyping; secure apps should use preload
       webSecurity: false // Allow loading local resources
     },
-    titleBarStyle: 'hidden',
-    trafficLightPosition: { x: 15, y: 15 }, // MacOS traffic lights
     backgroundColor: '#000000',
   });
 
@@ -121,21 +120,68 @@ ipcMain.handle('select-file', async () => {
   return result.filePaths[0];
 });
 
+// 1b. Select Folder Dialog
+ipcMain.handle('select-folder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'createDirectory']
+  });
+  return result.filePaths[0];
+});
+
 // 2. Run Python Scripts
-ipcMain.on('run-script', (event, { command, args }) => {
+ipcMain.on('run-script', (event, { command, args, downloadFolder }) => {
     // Determine api.py path
     // In dev: ../api.py. In prod: resources/app.asar.unpacked/api.py or similar
     // For now, let's assume we are running relative to the project root in dev
     // and we'll need to handle prod path logic later.
     
     let scriptPath;
+    let pythonCommand;
+    let baseDir;
+    
     if (app.isPackaged) {
         scriptPath = path.join(process.resourcesPath, 'api.py');
+        baseDir = process.resourcesPath;
     } else {
         scriptPath = path.join(__dirname, '..', 'api.py');
+        baseDir = path.join(__dirname, '..');
     }
 
-    const pythonProcess = spawn('python3', [scriptPath, command, ...args]);
+    // Check for venv in user's home directory first (where installer creates it)
+    const homeVenvPath = path.join(process.env.USERPROFILE || process.env.HOME, 'snapchat-memories-downloader', '.venv');
+    const projectVenvPath = path.join(baseDir, '.venv');
+    
+    if (process.platform === 'win32') {
+        const homeVenvPython = path.join(homeVenvPath, 'Scripts', 'python.exe');
+        const projectVenvPython = path.join(projectVenvPath, 'Scripts', 'python.exe');
+        
+        if (fs.existsSync(homeVenvPython)) {
+            pythonCommand = homeVenvPython;
+        } else if (fs.existsSync(projectVenvPython)) {
+            pythonCommand = projectVenvPython;
+        } else {
+            pythonCommand = 'python';
+        }
+    } else {
+        const homeVenvPython = path.join(homeVenvPath, 'bin', 'python3');
+        const projectVenvPython = path.join(projectVenvPath, 'bin', 'python3');
+        
+        if (fs.existsSync(homeVenvPython)) {
+            pythonCommand = homeVenvPython;
+        } else if (fs.existsSync(projectVenvPython)) {
+            pythonCommand = projectVenvPython;
+        } else {
+            pythonCommand = 'python3';
+        }
+    }
+    
+    // Add download folder to args if provided
+    const scriptArgs = [scriptPath, command, ...args];
+    if (downloadFolder) {
+        scriptArgs.push('--output', downloadFolder);
+    }
+    
+    const pythonProcess = spawn(pythonCommand, scriptArgs);
     trackProcess(pythonProcess);
 
     pythonProcess.stdout.on('data', (data) => {
@@ -159,6 +205,13 @@ ipcMain.on('run-script', (event, { command, args }) => {
     pythonProcess.on('close', (code) => {
         event.reply('script-exit', code);
     });
+});
+
+// 2b. Stop Running Script
+ipcMain.on('stop-script', (event) => {
+    event.reply('script-log', { type: 'info', message: 'Stopping process...' });
+    terminateActiveProcesses();
+    event.reply('script-exit', -1); // Signal stopped
 });
 
 // 3. Install Dependencies
@@ -197,10 +250,17 @@ ipcMain.on('install-dependencies', (event) => {
   }
 
   if (process.platform === 'win32') {
-    const psScript = path.join(projectRoot, 'installer.ps1');
+    // Resolve script path based on environment
+    let psScript;
+    if (app.isPackaged) {
+      psScript = path.join(process.resourcesPath, 'installer.ps1');
+    } else {
+      psScript = path.join(projectRoot, 'installer.ps1');
+    }
+    
     const powershell = 'powershell.exe';
     const args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', psScript];
-    const installProcess = spawn(powershell, args, { cwd: projectRoot });
+    const installProcess = spawn(powershell, args, { cwd: app.isPackaged ? process.resourcesPath : projectRoot });
     trackProcess(installProcess);
 
     installProcess.stdout.on('data', (data) => {

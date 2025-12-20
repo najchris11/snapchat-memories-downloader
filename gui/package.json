@@ -51,15 +51,42 @@
       "package.json"
     ],
     "extraResources": [
-      "../installer.sh",
-      "../installer.ps1",
-      "../requirements.txt",
-      "../api.py",
-      "../metadata.py",
-      "../combine_overlays.py",
-      "../delete-dupes.py",
-      "../snapchat-downloader.py",
-      "../run_all.py"
+      {
+        "from": "../installer.sh",
+        "to": "installer.sh"
+      },
+      {
+        "from": "../installer.ps1",
+        "to": "installer.ps1"
+      },
+      {
+        "from": "../requirements.txt",
+        "to": "requirements.txt"
+      },
+      {
+        "from": "../api.py",
+        "to": "api.py"
+      },
+      {
+        "from": "../metadata.py",
+        "to": "metadata.py"
+      },
+      {
+        "from": "../combine_overlays.py",
+        "to": "combine_overlays.py"
+      },
+      {
+        "from": "../delete-dupes.py",
+        "to": "delete-dupes.py"
+      },
+      {
+        "from": "../snapchat-downloader.py",
+        "to": "snapchat-downloader.py"
+      },
+      {
+        "from": "../run_all.py",
+        "to": "run_all.py"
+      }
     ],
     "mac": {
       "category": "public.app-category.utilities",

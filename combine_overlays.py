@@ -21,6 +21,8 @@ except ImportError:
     print("   Run: pip install Pillow")
 
 # Configuration
+import argparse
+
 DOWNLOAD_FOLDER = 'snapchat_memories'
 DRY_RUN = False  # Set to True for preview only
 DELETE_FOLDER_AFTER = True  # Delete the folder after combining (keeps only the combined image/video)
@@ -28,6 +30,17 @@ KEEP_ORIGINALS = False  # Keep original main and overlay files in the folder
 USE_EXIFTOOL = True  # Copy metadata from main image to combined image
 PROCESS_VIDEOS = True  # Process video files with FFmpeg
 MAX_WORKERS = max(2, (os.cpu_count() or 4))
+
+def parse_args():
+    global DOWNLOAD_FOLDER
+    parser = argparse.ArgumentParser(description="Combine overlays with memories")
+    parser.add_argument('--output', type=str, help='Folder containing memories')
+    args = parser.parse_args()
+    
+    if args.output:
+        DOWNLOAD_FOLDER = args.output
+
+parse_args()
 
 def check_exiftool():
     """Checks if exiftool is installed"""

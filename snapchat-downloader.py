@@ -31,11 +31,12 @@ TEST_LIMIT = None
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 def _parse_args():
-    global TEST_MODE, MAX_WORKERS, TEST_LIMIT, HTML_FILE
+    global TEST_MODE, MAX_WORKERS, TEST_LIMIT, HTML_FILE, DOWNLOAD_FOLDER
     parser = argparse.ArgumentParser(description="Snapchat Memories Downloader")
     parser.add_argument('input', nargs='?', help='Path to memories_history.html')
     parser.add_argument('--test', nargs='?', const=0, type=int, help='Test mode: limit downloads to N files (default: 0)')
     parser.add_argument('--workers', type=int, help='Number of parallel workers')
+    parser.add_argument('--output', type=str, help='Output folder for downloaded memories')
     
     args = parser.parse_args()
     
@@ -48,6 +49,9 @@ def _parse_args():
         
     if args.workers:
         MAX_WORKERS = args.workers
+    
+    if args.output:
+        DOWNLOAD_FOLDER = args.output
 
 _parse_args()
 

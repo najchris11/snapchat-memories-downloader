@@ -15,6 +15,7 @@ interface LogMessage {
 
 export default function Home() {
   const [htmlFile, setHtmlFile] = useState<string | null>(null);
+  const [downloadFolder, setDownloadFolder] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [logs, setLogs] = useState<LogMessage[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -70,6 +71,19 @@ export default function Home() {
     }
   };
 
+  const selectFolder = async () => {
+    if (typeof window !== 'undefined' && window.require) {
+      const { ipcRenderer } = window.require('electron');
+      const folderPath = await ipcRenderer.invoke('select-folder');
+      if (folderPath) {
+        setDownloadFolder(folderPath);
+        setLogs(prev => [...prev, { type: 'info', message: `Download folder: ${folderPath}` }]);
+      }
+    } else {
+        setDownloadFolder('/mock/path/to/downloads');
+    }
+  };
+
   const runInstaller = () => {
     setIsRunning(true);
     setLogs([{ type: 'info', message: 'Starting environment setup...' }]);
@@ -92,7 +106,18 @@ export default function Home() {
 
     if (typeof window !== 'undefined' && window.require) {
       const { ipcRenderer } = window.require('electron');
-      ipcRenderer.send('run-script', { command: 'download', args: [htmlFile] });
+      ipcRenderer.send('run-script', { 
+        command: 'download', 
+        args: [htmlFile],
+        downloadFolder: downloadFolder 
+      });
+    }
+  };
+
+  const stopProcess = () => {
+    if (typeof window !== 'undefined' && window.require) {
+      const { ipcRenderer } = window.require('electron');
+      ipcRenderer.send('stop-script');
     }
   };
 
@@ -133,29 +158,54 @@ export default function Home() {
                 {/* File Selection */}
                 <Card className="border-2 border-border shadow-[4px_4px_0px_0px_hsl(var(--foreground))] rounded-xl overflow-hidden">
                     <CardHeader className="bg-muted border-b-2 border-dashed border-muted-foreground/20">
-                        <CardTitle className="text-lg font-bold">1. Select File</CardTitle>
+                        <CardTitle className="text-lg font-bold">1. Select Files</CardTitle>
                     </CardHeader>
-                    <CardContent className="pt-6">
-                        <Button 
-                            variant="default"
-                            className="w-full flex items-center gap-2 font-bold py-6 text-md"
-                            onClick={selectFile}
-                        >
-                            <FolderOpen className="w-5 h-5" />
-                            {htmlFile ? "Change File" : "Select HTML"}
-                        </Button>
-                        
-                        <p className="mt-3 text-xs font-medium text-center opacity-60">
-                            Please select <span className="font-mono bg-secondary px-1 rounded">memories_history.html</span>
-                        </p>
+                    <CardContent className="pt-6 space-y-4">
+                        <div>
+                            <Button 
+                                variant="default"
+                                className="w-full flex items-center gap-2 font-bold py-6 text-md"
+                                onClick={selectFile}
+                            >
+                                <FolderOpen className="w-5 h-5" />
+                                {htmlFile ? "Change HTML" : "Select HTML"}
+                            </Button>
+                            
+                            <p className="mt-3 text-xs font-medium text-center opacity-60">
+                                Select <span className="font-mono bg-secondary px-1 rounded">memories_history.html</span>
+                            </p>
 
-                        {htmlFile && (
-                            <div className="mt-4 p-3 bg-muted rounded border border-border">
-                                <p className="text-xs text-foreground break-all font-mono">
-                                    {htmlFile.split('/').pop()}
-                                </p>
-                            </div>
-                        )}
+                            {htmlFile && (
+                                <div className="mt-4 p-3 bg-muted rounded border border-border">
+                                    <p className="text-xs text-foreground break-all font-mono">
+                                        {htmlFile.split('/').pop() || htmlFile.split('\\').pop()}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        <div>
+                            <Button 
+                                variant="outline"
+                                className="w-full flex items-center gap-2 font-bold py-6 text-md"
+                                onClick={selectFolder}
+                            >
+                                <Download className="w-5 h-5" />
+                                {downloadFolder ? "Change Folder" : "Download Folder"}
+                            </Button>
+                            
+                            <p className="mt-3 text-xs font-medium text-center opacity-60">
+                                Optional: Choose where to save memories
+                            </p>
+
+                            {downloadFolder && (
+                                <div className="mt-4 p-3 bg-muted rounded border border-border">
+                                    <p className="text-xs text-foreground break-all font-mono">
+                                        {downloadFolder}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
                     </CardContent>
                 </Card>
 
@@ -200,6 +250,17 @@ export default function Home() {
                 >
                     {isRunning ? "PROCESSING..." : "START DOWNLOAD"}
                 </Button>
+                
+                {isRunning && (
+                    <Button 
+                        size="lg"
+                        variant="destructive"
+                        className="w-full font-black text-lg py-8 shadow-[4px_4px_0px_0px_hsl(var(--foreground))] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_hsl(var(--foreground))] transition-all border-2 border-border rounded-xl"
+                        onClick={stopProcess}
+                    >
+                        STOP PROCESS
+                    </Button>
+                )}
             </div>
 
             {/* Right Column: Logs */}

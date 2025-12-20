@@ -111,28 +111,59 @@ if (-not (Test-Command 'ffmpeg')) {
 
 # 4. Set up venv and Python deps
 Write-Host "Step 4/5: Python virtual environment & requirements..."
-$scriptRoot = (Get-Location).Path
-$venvPath = Join-Path $scriptRoot '.venv'
+
+# Create venv in a writable location (user's home directory)
+$venvRoot = Join-Path $env:USERPROFILE 'snapchat-memories-downloader'
+$venvPath = Join-Path $venvRoot '.venv'
+
+# Ensure the venv root directory exists
+if (-not (Test-Path $venvRoot)) {
+  New-Item -ItemType Directory -Path $venvRoot -Force | Out-Null
+}
 
 if (-not (Test-Path $venvPath)) {
-  Write-Info "Creating virtual environment..."
-  if ($pythonExe -eq 'py') {
-    py -3 -m venv .venv
-  } else {
-    & $pythonExe -m venv .venv
+  Write-Info "Creating virtual environment in $venvRoot..."
+  Push-Location $venvRoot
+  try {
+    if ($pythonExe -eq 'py') {
+      py -3 -m venv .venv
+    } else {
+      & $pythonExe -m venv .venv
+    }
+  } finally {
+    Pop-Location
   }
 }
 
 Write-Info "Activating virtual environment..."
 $venvActivate = Join-Path $venvPath 'Scripts/Activate.ps1'
+if (-not (Test-Path $venvActivate)) {
+  Write-ErrorMsg "Virtual environment activation script not found at $venvActivate"
+  exit 1
+}
 . $venvActivate
 
 Write-Info "Upgrading pip and installing requirements..."
 python -m pip install -q --upgrade pip
-if (Test-Path (Join-Path $scriptRoot 'requirements.txt')) {
-  python -m pip install -q -r requirements.txt
+
+# Try to find requirements.txt in multiple locations
+$requirementsPath = $null
+if (Test-Path 'requirements.txt') {
+  $requirementsPath = 'requirements.txt'
+} elseif (Test-Path (Join-Path $PSScriptRoot 'requirements.txt')) {
+  $requirementsPath = Join-Path $PSScriptRoot 'requirements.txt'
+} elseif (Test-Path (Join-Path (Get-Location) 'requirements.txt')) {
+  $requirementsPath = Join-Path (Get-Location) 'requirements.txt'
 }
-Write-Success "Python dependencies installed."
+
+if ($requirementsPath) {
+  python -m pip install -q -r $requirementsPath
+  Write-Success "Python dependencies installed."
+} else {
+  Write-Info "requirements.txt not found - skipping pip dependencies"
+}
+
+Write-Success "Virtual environment created at: $venvRoot"
 
 # 5. Done
 Write-Host "Step 5/5: Finalizing..."

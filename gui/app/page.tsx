@@ -32,6 +32,7 @@ export default function Home() {
   const [workerCount, setWorkerCount] = useState(
     typeof navigator !== 'undefined' ? Math.max(2, Math.floor((navigator.hardwareConcurrency || 4) / 2)) : 2
   );
+    const htmlNeeded = runDownload || runMetadata;
 
   // Auto-scroll logs
   useEffect(() => {
@@ -306,7 +307,7 @@ export default function Home() {
                 <Button 
                     size="lg" 
                     className="w-full font-black text-lg py-8 shadow-[4px_4px_0px_0px_hsl(var(--foreground))] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_hsl(var(--foreground))] transition-all bg-foreground text-background border-2 border-border rounded-xl"
-                    disabled={!htmlFile || isRunning}
+                    disabled={isRunning || (htmlNeeded && !htmlFile)}
                     onClick={startProcess}
                 >
                     {isRunning ? "PROCESSING..." : "START DOWNLOAD"}

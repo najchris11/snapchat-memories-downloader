@@ -32,22 +32,37 @@ PROCESS_VIDEOS = True  # Process video files with FFmpeg
 MAX_WORKERS = max(2, (os.cpu_count() or 4) // 2)
 
 def parse_args():
-    global DOWNLOAD_FOLDER, DRY_RUN
     parser = argparse.ArgumentParser(description="Combine overlays with memories")
     parser.add_argument('--output', type=str, help='Folder containing memories')
     parser.add_argument('--dry-run', action='store_true', help='Preview only, do not write files or delete folders')
     parser.add_argument('--no-dry-run', action='store_true', help='Force actual combine even if DRY_RUN is True')
+    parser.add_argument('--workers', type=int, help='Number of parallel workers (threads)')
     args = parser.parse_args()
-    
+
+    # Start from module-level defaults
+    download_folder = DOWNLOAD_FOLDER
+    dry_run = DRY_RUN
+    max_workers = MAX_WORKERS
+
     if args.output:
-        DOWNLOAD_FOLDER = args.output
+        download_folder = args.output
     if args.dry_run:
-        DRY_RUN = True
+        dry_run = True
     elif args.no_dry_run:
-        DRY_RUN = False
+        dry_run = False
+    if args.workers:
+        max_workers = max(1, args.workers)
 
-parse_args()
+    return {
+        "download_folder": download_folder,
+        "dry_run": dry_run,
+        "max_workers": max_workers,
+    }
 
+config = parse_args()
+DOWNLOAD_FOLDER = config["download_folder"]
+DRY_RUN = config["dry_run"]
+MAX_WORKERS = config["max_workers"]
 def check_exiftool():
     """Checks if exiftool is installed"""
     try:
@@ -367,15 +382,6 @@ def main():
         print("   Install at least one: pip install Pillow  or  brew install ffmpeg")
         return
     
-    # Optional workers flag
-    for i, a in enumerate(sys.argv[1:]):
-        if a.startswith('--workers='):
-            try:
-                val = int(a.split('=', 1)[1])
-                globals()['MAX_WORKERS'] = max(1, val)
-            except ValueError:
-                pass
-
     if DRY_RUN:
         print("⚠️  DRY RUN MODE - Preview only, no changes")
         print()

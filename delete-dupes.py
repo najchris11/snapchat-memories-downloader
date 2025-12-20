@@ -17,22 +17,30 @@ DRY_RUN = True  # Set to False to actually delete files
 MAX_WORKERS = max(2, (os.cpu_count() or 4) // 2)
 
 def parse_args():
-    global DOWNLOAD_FOLDER, DRY_RUN
     parser = argparse.ArgumentParser(description="Remove duplicate files in memories")
     parser.add_argument('--output', type=str, help='Folder containing memories')
     parser.add_argument('--dry-run', action='store_true', help='Preview only, do not delete files')
     parser.add_argument('--no-dry-run', action='store_true', help='Force deletion even if DRY_RUN is True')
+    parser.add_argument('--workers', type=int, help='Number of parallel workers (threads)')
     args = parser.parse_args()
-    
+
+    # Start from module defaults
+    download_folder = DOWNLOAD_FOLDER
+    dry_run = DRY_RUN
+    max_workers = MAX_WORKERS
+
     if args.output:
-        DOWNLOAD_FOLDER = args.output
+        download_folder = args.output
     if args.dry_run:
-        DRY_RUN = True
+        dry_run = True
     elif args.no_dry_run:
-        DRY_RUN = False
+        dry_run = False
+    if args.workers:
+        max_workers = max(1, args.workers)
 
-parse_args()
+    return download_folder, dry_run, max_workers
 
+DOWNLOAD_FOLDER, DRY_RUN, MAX_WORKERS = parse_args()
 def calculate_file_hash(filepath):
     """Calculate SHA256 hash for a file."""
     sha256_hash = hashlib.sha256()
@@ -179,13 +187,6 @@ def main():
     print("=" * 80)
     print()
     
-    for a in sys.argv[1:]:
-        if a.startswith('--workers='):
-            try:
-                MAX_WORKERS = max(1, int(a.split('=', 1)[1]))
-            except ValueError:
-                pass
-
     if DRY_RUN:
         print("⚠️  DRY RUN MODE - Preview only, no changes")
         print()

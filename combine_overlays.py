@@ -160,14 +160,21 @@ def combine_video_with_overlay(video_path, overlay_path, output_path):
     if not ffmpeg_available:
         print("   [ERROR] FFmpeg not available for video combining")
         return False
-    
+
     try:
-        # Use scale2ref to force the overlay to match the displayed video dimensions
-        # Ensure overlay keeps alpha (format=rgba) before overlaying
+        # Filter complex explanation:
+        # 1. Process video first with format=rgba to ensure correct post-rotation
+        #    dimensions are used (phone videos often have rotation metadata)
+        # 2. Apply setsar=1 to normalize sample aspect ratio (handles non-square pixels)
+        # 3. Convert overlay to RGBA for proper alpha/transparency handling
+        # 4. Use scale2ref without explicit dimensions - this automatically scales
+        #    the overlay to match the video's actual decoded frame size
+        # 5. Composite the overlay on top of the video
         filter_complex = (
+            '[0:v]format=rgba,setsar=1[vid];'
             '[1:v]format=rgba[ov];'
-            '[ov][0:v]scale2ref=main_w:main_h[ovr][base];'
-            '[base][ovr]overlay=0:0:format=auto'
+            '[ov][vid]scale2ref[ovr][base];'
+            '[base][ovr]overlay=0:0'
         )
 
         result = subprocess.run([
@@ -181,6 +188,7 @@ def combine_video_with_overlay(video_path, overlay_path, output_path):
             '-preset', 'medium',  # Encoding preset
             '-crf', '18',  # Quality (lower = better, 18-23 is good)
             '-pix_fmt', 'yuv420p',  # Compatibility
+            '-movflags', '+faststart',  # Optimize for streaming/web playback
             output_path
         ], capture_output=True, text=True)
         

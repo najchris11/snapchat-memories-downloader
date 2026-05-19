@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { spawn } = require('child_process');
 
 let mainWindow;
@@ -64,8 +65,9 @@ function confirmQuitSync(browserWindow) {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1000,
-    height: 800,
+    width: 1200,
+    height: 850,
+    icon: path.join(__dirname, 'build', 'icon.png'),
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false, // For easier prototyping; secure apps should use preload
@@ -73,7 +75,7 @@ function createWindow() {
     },
     titleBarStyle: 'hidden',
     trafficLightPosition: { x: 15, y: 15 }, // MacOS traffic lights
-    backgroundColor: '#000000',
+    backgroundColor: '#081425',
   });
 
   const startUrl = process.env.ELECTRON_START_URL || 

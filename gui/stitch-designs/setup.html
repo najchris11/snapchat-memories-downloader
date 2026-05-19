@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SnapVault Pro - Environment Setup</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-card {
+            background: rgba(21, 32, 49, 0.4);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(255, 255, 255, 0.15);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .stroke-of-light {
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .glow-primary {
+            box-shadow: 0px 10px 30px rgba(139, 92, 246, 0.15);
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+        @keyframes pulse-subtle {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .animate-pulse-subtle {
+            animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container": "#152031",
+                        "primary-fixed-dim": "#d0bcff",
+                        "on-secondary-fixed-variant": "#3f465c",
+                        "on-tertiary": "#00354a",
+                        "on-error-container": "#ffdad6",
+                        "inverse-on-surface": "#263143",
+                        "outline-variant": "#494454",
+                        "on-tertiary-fixed": "#001e2c",
+                        "background": "#081425",
+                        "tertiary-fixed-dim": "#7bd0ff",
+                        "on-background": "#d8e3fb",
+                        "surface-bright": "#2f3a4c",
+                        "on-primary-container": "#340080",
+                        "secondary-container": "#3f465c",
+                        "surface": "#081425",
+                        "on-secondary-fixed": "#131b2e",
+                        "on-secondary": "#283044",
+                        "on-primary-fixed": "#23005c",
+                        "primary-fixed": "#e9ddff",
+                        "on-primary": "#3c0091",
+                        "error": "#ffb4ab",
+                        "secondary-fixed-dim": "#bec6e0",
+                        "tertiary-container": "#009bd1",
+                        "error-container": "#93000a",
+                        "tertiary": "#7bd0ff",
+                        "surface-variant": "#2a3548",
+                        "on-surface-variant": "#cbc3d7",
+                        "surface-container-low": "#111c2d",
+                        "on-secondary-container": "#adb4ce",
+                        "on-error": "#690005",
+                        "surface-container-lowest": "#040e1f",
+                        "on-tertiary-fixed-variant": "#004c69",
+                        "surface-container-high": "#1f2a3c",
+                        "tertiary-fixed": "#c4e7ff",
+                        "surface-dim": "#081425",
+                        "outline": "#958ea0",
+                        "on-tertiary-container": "#002d40",
+                        "on-surface": "#d8e3fb",
+                        "on-primary-fixed-variant": "#5516be",
+                        "secondary": "#bec6e0",
+                        "surface-container-highest": "#2a3548",
+                        "primary": "#d0bcff",
+                        "surface-tint": "#d0bcff",
+                        "inverse-primary": "#6d3bd7",
+                        "secondary-fixed": "#dae2fd",
+                        "primary-container": "#a078ff",
+                        "inverse-surface": "#d8e3fb"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xs": "4px",
+                        "sm": "8px",
+                        "md": "16px",
+                        "gutter": "16px",
+                        "xl": "32px",
+                        "unit": "4px",
+                        "margin": "32px",
+                        "lg": "24px"
+                    },
+                    "fontFamily": {
+                        "headline-sm": ["Inter"],
+                        "body-md": ["Inter"],
+                        "label-md": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "code-md": ["JetBrains Mono"],
+                        "headline-md": ["Inter"],
+                        "body-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-sm": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "500" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "code-md": ["13px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }]
+                    }
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background text-on-surface font-body-md text-body-md overflow-hidden selection:bg-primary/30">
+<div class="flex h-screen w-full">
+<!-- SideNavBar -->
+<aside class="flex flex-col h-screen p-md overflow-y-auto w-60 border-r border-white/15 bg-surface/40 backdrop-blur-xl shrink-0">
+<div class="mb-xl px-sm">
+<h1 class="font-headline-md text-headline-md font-bold text-on-surface tracking-tight">SnapVault</h1>
+<p class="text-on-surface-variant/70 text-label-md font-label-md">Pro Utility</p>
+</div>
+<nav class="flex-1 space-y-1">
+<button class="w-full flex items-center gap-3 px-3 py-2 text-on-surface-variant/70 hover:text-on-surface hover:bg-white/5 transition-all duration-200 rounded-lg group">
+<span class="material-symbols-outlined text-xl">dashboard</span>
+<span class="font-label-md text-label-md">Dashboard</span>
+</button>
+<button class="w-full flex items-center gap-3 px-3 py-2 text-on-surface-variant/70 hover:text-on-surface hover:bg-white/5 transition-all duration-200 rounded-lg">
+<span class="material-symbols-outlined text-xl">photo_library</span>
+<span class="font-label-md text-label-md">Library</span>
+</button>
+<button class="w-full flex items-center gap-3 px-3 py-2 bg-white/10 text-primary font-bold rounded-lg scale-95 active:scale-90 transition-all duration-200">
+<span class="material-symbols-outlined text-xl" data-weight="fill" style="font-variation-settings: 'FILL' 1;">terminal</span>
+<span class="font-label-md text-label-md">Environment</span>
+</button>
+<button class="w-full flex items-center gap-3 px-3 py-2 text-on-surface-variant/70 hover:text-on-surface hover:bg-white/5 transition-all duration-200 rounded-lg">
+<span class="material-symbols-outlined text-xl">settings</span>
+<span class="font-label-md text-label-md">Settings</span>
+</button>
+</nav>
+<div class="mt-auto pt-md border-t border-white/5">
+<button class="w-full py-2.5 px-4 bg-primary text-on-primary font-bold rounded-lg hover:brightness-110 active:scale-95 transition-all duration-200 shadow-lg shadow-primary/20">
+                    Start Sync
+                </button>
+<div class="mt-4 flex items-center gap-3 px-sm">
+<div class="w-8 h-8 rounded-full bg-surface-bright flex items-center justify-center border border-white/10 overflow-hidden">
+<img alt="User profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDQ9oDPL6c0UxHu1C4bxVjpQHSgpDJ2_q47WRTmBZCYhT6Q2_SBiBJrq36hAj2G8_jdKicEALb-ow41pZy2oQtDFiLnqyguo9bmNP8KvlFqFUaPsK156-7owJCDT2bP6Zn4RlFu4_XOX0coVXhM8g6ELCxHDgNN3RaCyCWJ6CbOjyGzQQKtlVhkgfTHMOGLkLB3vdQRjsbAHfEuGpkUer3vbPv8r20G2XXFpMBkkO8_xtCIHkaAbIiPykk-bTxH_H_lJWgssLOQrfs"/>
+</div>
+<div class="flex flex-col">
+<span class="text-label-md font-bold">Admin Node</span>
+<span class="text-[10px] text-on-surface-variant/60">Local Instance</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 flex flex-col h-full relative overflow-hidden">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center px-xl w-full z-10 h-14 bg-surface-dim/30 backdrop-blur-md border-b border-white/15">
+<div class="flex items-center gap-2">
+<span class="font-headline-sm text-headline-sm font-black text-on-surface">SnapVault Pro</span>
+<span class="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold tracking-widest uppercase">Environment</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="relative hidden lg:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+<input class="bg-surface-container-low border border-white/10 rounded-full py-1.5 pl-10 pr-4 text-xs w-64 focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all" placeholder="Search parameters..." type="text"/>
+</div>
+<div class="flex items-center gap-3">
+<button class="p-2 text-on-surface-variant hover:bg-surface-bright/50 rounded-full transition-colors">
+<span class="material-symbols-outlined text-xl">notifications</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:bg-surface-bright/50 rounded-full transition-colors">
+<span class="material-symbols-outlined text-xl">help_outline</span>
+</button>
+</div>
+</div>
+</header>
+<!-- Scrollable Content -->
+<div class="flex-1 overflow-y-auto p-xl">
+<div class="max-w-4xl mx-auto space-y-xl">
+<!-- Header Section -->
+<section class="space-y-sm">
+<h2 class="font-headline-lg text-headline-lg">Environment Setup</h2>
+<p class="text-on-surface-variant max-w-2xl font-body-lg text-body-lg">
+                            SnapVault requires specific binaries to process high-resolution media and extract metadata. Let's ensure your workstation is configured for maximum performance.
+                        </p>
+</section>
+<!-- Bento Grid for Dependencies -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-md">
+<!-- Python Card -->
+<div class="glass-card p-md rounded-xl flex flex-col gap-sm group">
+<div class="flex justify-between items-start">
+<div class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">terminal</span>
+</div>
+<span class="px-2 py-1 rounded bg-surface-container-high text-success text-[10px] font-bold text-tertiary">READY</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm mt-2">Python Core</h3>
+<p class="text-on-surface-variant text-label-md">Required for local automation scripts and AI classification tasks.</p>
+<div class="mt-auto pt-sm flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+<span class="font-code-md text-code-md text-on-surface-variant">v3.11.4 detected</span>
+</div>
+</div>
+<!-- ExifTool Card -->
+<div class="glass-card p-md rounded-xl flex flex-col gap-sm group border-primary/20">
+<div class="flex justify-between items-start">
+<div class="w-10 h-10 rounded-lg bg-error-container/20 flex items-center justify-center text-error">
+<span class="material-symbols-outlined">image_search</span>
+</div>
+<span class="px-2 py-1 rounded bg-error-container/40 text-error text-[10px] font-bold">NOT FOUND</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm mt-2">ExifTool</h3>
+<p class="text-on-surface-variant text-label-md">Enables precise metadata extraction for RAW files and sidecars.</p>
+<div class="mt-auto pt-sm flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-error"></span>
+<span class="font-code-md text-code-md text-on-surface-variant">Binary missing from path</span>
+</div>
+</div>
+<!-- FFmpeg Card -->
+<div class="glass-card p-md rounded-xl flex flex-col gap-sm group">
+<div class="flex justify-between items-start">
+<div class="w-10 h-10 rounded-lg bg-tertiary/10 flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined">movie</span>
+</div>
+<span class="px-2 py-1 rounded bg-surface-container-high text-on-surface-variant text-[10px] font-bold">PENDING</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm mt-2">FFmpeg</h3>
+<p class="text-on-surface-variant text-label-md">Handles video transcoding and thumbnail generation for 4K streams.</p>
+<div class="mt-auto pt-sm flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+<span class="font-code-md text-code-md text-on-surface-variant">Click to verify binary</span>
+</div>
+</div>
+</div>
+<!-- Main Action Area -->
+<div class="glass-card rounded-2xl p-xl flex flex-col items-center justify-center text-center space-y-lg transition-all duration-500 overflow-hidden min-h-[400px]" id="setup-panel">
+<div class="flex flex-col items-center space-y-md" id="initial-state">
+<div class="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary to-tertiary flex items-center justify-center shadow-2xl shadow-primary/20">
+<span class="material-symbols-outlined text-4xl text-on-primary">settings_suggest</span>
+</div>
+<div class="space-y-sm">
+<h3 class="font-headline-md text-headline-md">Automatic Configuration</h3>
+<p class="text-on-surface-variant max-w-sm">
+                                    SnapVault can automatically fetch and link missing dependencies for your current OS architecture.
+                                </p>
+</div>
+<button class="glow-primary group flex items-center gap-2 px-8 py-4 bg-primary text-on-primary font-bold rounded-xl hover:scale-105 active:scale-95 transition-all duration-300" id="configure-btn">
+<span>Configure Environment</span>
+<span class="material-symbols-outlined text-xl group-hover:translate-x-1 transition-transform">arrow_forward</span>
+</button>
+</div>
+<!-- Progress State (Hidden initially) -->
+<div class="hidden w-full max-w-md flex flex-col items-center space-y-xl animate-in fade-in zoom-in duration-500" id="progress-state">
+<div class="w-full space-y-sm">
+<div class="flex justify-between text-label-md font-bold">
+<span class="text-primary" id="progress-task">Initializing core...</span>
+<span class="text-on-surface-variant" id="progress-pct">0%</span>
+</div>
+<div class="w-full h-2 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full w-0 bg-gradient-to-r from-primary via-tertiary to-primary bg-[length:200%_100%] transition-all duration-300" id="progress-bar" style="background-image: linear-gradient(to right, #d0bcff, #7bd0ff, #d0bcff)"></div>
+</div>
+</div>
+<div class="w-full glass-card bg-surface-container-lowest/50 p-md rounded-xl text-left font-code-md text-code-md text-on-surface-variant/80 space-y-1">
+<div class="flex gap-3"><span class="text-primary">&gt;</span> <span id="log-1">Checking system architecture... x86_64</span></div>
+<div class="flex gap-3 opacity-0 transition-opacity duration-300" id="log-2"><span class="text-primary">&gt;</span> <span>Locating brew executable...</span></div>
+<div class="flex gap-3 opacity-0 transition-opacity duration-300" id="log-3"><span class="text-primary">&gt;</span> <span>Installing ExifTool v12.60...</span></div>
+<div class="flex gap-3 opacity-0 transition-opacity duration-300" id="log-4"><span class="text-primary">&gt;</span> <span class="text-tertiary">Verification complete.</span></div>
+</div>
+</div>
+<!-- Success State (Hidden initially) -->
+<div class="hidden flex flex-col items-center space-y-md animate-in fade-in slide-in-from-bottom-4 duration-500" id="success-state">
+<div class="w-16 h-16 rounded-full bg-tertiary flex items-center justify-center text-on-tertiary animate-bounce">
+<span class="material-symbols-outlined text-4xl">check_circle</span>
+</div>
+<div class="space-y-sm">
+<h3 class="font-headline-md text-headline-md text-tertiary">Environment Ready</h3>
+<p class="text-on-surface-variant">All dependencies linked. System status is nominal.</p>
+</div>
+<button class="mt-4 px-6 py-2 border border-white/10 rounded-lg hover:bg-white/5 transition-colors text-label-md" onclick="window.location.reload()">
+                                Back to Dashboard
+                            </button>
+</div>
+</div>
+<!-- Footer Help -->
+<div class="flex items-center justify-center gap-xl py-xl opacity-50 text-label-md font-label-md">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">security</span>
+<span>End-to-End Encrypted Sync</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">bolt</span>
+<span>Direct Binary Execution</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">database</span>
+<span>Local-First Metadata Storage</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Atmospheric Glow Background -->
+<div class="absolute -top-[20%] -right-[10%] w-[500px] h-[500px] bg-primary/10 rounded-full blur-[120px] pointer-events-none"></div>
+<div class="absolute -bottom-[20%] -left-[10%] w-[400px] h-[400px] bg-tertiary/10 rounded-full blur-[100px] pointer-events-none"></div>
+</main>
+</div>
+<script>
+        const configureBtn = document.getElementById('configure-btn');
+        const initialState = document.getElementById('initial-state');
+        const progressState = document.getElementById('progress-state');
+        const successState = document.getElementById('success-state');
+        const progressBar = document.getElementById('progress-bar');
+        const progressPct = document.getElementById('progress-pct');
+        const progressTask = document.getElementById('progress-task');
+        
+        const logs = [
+            document.getElementById('log-2'),
+            document.getElementById('log-3'),
+            document.getElementById('log-4')
+        ];
+
+        configureBtn.addEventListener('click', () => {
+            initialState.classList.add('hidden');
+            progressState.classList.remove('hidden');
+            
+            let progress = 0;
+            const tasks = [
+                "Fetching repository index...",
+                "Downloading ExifTool (14MB)...",
+                "Extracting binaries...",
+                "Mapping system symlinks...",
+                "Finalizing environment..."
+            ];
+
+            const interval = setInterval(() => {
+                progress += Math.floor(Math.random() * 8) + 1;
+                if (progress >= 100) {
+                    progress = 100;
+                    clearInterval(interval);
+                    setTimeout(() => {
+                        progressState.classList.add('hidden');
+                        successState.classList.remove('hidden');
+                    }, 800);
+                }
+                
+                progressBar.style.width = `${progress}%`;
+                progressPct.textContent = `${progress}%`;
+                
+                // Update task text
+                const taskIdx = Math.min(Math.floor(progress / 20), tasks.length - 1);
+                progressTask.textContent = tasks[taskIdx];
+
+                // Show logs sequentially
+                if (progress > 30) logs[0].classList.remove('opacity-0');
+                if (progress > 60) logs[1].classList.remove('opacity-0');
+                if (progress > 90) logs[2].classList.remove('opacity-0');
+
+            }, 250);
+        });
+    </script>
+</body></html>

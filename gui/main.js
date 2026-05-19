@@ -1,6 +1,5 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
-const fs = require('fs');
 const { spawn } = require('child_process');
 
 let mainWindow;
@@ -72,6 +71,8 @@ function createWindow() {
       contextIsolation: false, // For easier prototyping; secure apps should use preload
       webSecurity: false // Allow loading local resources
     },
+    titleBarStyle: 'hidden',
+    trafficLightPosition: { x: 15, y: 15 }, // MacOS traffic lights
     backgroundColor: '#000000',
   });
 
@@ -136,14 +137,6 @@ ipcMain.handle('select-file', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'],
     filters: [{ name: 'HTML Files', extensions: ['html'] }]
-  });
-  return result.filePaths[0];
-});
-
-// 1b. Select Folder Dialog
-ipcMain.handle('select-folder', async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ['openDirectory', 'createDirectory']
   });
   return result.filePaths[0];
 });
@@ -304,48 +297,49 @@ ipcMain.on('install-dependencies', (event) => {
   const projectRoot = path.join(__dirname, '..');
 
   if (process.platform === 'darwin') {
-    // Resolve script path based on environment
-    let scriptPath;
-    if (app.isPackaged) {
-      scriptPath = path.join(process.resourcesPath, 'installer.sh');
-    } else {
-      scriptPath = path.join(projectRoot, 'installer.sh');
-    }
-
+    const scriptPath = path.join(projectRoot, 'installer.sh');
     // Ensure executable
     const chmod = spawn('chmod', ['+x', scriptPath]);
-    
+    trackProcess(chmod);
+
     chmod.on('close', (code) => {
       if (code !== 0) {
-        event.reply('script-log', { type: 'error', message: 'Failed to make installer executable. Please try running manually.' });
+        event.reply('script-log', { type: 'error', message: 'Failed to make installer executable.' });
         event.reply('script-exit', code);
         return;
       }
 
-      event.reply('script-log', { type: 'info', message: 'Launching installer in Terminal...' });
-      event.reply('script-log', { type: 'info', message: 'Please follow the instructions in the new Terminal window.' });
+      const installProcess = spawn(scriptPath, [], { cwd: projectRoot });
+      trackProcess(installProcess);
 
-      // Open a new Terminal window to run the script
-      // This allows for user interaction (sudo password, homebrew prompt)
-      spawn('open', ['-a', 'Terminal', scriptPath]);
-      
-      event.reply('script-exit', 0);
+      installProcess.stdout.on('data', (data) => {
+        const lines = data.toString().split('\n');
+        lines.forEach(line => {
+          if(line.trim()) event.reply('script-log', { type: 'log', message: line });
+        });
+      });
+
+      installProcess.stderr.on('data', (data) => {
+         event.reply('script-log', { type: 'log', message: data.toString() });
+      });
+
+      installProcess.on('close', (code) => {
+        if (code === 0) {
+           event.reply('script-log', { type: 'success', message: 'Installation completed successfully!' });
+        } else {
+           event.reply('script-log', { type: 'error', message: `Installer exited with code ${code}` });
+        }
+        event.reply('script-exit', code);
+      });
     });
     return;
   }
 
   if (process.platform === 'win32') {
-    // Resolve script path based on environment
-    let psScript;
-    if (app.isPackaged) {
-      psScript = path.join(process.resourcesPath, 'installer.ps1');
-    } else {
-      psScript = path.join(projectRoot, 'installer.ps1');
-    }
-    
+    const psScript = path.join(projectRoot, 'installer.ps1');
     const powershell = 'powershell.exe';
     const args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', psScript];
-    const installProcess = spawn(powershell, args, { cwd: app.isPackaged ? process.resourcesPath : projectRoot });
+    const installProcess = spawn(powershell, args, { cwd: projectRoot });
     trackProcess(installProcess);
 
     installProcess.stdout.on('data', (data) => {

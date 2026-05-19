@@ -228,7 +228,7 @@ export default function Home() {
                         </div>
                     </CardContent>
                 </Card>
-
+                        {/* TODO: add progress bar based on files downloaded */}
                 {/* Options */}
                 <Card className="border-2 border-border shadow-[4px_4px_0px_0px_hsl(var(--foreground))] rounded-xl">
                     <CardHeader className="bg-muted border-b-2 border-dashed border-muted-foreground/20">

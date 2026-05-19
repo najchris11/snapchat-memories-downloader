@@ -12,6 +12,9 @@ __pycache__/
 # Downloaded memories (large files, don't commit)
 snapchat_memories/
 
+# Bundled runtime (generated in CI)
+runtime/
+
 # Progress/state files
 downloaded_files.json
 download_errors.json

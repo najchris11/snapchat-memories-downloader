@@ -91,7 +91,40 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libarchive-tools
+          sudo apt-get install -y libarchive-tools xz-utils
+
+      - name: Install macOS Deps
+        if: matrix.os == 'macos-latest'
+        run: |
+          echo "No extra dependencies needed"
+
+      - name: Prepare Bundled Runtime
+        if: matrix.os == 'macos-latest'
+        env:
+          PYTHON_SHA256: ${{ secrets.PYTHON_SHA256 }}
+          EXIFTOOL_SHA256: c84fb6b613a480a638225d44979bf44cd2f91c92b79f4d2aa43773c89fa4199e
+          FFMPEG_SHA256: ${{ secrets.FFMPEG_SHA256 }}
+        run: |
+          bash scripts/prepare-runtime-macos.sh
+
+      - name: Prepare Bundled Runtime
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          PYTHON_SHA256: ${{ secrets.PYTHON_SHA256 }}
+          EXIFTOOL_SHA256: c84fb6b613a480a638225d44979bf44cd2f91c92b79f4d2aa43773c89fa4199e
+          FFMPEG_SHA256: ${{ secrets.FFMPEG_SHA256 }}
+        run: |
+          bash scripts/prepare-runtime-linux.sh
+
+      - name: Prepare Bundled Runtime
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        env:
+          PYTHON_SHA256: ${{ secrets.PYTHON_SHA256 }}
+          EXIFTOOL_SHA256: fd3b47a01e6ffc6160f2d5fde5ff0c003f6c4c2ba85eee1ce8928ccb51fa3e6
+          FFMPEG_SHA256: ${{ secrets.FFMPEG_SHA256 }}
+        run: |
+          .\scripts\prepare-runtime-windows.ps1
           
       - name: Build & Publish
         env:

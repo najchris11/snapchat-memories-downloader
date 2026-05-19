@@ -58,6 +58,14 @@
     ],
     "extraResources": [
       {
+        "from": "../runtime/python",
+        "to": "python"
+      },
+      {
+        "from": "../runtime/tools",
+        "to": "tools"
+      },
+      {
         "from": "../installer.sh",
         "to": "installer.sh"
       },

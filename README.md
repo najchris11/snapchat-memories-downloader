@@ -35,6 +35,44 @@ npm run electron-dev
 
 The installers prepare the environment only; the GUI handles running workflows.
 
+### Packaged App: Bundled Runtime (No User Setup)
+
+The packaged Electron app can bundle the Python runtime, pip dependencies, and
+native tools so users do not need to install anything manually.
+
+Expected layout in the repo before running `npm run electron-build`:
+
+```
+runtime/
+	python/
+		...full Python distribution with site-packages...
+	tools/
+		darwin/
+			exiftool
+			ffmpeg
+		win32/
+			exiftool.exe
+			ffmpeg.exe
+		linux/
+			exiftool
+			ffmpeg
+```
+
+Notes:
+- Put a full Python runtime in `runtime/python` and pre-install `requirements.txt` into it.
+- Place OS-specific `exiftool` and `ffmpeg` binaries in `runtime/tools/<platform>`.
+- The packaged app will prefer these bundled binaries and fall back to system installs only in dev.
+
+CI prepares the `runtime/` directory during release builds using the scripts in `scripts/`.
+The bundled runtime is not committed to git; it is assembled on each release runner.
+
+Optional checksum validation:
+- Set `PYTHON_SHA256`, `EXIFTOOL_SHA256`, and `FFMPEG_SHA256` in the build environment.
+- If provided, the runtime scripts will validate each download and fail on mismatch.
+	- ExifTool 13.58 checksums (from https://exiftool.org/checksums-13.58.txt):
+		- macOS/Linux tarball (`Image-ExifTool-13.58.tar.gz`): `c84fb6b613a480a638225d44979bf44cd2f91c92b79f4d2aa43773c89fa4199e`
+		- Windows zip (`exiftool-13.58_64.zip`): `fd3b47a01e6ffc6160f2d5fde5ff0c003f6c4c2ba85eee1ce8928ccb51fa3e6`
+
 ## CLI (Alternative)
 
 Manual setup for CLI usage (outside the GUI):

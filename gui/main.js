@@ -8,6 +8,62 @@ let isQuitting = false;
 const activeProcesses = new Set();
 let stopRequested = false;
 
+function getBundledRuntimePaths() {
+  if (!app.isPackaged) {
+    return null;
+  }
+
+  const resourcesRoot = process.resourcesPath;
+  const pythonRoot = path.join(resourcesRoot, 'python');
+  const toolsRoot = path.join(resourcesRoot, 'tools');
+
+  const candidates = {
+    pythonRoot,
+    python:
+      process.platform === 'win32'
+        ? path.join(pythonRoot, 'python.exe')
+        : path.join(pythonRoot, 'bin', 'python3'),
+    toolsBin:
+      process.platform === 'win32'
+        ? path.join(toolsRoot, 'win32')
+        : process.platform === 'darwin'
+          ? path.join(toolsRoot, 'darwin')
+          : path.join(toolsRoot, 'linux')
+  };
+
+  if (!fs.existsSync(candidates.python)) {
+    return null;
+  }
+
+  return candidates;
+}
+
+function buildBundledEnv(runtimePaths) {
+  if (!runtimePaths) {
+    return null;
+  }
+
+  const env = { ...process.env };
+  const pathParts = [];
+
+  if (runtimePaths.toolsBin && fs.existsSync(runtimePaths.toolsBin)) {
+    pathParts.push(runtimePaths.toolsBin);
+  }
+
+  if (process.platform === 'win32') {
+    pathParts.push(runtimePaths.pythonRoot);
+    pathParts.push(path.join(runtimePaths.pythonRoot, 'Scripts'));
+  } else {
+    pathParts.push(path.join(runtimePaths.pythonRoot, 'bin'));
+  }
+
+  const existingPath = env.PATH || env.Path || '';
+  env.PATH = [...pathParts, existingPath].filter(Boolean).join(path.delimiter);
+  env.PYTHONHOME = runtimePaths.pythonRoot;
+
+  return env;
+}
+
 function trackProcess(proc) {
   activeProcesses.add(proc);
   proc.on('close', () => {
@@ -150,6 +206,7 @@ ipcMain.on('run-script', async (event, payload) => {
   let scriptPath;
   let pythonCommand;
   let baseDir;
+  let pythonEnv = null;
 
   if (app.isPackaged) {
     scriptPath = path.join(process.resourcesPath, 'api.py');
@@ -159,37 +216,45 @@ ipcMain.on('run-script', async (event, payload) => {
     baseDir = path.join(__dirname, '..');
   }
 
-  // Check for venv in user's home directory first (where installer creates it)
-  const homeVenvPath = path.join(process.env.USERPROFILE || process.env.HOME, 'snapchat-memories-downloader', '.venv');
-  const projectVenvPath = path.join(baseDir, '.venv');
-
-  if (process.platform === 'win32') {
-    const homeVenvPython = path.join(homeVenvPath, 'Scripts', 'python.exe');
-    const projectVenvPython = path.join(projectVenvPath, 'Scripts', 'python.exe');
-
-    if (fs.existsSync(homeVenvPython)) {
-      pythonCommand = homeVenvPython;
-    } else if (fs.existsSync(projectVenvPython)) {
-      pythonCommand = projectVenvPython;
-    } else {
-      pythonCommand = 'python';
-    }
+  const bundledRuntime = getBundledRuntimePaths();
+  if (bundledRuntime) {
+    pythonCommand = bundledRuntime.python;
+    pythonEnv = buildBundledEnv(bundledRuntime);
   } else {
-    const homeVenvPython = path.join(homeVenvPath, 'bin', 'python3');
-    const projectVenvPython = path.join(projectVenvPath, 'bin', 'python3');
+    // Check for venv in user's home directory first (where installer creates it)
+    const homeVenvPath = path.join(process.env.USERPROFILE || process.env.HOME, 'snapchat-memories-downloader', '.venv');
+    const projectVenvPath = path.join(baseDir, '.venv');
 
-    if (fs.existsSync(homeVenvPython)) {
-      pythonCommand = homeVenvPython;
-    } else if (fs.existsSync(projectVenvPython)) {
-      pythonCommand = projectVenvPython;
+    if (process.platform === 'win32') {
+      const homeVenvPython = path.join(homeVenvPath, 'Scripts', 'python.exe');
+      const projectVenvPython = path.join(projectVenvPath, 'Scripts', 'python.exe');
+
+      if (fs.existsSync(homeVenvPython)) {
+        pythonCommand = homeVenvPython;
+      } else if (fs.existsSync(projectVenvPython)) {
+        pythonCommand = projectVenvPython;
+      } else {
+        pythonCommand = 'python';
+      }
     } else {
-      pythonCommand = 'python3';
+      const homeVenvPython = path.join(homeVenvPath, 'bin', 'python3');
+      const projectVenvPython = path.join(projectVenvPath, 'bin', 'python3');
+
+      if (fs.existsSync(homeVenvPython)) {
+        pythonCommand = homeVenvPython;
+      } else if (fs.existsSync(projectVenvPython)) {
+        pythonCommand = projectVenvPython;
+      } else {
+        pythonCommand = 'python3';
+      }
     }
   }
 
   const runApi = (command, args = []) => {
     const scriptArgs = [scriptPath, command, ...args];
-    const pythonProcess = spawn(pythonCommand, scriptArgs);
+    const pythonProcess = spawn(pythonCommand, scriptArgs, {
+      env: pythonEnv || process.env
+    });
     trackProcess(pythonProcess);
 
     pythonProcess.stdout.on('data', (data) => {
@@ -296,6 +361,19 @@ ipcMain.on('stop-script', (event) => {
 
 // 3. Install Dependencies
 ipcMain.on('install-dependencies', (event) => {
+  if (app.isPackaged) {
+    const message = 'This build bundles Python, exiftool, and ffmpeg. No setup is required.';
+    dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      buttons: ['OK'],
+      title: 'Environment Ready',
+      message
+    });
+    event.reply('script-log', { type: 'info', message });
+    event.reply('script-exit', 0);
+    return;
+  }
+
   const projectRoot = path.join(__dirname, '..');
 
   if (process.platform === 'darwin') {

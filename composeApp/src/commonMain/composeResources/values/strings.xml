@@ -1,0 +1,66 @@
+<resources>
+    <!-- General Strings -->
+    <string name="app_name">SnapVault</string>
+    <string name="window_title">SnapVault — Snapchat Memories Downloader</string>
+    <string name="cli_header">==================================================\n       SnapVault - Lightweight CLI Runner       \n==================================================</string>
+    
+    <!-- Sidebar Navigation -->
+    <string name="nav_dashboard">Dashboard</string>
+    <string name="nav_library">Library</string>
+    <string name="nav_environment">Environment</string>
+    <string name="nav_settings">Settings</string>
+    
+    <!-- Dashboard Screen -->
+    <string name="dashboard_title">Dashboard</string>
+    <string name="config_section_title">Configuration</string>
+    <string name="source_dir_label">History File (memories_history.html)</string>
+    <string name="dest_dir_label">Output Directory</string>
+    <string name="browse_btn">Browse</string>
+    
+    <string name="options_section_title">Pipeline Options</string>
+    <string name="opt_download_memories">Download Memories</string>
+    <string name="opt_inject_gps">Inject GPS Coordinates</string>
+    <string name="opt_combine_overlays">Merge Video Overlays</string>
+    <string name="opt_clean_duplicates">Clean Duplicate Files</string>
+    
+    <string name="status_section_title">Active Sync Status</string>
+    <string name="status_idle">Idle — Configure options and click Start Sync</string>
+    <string name="status_complete">Sync Complete!</string>
+    <string name="status_failed">Sync Failed</string>
+    <string name="status_eta">ETA: %s</string>
+    <string name="status_speed">Speed: %s</string>
+    <string name="status_progress_files">Fetched %1$d of %2$d files</string>
+    
+    <string name="sub_process_metadata">Metadata Extraction</string>
+    <string name="sub_process_verification">File Verification</string>
+    
+    <string name="logs_accordion_title">Detailed Process Logs</string>
+    <string name="btn_start_sync">Start Sync</string>
+    <string name="btn_cancel">Cancel</string>
+    
+    <!-- Environment Screen -->
+    <string name="env_title">Environment Setup</string>
+    <string name="env_intro">SnapVault uses ExifTool and FFmpeg to update file metadata (dates and locations) and merge video overlays. These binaries will be automatically bundled or extracted from your app package.</string>
+    <string name="dep_exiftool">ExifTool Metadata Engine</string>
+    <string name="dep_ffmpeg">FFmpeg Video Processor</string>
+    <string name="status_ready">Ready</string>
+    <string name="status_missing">Missing (Extracting...)</string>
+    <string name="status_extract_error">Extraction Failed</string>
+    
+    <!-- Library Screen -->
+    <string name="library_title">Library</string>
+    <string name="lib_filter_all">All</string>
+    <string name="lib_filter_photos">Photos</string>
+    <string name="lib_filter_videos">Videos</string>
+    <string name="lib_search_placeholder">Search library...</string>
+    <string name="lib_empty_state">No downloaded memories found in output directory.</string>
+    
+    <!-- Settings Screen -->
+    <string name="settings_title">Settings</string>
+    <string name="set_theme_label">Application Theme</string>
+    <string name="set_theme_dark">Dark (Obsidian)</string>
+    <string name="set_theme_light">Light (Fidelity)</string>
+    <string name="set_concurrency_label">Parallel Download Concurrency</string>
+    <string name="set_concurrency_desc">Number of concurrent network requests to fetch files.</string>
+    <string name="set_footer_license">SnapVault Utility v2.4.0 — Open Source License</string>
+</resources>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.najdev.snapvault.BinaryExtractorTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-06-02T21:43:55" hostname="device-91.home" time="0.021">
+  <properties/>
+  <testcase name="testGetPlatform[desktop]" classname="com.najdev.snapvault.BinaryExtractorTest" time="0.012"/>
+  <testcase name="testCheckCommandSystemPath[desktop]" classname="com.najdev.snapvault.BinaryExtractorTest" time="0.008"/>
+  <testcase name="testBinDir[desktop]" classname="com.najdev.snapvault.BinaryExtractorTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -19,11 +19,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
       - name: Automated Version Bump
         id: version
         env:
@@ -47,21 +42,47 @@ jobs:
           
           echo "Bumping version ($BUMP)..."
           
-          cd gui
-          npm version $BUMP --no-git-tag-version
+          # Run python inline script to bump packageVersion in composeApp/build.gradle.kts
+          NEW_VERSION=$(python3 -c "
+          import re, sys
+          with open('composeApp/build.gradle.kts', 'r') as f:
+              content = f.read()
+          version_match = re.search(r'packageVersion\s*=\s*\"([^\"]+)\"', content)
+          if not version_match:
+              sys.exit('packageVersion not found')
+          version = version_match.group(1)
+          major, minor, patch = map(int, version.split('.'))
+          bump = '$BUMP'
+          if bump == 'major':
+              major += 1
+              minor = 0
+              patch = 0
+          elif bump == 'minor':
+              minor += 1
+              patch = 0
+          else:
+              patch += 1
+          new_version = f'{major}.{minor}.{patch}'
+          content = re.sub(r'packageVersion\s*=\s*\"[^\"]+\"', f'packageVersion = \"{new_version}\"', content)
+          content = re.sub(r'versionName\s*=\s*\"[^\"]+\"', f'versionName = \"{new_version}\"', content)
+          code_match = re.search(r'versionCode\s*=\s*(\d+)', content)
+          if code_match:
+              code = int(code_match.group(1)) + 1
+              content = re.sub(r'versionCode\s*=\s*\d+', f'versionCode = {code}', content)
+          with open('composeApp/build.gradle.kts', 'w') as f:
+              f.write(content)
+          print(new_version)
+          ")
           
-          NEW_VERSION=$(node -p "require('./package.json').version")
           NEW_TAG="v$NEW_VERSION"
           echo "New Version: $NEW_VERSION"
           echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
           
           # Commit and Push
-          git add package.json
+          git add composeApp/build.gradle.kts
           git commit -m "chore: release $NEW_TAG [skip ci]"
           git tag $NEW_TAG
           
-          # Push changes (skip ci for the commit, but the tag triggers releases if configured, 
-          # but here we trigger build-release via 'needs')
           git push origin main
           git push origin $NEW_TAG
 
@@ -76,59 +97,55 @@ jobs:
         with:
           ref: ${{ needs.bump-version.outputs.new_tag }}
       
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
         with:
-          node-version: 20
-          
-      - name: Install Dependencies
-        run: |
-          cd gui
-          npm install
-          
+          java-version: '21'
+          distribution: 'zulu'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
       # Install Linux dependencies if running on Ubuntu
       - name: Install Linux Deps
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libarchive-tools xz-utils
+          sudo apt-get install -y libarchive-tools xz-utils zip unzip
 
+      # Make sure packaging dependencies are installed on macOS
       - name: Install macOS Deps
         if: matrix.os == 'macos-latest'
         run: |
           echo "No extra dependencies needed"
 
-      - name: Prepare Bundled Runtime
+      - name: Prepare Bundled Runtime (macOS)
         if: matrix.os == 'macos-latest'
-        env:
-          PYTHON_SHA256: ${{ secrets.PYTHON_SHA256 }}
-          EXIFTOOL_SHA256: c84fb6b613a480a638225d44979bf44cd2f91c92b79f4d2aa43773c89fa4199e
-          FFMPEG_SHA256: ${{ secrets.FFMPEG_SHA256 }}
         run: |
           bash scripts/prepare-runtime-macos.sh
 
-      - name: Prepare Bundled Runtime
+      - name: Prepare Bundled Runtime (Linux)
         if: matrix.os == 'ubuntu-latest'
-        env:
-          PYTHON_SHA256: ${{ secrets.PYTHON_SHA256 }}
-          EXIFTOOL_SHA256: c84fb6b613a480a638225d44979bf44cd2f91c92b79f4d2aa43773c89fa4199e
-          FFMPEG_SHA256: ${{ secrets.FFMPEG_SHA256 }}
         run: |
           bash scripts/prepare-runtime-linux.sh
 
-      - name: Prepare Bundled Runtime
+      - name: Prepare Bundled Runtime (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
-        env:
-          PYTHON_SHA256: ${{ secrets.PYTHON_SHA256 }}
-          EXIFTOOL_SHA256: fd3b47a01e6ffc6160f2d5fde5ff0c003f6c4c2ba85eee1ce8928ccb51fa3e6
-          FFMPEG_SHA256: ${{ secrets.FFMPEG_SHA256 }}
         run: |
           .\scripts\prepare-runtime-windows.ps1
           
-      - name: Build & Publish
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & Package Desktop Distribution
         run: |
-          cd gui
-          npm run electron-build -- --publish always
+          ./gradlew packageDistributionForCurrentOS
+
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.bump-version.outputs.new_tag }}
+          files: |
+            composeApp/build/compose/binaries/main/dmg/*.dmg
+            composeApp/build/compose/binaries/main/msi/*.msi
+            composeApp/build/compose/binaries/main/deb/*.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,6 +1,6 @@
 package com.najdev.snapvault.ui
 
-import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,11 +12,14 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -25,9 +28,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.ui.theme.ElectricPurple
 import com.najdev.snapvault.ui.theme.InfoBlue
-import com.najdev.snapvault.ui.theme.SlateBright
-import com.najdev.snapvault.ui.theme.SurfaceContainerHigh
+import com.najdev.snapvault.ui.theme.SecondaryBlue
 import com.najdev.snapvault.ui.theme.SurfaceContainerLowest
+import com.najdev.snapvault.ui.theme.TertiaryCyan
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import snapchat_memories_downloader.composeapp.generated.resources.*
@@ -38,6 +41,7 @@ fun DashboardScreen(
     downloadFolder: String?,
     onSelectHtmlFile: () -> Unit,
     onSelectFolder: () -> Unit,
+    onNavigateToSettings: () -> Unit,
     onStartSync: (runDownload: Boolean, runMetadata: Boolean, runCombine: Boolean, runDedupe: Boolean, dryRun: Boolean, workers: Int) -> Unit,
     onStopSync: () -> Unit,
     isRunning: Boolean,
@@ -46,7 +50,7 @@ fun DashboardScreen(
     progressText: String,
     etaText: String,
     speedText: String,
-    currentStep: Int // 0: Setup, 1: Syncing, 2: Processing, 3: Complete
+    currentStep: Int
 ) {
     var runDownload by remember { mutableStateOf(true) }
     var runMetadata by remember { mutableStateOf(true) }
@@ -54,439 +58,559 @@ fun DashboardScreen(
     var runDedupe by remember { mutableStateOf(true) }
     var dryRun by remember { mutableStateOf(false) }
     var workers by remember { mutableStateOf(5) }
-    var logsExpanded by remember { mutableStateOf(false) }
 
-    Row(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-        // Left Column: Configuration (40%)
-        Column(modifier = Modifier.weight(0.4f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text(
-                text = stringResource(Res.string.config_section_title),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-
-            // Source & Destination Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        text = stringResource(Res.string.config_section_title),
-                        fontWeight = FontWeight.Bold,
-                        color = ElectricPurple,
-                        fontSize = 12.sp
-                    )
-
-                    // HTML Picker
-                    Column {
-                        Text(stringResource(Res.string.source_dir_label), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(SurfaceContainerLowest, RoundedCornerShape(8.dp))
-                                .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
-                                .clickable { onSelectHtmlFile() }
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.Menu, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = htmlFile ?: "Select memories_history.html",
-                                fontSize = 12.sp,
-                                color = if (htmlFile != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(stringResource(Res.string.browse_btn), fontSize = 11.sp, color = ElectricPurple, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    // Folder Picker
-                    Column {
-                        Text(stringResource(Res.string.dest_dir_label), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(SurfaceContainerLowest, RoundedCornerShape(8.dp))
-                                .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
-                                .clickable { onSelectFolder() }
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.List, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = downloadFolder ?: "Select download folder",
-                                fontSize = 12.sp,
-                                color = if (downloadFolder != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(stringResource(Res.string.browse_btn), fontSize = 11.sp, color = ElectricPurple, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-
-            // Pipeline Options Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(stringResource(Res.string.options_section_title), fontWeight = FontWeight.Bold, color = ElectricPurple, fontSize = 12.sp)
-
-                    PipelineToggle(
-                        label = stringResource(Res.string.opt_download_memories),
-                        checked = runDownload,
-                        onCheckedChange = { runDownload = it },
-                        icon = Icons.Default.Add
-                    )
-                    PipelineToggle(
-                        label = stringResource(Res.string.opt_inject_gps),
-                        checked = runMetadata,
-                        onCheckedChange = { runMetadata = it },
-                        icon = Icons.Default.LocationOn
-                    )
-                    PipelineToggle(
-                        label = stringResource(Res.string.opt_combine_overlays),
-                        checked = runCombine,
-                        onCheckedChange = { runCombine = it },
-                        icon = Icons.Default.Build
-                    )
-                    PipelineToggle(
-                        label = stringResource(Res.string.opt_clean_duplicates),
-                        checked = runDedupe,
-                        onCheckedChange = { runDedupe = it },
-                        icon = Icons.Default.Delete
-                    )
-                }
-            }
-
-            // Advanced Tuning Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(stringResource(Res.string.set_concurrency_label), fontWeight = FontWeight.Bold, color = ElectricPurple, fontSize = 12.sp)
-
+    Row(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        horizontalArrangement = Arrangement.spacedBy(24.dp)
+    ) {
+        // ── Left column: controls (40%) ──────────────────────────────────────
+        Column(
+            modifier = Modifier.weight(0.4f),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Setup card
+            ControlCard {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.Top
                     ) {
-                        Text("Dry Run (Preview)", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
-                        Switch(
-                            checked = dryRun,
-                            onCheckedChange = { dryRun = it },
-                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = ElectricPurple)
-                        )
-                    }
-
-                    Column {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Parallel Worker Threads", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
-                            Text("$workers threads", fontSize = 13.sp, color = ElectricPurple, fontWeight = FontWeight.Bold)
-                        }
-                        Slider(
-                            value = workers.toFloat(),
-                            onValueChange = { workers = it.toInt() },
-                            valueRange = 1f..16f,
-                            steps = 15,
-                            colors = SliderDefaults.colors(thumbColor = ElectricPurple, activeTrackColor = ElectricPurple)
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.weight(1f))
-
-            // Action Buttons
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
-                    onClick = { onStartSync(runDownload, runMetadata, runCombine, runDedupe, dryRun, workers) },
-                    enabled = !isRunning && htmlFile != null && downloadFolder != null,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = ElectricPurple)
-                ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(Res.string.btn_start_sync), fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                }
-
-                Button(
-                    onClick = { onStopSync() },
-                    enabled = isRunning,
-                    modifier = Modifier.height(48.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Icon(Icons.Default.Close, contentDescription = null)
-                }
-            }
-        }
-
-        // Right Column: Reimagined Sync Info & Collapsible Logs (60%)
-        Column(modifier = Modifier.weight(0.6f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text(
-                text = stringResource(Res.string.status_section_title),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-
-            // Hero Sync Info Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
-            ) {
-                Row(
-                    modifier = Modifier.padding(24.dp).fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = if (isRunning) "Synchronization Active" else "Synchronization Inactive",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
-                            color = if (isRunning) ElectricPurple else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        Text(
-                            text = progressText.ifEmpty { "Idle — Configure directories and start sync." },
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-
-                        if (isRunning) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                if (speedText.isNotEmpty()) {
-                                    Badge(containerColor = SurfaceContainerHigh) {
-                                        Text(speedText, modifier = Modifier.padding(4.dp), fontSize = 11.sp)
-                                    }
-                                }
-                                if (etaText.isNotEmpty()) {
-                                    Badge(containerColor = SurfaceContainerHigh) {
-                                        Text(etaText, modifier = Modifier.padding(4.dp), fontSize = 11.sp)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.width(16.dp))
-
-                    // Large circular progress indicator
-                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(120.dp)) {
-                        CircularProgressIndicator(
-                            progress = progress,
-                            modifier = Modifier.size(110.dp),
-                            color = ElectricPurple,
-                            strokeWidth = 8.dp,
-                            trackColor = Color.White.copy(alpha = 0.05f)
-                        )
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("${(progress * 100).toInt()}%", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                            Text("complete", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-            }
-
-            // Sub-process status cards
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Sub-Processes", fontWeight = FontWeight.Bold, color = ElectricPurple, fontSize = 12.sp)
-
-                    SubProcessItem(
-                        name = stringResource(Res.string.sub_process_metadata),
-                        status = when {
-                            !isRunning -> "Pending"
-                            currentStep > 2 -> "Complete"
-                            currentStep == 2 && runMetadata -> "Running"
-                            else -> "Idle"
-                        },
-                        isActive = isRunning && currentStep == 2 && runMetadata,
-                        isComplete = currentStep > 2 || (!runMetadata && isRunning)
-                    )
-
-                    SubProcessItem(
-                        name = stringResource(Res.string.sub_process_verification),
-                        status = when {
-                            !isRunning -> "Pending"
-                            currentStep > 3 -> "Complete"
-                            currentStep == 3 -> "Running"
-                            else -> "Idle"
-                        },
-                        isActive = isRunning && currentStep == 3,
-                        isComplete = currentStep > 3
-                    )
-                }
-            }
-
-            // Expandable process logs accordion
-            Card(
-                modifier = Modifier.fillMaxWidth().animateContentSize(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
-            ) {
-                Column {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().clickable { logsExpanded = !logsExpanded }.padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(stringResource(Res.string.logs_accordion_title), fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        Icon(
-                            imageVector = if (logsExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    if (logsExpanded) {
-                        HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
-                        
-                        val listState = rememberLazyListState()
-                        val coroutineScope = rememberCoroutineScope()
-                        LaunchedEffect(logs.size) {
-                            if (logs.isNotEmpty()) {
-                                coroutineScope.launch {
-                                    listState.animateScrollToItem(logs.size - 1)
-                                }
-                            }
-                        }
-
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier.fillMaxWidth().height(160.dp).padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            items(logs) { log ->
-                                val color = when {
-                                    log.contains("[SUCCESS]") || log.contains("[DOWNLOADED]") -> Color.Green
-                                    log.contains("[ERROR]") -> Color.Red
-                                    log.contains("[WARN]") -> Color.Yellow
-                                    else -> MaterialTheme.colorScheme.onBackground
-                                }
+                            Icon(
+                                Icons.Outlined.RocketLaunch,
+                                contentDescription = null,
+                                tint = ElectricPurple,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Column {
                                 Text(
-                                    text = log,
+                                    stringResource(Res.string.dash_setup_title),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    stringResource(Res.string.dash_setup_subtitle),
                                     fontSize = 11.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = color
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                )
+                            }
+                        }
+                        Surface(
+                            onClick = onNavigateToSettings,
+                            color = Color.White.copy(alpha = 0.05f),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                Icon(Icons.Outlined.Tune, null, modifier = Modifier.size(12.dp))
+                                Text(
+                                    stringResource(Res.string.dash_configure_btn),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
                                 )
                             }
                         }
                     }
                 }
             }
-            
-            // Stepper Status Indicator
-            Card(
+
+            // Source & Destination card
+            ControlCard {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    SectionLabel(
+                        icon = Icons.Outlined.FolderOpen,
+                        text = stringResource(Res.string.dash_source_title)
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            stringResource(Res.string.dash_history_label),
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        FilePickerBox(
+                            icon = Icons.Outlined.FileOpen,
+                            label = htmlFile ?: stringResource(Res.string.dash_history_placeholder),
+                            onClick = onSelectHtmlFile,
+                            isSelected = htmlFile != null
+                        )
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            stringResource(Res.string.dash_output_label),
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        FilePickerBox(
+                            icon = Icons.Outlined.FolderOpen,
+                            label = downloadFolder ?: stringResource(Res.string.dash_output_placeholder),
+                            onClick = onSelectFolder,
+                            isSelected = downloadFolder != null
+                        )
+                    }
+                }
+            }
+
+            // Pipeline options card
+            ControlCard {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SectionLabel(
+                        icon = Icons.Outlined.AccountTree,
+                        text = stringResource(Res.string.dash_pipeline_title)
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        PipelineItem(Icons.Outlined.CloudDownload, stringResource(Res.string.opt_download_memories), runDownload) { runDownload = it }
+                        PipelineItem(Icons.Outlined.GpsFixed, stringResource(Res.string.opt_inject_gps), runMetadata) { runMetadata = it }
+                        PipelineItem(Icons.Outlined.Layers, stringResource(Res.string.opt_combine_overlays), runCombine) { runCombine = it }
+                        PipelineItem(Icons.Outlined.AutoDelete, stringResource(Res.string.opt_clean_duplicates), runDedupe) { runDedupe = it }
+                    }
+
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
+
+                    // Workers slider
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Outlined.Speed,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            stringResource(Res.string.dash_workers_label),
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            "$workers",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ElectricPurple,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                    Slider(
+                        value = workers.toFloat(),
+                        onValueChange = { workers = it.toInt() },
+                        valueRange = 1f..10f,
+                        steps = 8,
+                        modifier = Modifier.fillMaxWidth().height(24.dp),
+                        colors = SliderDefaults.colors(
+                            thumbColor = ElectricPurple,
+                            activeTrackColor = ElectricPurple,
+                            inactiveTrackColor = Color.White.copy(alpha = 0.08f)
+                        )
+                    )
+                }
+            }
+
+            Spacer(Modifier.weight(1f))
+
+            // Action buttons
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Button(
+                    onClick = { onStartSync(runDownload, runMetadata, runCombine, runDedupe, dryRun, workers) },
+                    enabled = !isRunning && htmlFile != null && downloadFolder != null,
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = ElectricPurple)
+                ) {
+                    Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        stringResource(Res.string.btn_start_sync),
+                        fontWeight = FontWeight.Black,
+                        fontSize = 15.sp
+                    )
+                }
+
+                Surface(
+                    onClick = onStopSync,
+                    enabled = isRunning,
+                    color = if (isRunning) MaterialTheme.colorScheme.surfaceVariant else Color.White.copy(alpha = 0.04f),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.size(52.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.Stop,
+                            contentDescription = stringResource(Res.string.btn_stop),
+                            tint = if (isRunning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                        )
+                    }
+                }
+            }
+        }
+
+        // ── Right column: terminal + progress (60%) ──────────────────────────
+        Column(
+            modifier = Modifier.weight(0.6f),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Terminal
+            Surface(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                color = Color.Black.copy(alpha = 0.45f),
                 shape = RoundedCornerShape(12.dp),
                 border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    StepItem(step = 1, label = "Setup", active = currentStep == 0, complete = currentStep > 0)
-                    Box(Modifier.weight(1f).height(1.dp).background(Color.White.copy(alpha = 0.1f)).padding(horizontal = 8.dp))
-                    StepItem(step = 2, label = "Syncing", active = currentStep == 1, complete = currentStep > 1)
-                    Box(Modifier.weight(1f).height(1.dp).background(Color.White.copy(alpha = 0.1f)).padding(horizontal = 8.dp))
-                    StepItem(step = 3, label = "Processing", active = currentStep == 2, complete = currentStep > 2)
-                    Box(Modifier.weight(1f).height(1.dp).background(Color.White.copy(alpha = 0.1f)).padding(horizontal = 8.dp))
-                    StepItem(step = 4, label = "Complete", active = currentStep == 3, complete = currentStep > 3)
+                Column {
+                    // Terminal chrome
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f))
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                TerminalDot(Color(0xFFFF5F56))
+                                TerminalDot(Color(0xFFFFBD2E))
+                                TerminalDot(Color(0xFF27C93F))
+                            }
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                stringResource(Res.string.dash_terminal_title),
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Icon(
+                                Icons.Outlined.ContentCopy,
+                                null,
+                                modifier = Modifier.size(13.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                            )
+                            Icon(
+                                Icons.Outlined.DeleteSweep,
+                                null,
+                                modifier = Modifier.size(13.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                            )
+                        }
+                    }
+
+                    val listState = rememberLazyListState()
+                    val coroutineScope = rememberCoroutineScope()
+                    LaunchedEffect(logs.size) {
+                        if (logs.isNotEmpty()) {
+                            coroutineScope.launch { listState.animateScrollToItem(logs.size - 1) }
+                        }
+                    }
+
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize().padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        items(logs) { log -> TerminalLogLine(log) }
+                        if (isRunning) {
+                            item {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        "$ ",
+                                        color = ElectricPurple,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 12.sp
+                                    )
+                                    Text(
+                                        "running_pipeline",
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 12.sp
+                                    )
+                                    BlinkingCursor()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Progress & stepper card
+            ControlCard {
+                Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                    // Stepper
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        StepItem(1, stringResource(Res.string.dash_step_setup), currentStep == 0, currentStep > 0, Icons.Outlined.Edit)
+                        StepperDivider(currentStep > 0)
+                        StepItem(2, stringResource(Res.string.dash_step_syncing), currentStep == 1, currentStep > 1, Icons.Outlined.CloudSync)
+                        StepperDivider(currentStep > 1)
+                        StepItem(3, stringResource(Res.string.dash_step_processing), currentStep == 2, currentStep > 2, Icons.Outlined.AutoFixHigh)
+                        StepperDivider(currentStep > 2)
+                        StepItem(4, stringResource(Res.string.dash_step_complete), currentStep == 3, currentStep > 3, Icons.Outlined.TaskAlt)
+                    }
+
+                    // Progress bar
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Bottom
+                        ) {
+                            Text(
+                                progressText.ifEmpty { stringResource(Res.string.status_idle) },
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                "${(progress * 100).toInt()}%",
+                                fontSize = 12.sp,
+                                color = TertiaryCyan,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(100))
+                                .background(Color.White.copy(alpha = 0.05f))
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(progress.coerceIn(0f, 1f))
+                                    .fillMaxHeight()
+                                    .background(
+                                        Brush.horizontalGradient(listOf(ElectricPurple, InfoBlue))
+                                    )
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                speedText,
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Text(
+                                etaText,
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
 
+// ── Shared sub-components ────────────────────────────────────────────────────
+
 @Composable
-fun SubProcessItem(
-    name: String,
-    status: String,
-    isActive: Boolean,
-    isComplete: Boolean
-) {
+fun SectionLabel(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Text(name, fontSize = 13.sp)
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (isActive) {
-                CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp, color = ElectricPurple)
-            } else if (isComplete) {
-                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color.Green, modifier = Modifier.size(14.dp))
-            }
-            Text(
-                text = status,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = when {
-                    isComplete -> Color.Green
-                    isActive -> ElectricPurple
-                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                }
-            )
-        }
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(13.dp))
+        Text(
+            text = text,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            letterSpacing = 0.8.sp
+        )
     }
 }
 
 @Composable
-fun PipelineToggle(
+fun ControlCard(content: @Composable () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
+    ) {
+        Box(modifier = Modifier.padding(20.dp)) { content() }
+    }
+}
+
+@Composable
+fun FilePickerBox(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    icon: androidx.compose.ui.graphics.vector.ImageVector
+    onClick: () -> Unit,
+    isSelected: Boolean
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .height(42.dp)
+            .background(SurfaceContainerLowest, RoundedCornerShape(8.dp))
+            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(
+            icon,
+            null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            modifier = Modifier.size(15.dp)
+        )
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            color = if (isSelected) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            stringResource(Res.string.browse_btn),
+            fontSize = 10.sp,
+            color = ElectricPurple,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+fun PipelineItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
             .clickable { onCheckedChange(!checked) }
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(vertical = 6.dp, horizontal = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-            Text(label, fontSize = 13.sp)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                icon,
+                null,
+                tint = if (checked) ElectricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                modifier = Modifier.size(16.dp)
+            )
+            Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
         }
-        Checkbox(
+        Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
-            colors = CheckboxDefaults.colors(checkedColor = ElectricPurple, checkmarkColor = Color.White)
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = ElectricPurple,
+                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        )
+    }
+}
+
+@Composable
+fun TerminalDot(color: Color) {
+    Box(Modifier.size(10.dp).clip(RoundedCornerShape(100)).background(color.copy(alpha = 0.6f)))
+}
+
+@Composable
+fun BlinkingCursor() {
+    val alpha by rememberInfiniteTransition(label = "cursor").animateFloat(
+        initialValue = 1f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 500, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "blink"
+    )
+    Box(
+        Modifier
+            .padding(start = 3.dp)
+            .width(7.dp)
+            .height(14.dp)
+            .alpha(alpha)
+            .background(ElectricPurple)
+    )
+}
+
+@Composable
+fun TerminalLogLine(log: String) {
+    val (tag, content) = when {
+        log.contains("[INFO]") -> "INFO" to log.replace("[INFO]", "").trim()
+        log.contains("[SUCCESS]") -> "SUCCESS" to log.replace("[SUCCESS]", "").trim()
+        log.contains("[ERROR]") -> "ERROR" to log.replace("[ERROR]", "").trim()
+        log.contains("[WARN]") -> "WARN" to log.replace("[WARN]", "").trim()
+        log.contains("[DOWNLOADED]") -> "DL" to log.replace("[DOWNLOADED]", "").trim()
+        log.contains("[SKIPPED]") -> "SKIP" to log.replace("[SKIPPED]", "").trim()
+        log.contains("[DELETED DUPES]") -> "DEDUPE" to log.replace("[DELETED DUPES]", "").trim()
+        log.contains("[METADATA]") -> "META" to log.replace("[METADATA]", "").trim()
+        else -> "" to log
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        if (tag.isNotEmpty()) {
+            Text(
+                text = "[$tag]",
+                color = when (tag) {
+                    "SUCCESS", "DL", "DEDUPE" -> Color(0xFF4ADE80)
+                    "ERROR" -> Color(0xFFF87171)
+                    "WARN" -> Color(0xFFFBBF24)
+                    "META" -> TertiaryCyan
+                    "SKIP" -> SecondaryBlue.copy(alpha = 0.7f)
+                    else -> InfoBlue
+                },
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Text(
+            text = content,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+            fontFamily = FontFamily.Monospace,
+            fontSize = 11.sp
         )
     }
 }
@@ -496,46 +620,67 @@ fun StepItem(
     step: Int,
     label: String,
     active: Boolean,
-    complete: Boolean
+    complete: Boolean,
+    icon: androidx.compose.ui.graphics.vector.ImageVector
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
         Box(
             modifier = Modifier
-                .size(28.dp)
+                .size(30.dp)
                 .clip(RoundedCornerShape(100))
                 .background(
                     when {
                         complete -> ElectricPurple
                         active -> ElectricPurple.copy(alpha = 0.2f)
-                        else -> SurfaceContainerHigh
+                        else -> Color.White.copy(alpha = 0.04f)
                     }
                 )
                 .border(
-                    width = 1.dp,
-                    color = when {
-                        active -> ElectricPurple
-                        else -> Color.Transparent
-                    },
+                    width = 1.5.dp,
+                    color = if (active || complete) ElectricPurple else Color.White.copy(alpha = 0.1f),
                     shape = RoundedCornerShape(100)
                 ),
             contentAlignment = Alignment.Center
         ) {
-            if (complete) {
-                Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-            } else {
-                Text(
-                    text = step.toString(),
-                    fontSize = 12.sp,
+            when {
+                complete -> Icon(
+                    Icons.Default.Check,
+                    null,
+                    tint = Color.White,
+                    modifier = Modifier.size(15.dp)
+                )
+                active -> Icon(
+                    icon,
+                    null,
+                    tint = ElectricPurple,
+                    modifier = Modifier.size(15.dp)
+                )
+                else -> Text(
+                    step.toString(),
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (active) ElectricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
                 )
             }
         }
         Text(
             text = label,
-            fontSize = 11.sp,
-            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-            color = if (active) ElectricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            fontSize = 10.sp,
+            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (active || complete) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
         )
     }
+}
+
+@Composable
+fun StepperDivider(filled: Boolean = false) {
+    Box(
+        Modifier
+            .width(36.dp)
+            .height(1.5.dp)
+            .background(if (filled) ElectricPurple.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.06f))
+    )
 }

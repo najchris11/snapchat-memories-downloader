@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.najdev.snapvault.downloader.DeduplicatorTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-06-02T21:43:55" hostname="device-91.home" time="0.036">
-  <properties/>
-  <testcase name="testDeduplication[desktop]" classname="com.najdev.snapvault.downloader.DeduplicatorTest" time="0.034"/>
-  <testcase name="testSha256Calculation[desktop]" classname="com.najdev.snapvault.downloader.DeduplicatorTest" time="0.002"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

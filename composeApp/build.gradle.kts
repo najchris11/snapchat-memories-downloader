@@ -22,7 +22,6 @@ kotlin {
     }
     
     listOf(
-        iosX64(),
         iosArm64(),
         iosSimulatorArm64()
     ).forEach { iosTarget ->
@@ -38,6 +37,7 @@ kotlin {
                 implementation(compose.runtime)
                 implementation(compose.foundation)
                 implementation(compose.material3)
+                implementation(compose.materialIconsExtended)
                 implementation(compose.ui)
                 implementation(compose.components.resources)
                 
@@ -90,7 +90,6 @@ kotlin {
             }
         }
         
-        val iosX64Main by getting { dependsOn(iosMain) }
         val iosArm64Main by getting { dependsOn(iosMain) }
         val iosSimulatorArm64Main by getting { dependsOn(iosMain) }
     }
@@ -120,6 +119,11 @@ android {
 compose.desktop {
     application {
         mainClass = "com.najdev.snapvault.MainKt"
+        jvmArgs += listOf(
+            "-Dsun.java2d.dpiaware=true",
+            "-Dhidpi=true",
+            "-Dapple.awt.application.appearance=system"
+        )
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "SnapVault"

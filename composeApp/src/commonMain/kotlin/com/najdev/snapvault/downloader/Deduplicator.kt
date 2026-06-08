@@ -9,7 +9,7 @@ import okio.buffer
 import okio.use
 
 class Deduplicator(
-    private val fileSystem: FileSystem = FileSystem.SYSTEM
+    private val fileSystem: FileSystem
 ) {
     fun calculateSha256(path: Path): String? {
         if (!fileSystem.exists(path)) return null

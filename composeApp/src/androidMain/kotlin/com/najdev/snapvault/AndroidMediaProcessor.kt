@@ -48,6 +48,11 @@ class AndroidMediaProcessor : MediaProcessor {
         } else null
     }
 
+    override fun writeDateMetadata(filePath: String, dateTimeUtc: String): Boolean {
+        // TODO: Implement using ExifInterface for Android
+        return false
+    }
+
     override fun combineVideoWithOverlay(videoPath: String, overlayPath: String, outputPath: String): Boolean {
         // TODO: Implement using MediaMuxer or an FFmpeg library for Android
         return false

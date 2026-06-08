@@ -13,6 +13,11 @@ class IosPickers : PlatformPickers {
         // TODO: Implement UIDocumentPickerViewController
         onResult(null)
     }
+
+    override fun pickZipFile(onResult: (String?) -> Unit) {
+        // TODO: Implement UIDocumentPickerViewController for zip files
+        onResult(null)
+    }
 }
 
 @Composable

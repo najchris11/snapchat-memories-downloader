@@ -3,10 +3,11 @@ package com.najdev.snapvault.ui.theme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-// Pro Palette from Stitch Design
+// ── Dark palette ─────────────────────────────────────────────────────────────
 val SlateDark = Color(0xFF081425)
 val SlateDim = Color(0xFF081425)
 val SurfaceContainer = Color(0xFF152031)
@@ -41,15 +42,48 @@ val SnapVaultColorScheme: ColorScheme = darkColorScheme(
     onSurface = OnBackground,
     surfaceVariant = SurfaceContainerHigh,
     onSurfaceVariant = OnSurfaceVariant,
+    surfaceContainerLowest = SurfaceContainerLowest,
+    surfaceContainerLow = SurfaceContainerLow,
+    surfaceContainer = SurfaceContainer,
+    surfaceContainerHigh = SurfaceContainerHigh,
+    surfaceContainerHighest = SurfaceContainerHighest,
     outline = Outline,
+    outlineVariant = Color(0xFF49454F),
     error = Color(0xFFFFB4AB),
     onError = Color(0xFF690005)
 )
 
+// ── Light palette ─────────────────────────────────────────────────────────────
+val SnapVaultLightColorScheme: ColorScheme = lightColorScheme(
+    primary = Color(0xFF6D3BD7),
+    onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFFEDE0FF),
+    onPrimaryContainer = Color(0xFF21005D),
+    secondary = Color(0xFF5B5D71),
+    onSecondary = Color(0xFFFFFFFF),
+    tertiary = Color(0xFF006687),
+    onTertiary = Color(0xFFFFFFFF),
+    background = Color(0xFFF4F6FB),
+    onBackground = Color(0xFF0D1525),
+    surface = Color(0xFFFFFFFF),
+    onSurface = Color(0xFF0D1525),
+    surfaceVariant = Color(0xFFE8ECF4),
+    onSurfaceVariant = Color(0xFF454558),
+    surfaceContainerLowest = Color(0xFFFFFFFF),
+    surfaceContainerLow = Color(0xFFF5F7FC),
+    surfaceContainer = Color(0xFFEFF1F8),
+    surfaceContainerHigh = Color(0xFFE8ECF4),
+    surfaceContainerHighest = Color(0xFFE0E5F0),
+    outline = Color(0xFF767688),
+    outlineVariant = Color(0xFFC8C6D7),
+    error = Color(0xFFBA1A1A),
+    onError = Color(0xFFFFFFFF)
+)
+
 @Composable
-fun SnapVaultTheme(content: @Composable () -> Unit) {
+fun SnapVaultTheme(darkMode: Boolean = true, content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = SnapVaultColorScheme,
+        colorScheme = if (darkMode) SnapVaultColorScheme else SnapVaultLightColorScheme,
         content = content
     )
 }

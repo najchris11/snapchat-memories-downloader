@@ -139,16 +139,63 @@ class DesktopMediaProcessor : MediaProcessor {
         }
     }
 
+    override fun writeDateMetadata(filePath: String, dateTimeUtc: String): Boolean {
+        val file = File(filePath)
+        if (!file.exists()) return false
+
+        val path = BinaryExtractor.checkCommand("exiftool") ?: return false
+
+        val exifDate = formatToExifDate(dateTimeUtc) ?: run {
+            val dateOnly = Regex("""(\d{4})-(\d{2})-(\d{2})""").find(dateTimeUtc)
+            if (dateOnly != null) {
+                "${dateOnly.groupValues[1]}:${dateOnly.groupValues[2]}:${dateOnly.groupValues[3]} 00:00:00"
+            } else return false
+        }
+
+        val ext = file.extension.lowercase()
+        val args = mutableListOf(path, "-overwrite_original", "-q")
+
+        if (ext in listOf("jpg", "jpeg", "png")) {
+            args += listOf("-DateTimeOriginal=$exifDate", "-CreateDate=$exifDate", "-ModifyDate=$exifDate")
+        } else if (ext in listOf("mp4", "mov", "avi")) {
+            args += listOf("-CreateDate=$exifDate", "-MediaCreateDate=$exifDate", "-TrackCreateDate=$exifDate", "-ModifyDate=$exifDate")
+        } else {
+            return false
+        }
+
+        args.add(filePath)
+
+        return try {
+            val process = ProcessBuilder(args).start()
+            val exitCode = process.waitFor()
+            if (exitCode == 0) {
+                val prefix = parseDateToFilenamePrefix(dateTimeUtc)
+                if (prefix != null && prefix.length >= 15) {
+                    try {
+                        val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss")
+                        val date = sdf.parse(prefix)
+                        file.setLastModified(date.time)
+                    } catch (_: Exception) {}
+                }
+            }
+            exitCode == 0
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     override fun combineVideoWithOverlay(videoPath: String, overlayPath: String, outputPath: String): Boolean {
         val ffmpegPath = BinaryExtractor.checkCommand("ffmpeg") ?: return false
         val exiftoolPath = BinaryExtractor.checkCommand("exiftool")
         
-        val filterComplex = "[1:v]format=rgba[ov];[ov][0:v]scale2ref=main_w:main_h[ovr][base];[base][ovr]overlay=0:0:format=auto"
+        // scale2ref scales the overlay (input 1) to the video's (input 0) dimensions.
+        // shortest=1 stops the encode when the video ends (the PNG loops via -loop 1).
+        val filterComplex = "[1:v][0:v]scale2ref[ovr][base];[base][ovr]overlay=0:0:shortest=1:format=auto"
         val args = listOf(
             ffmpegPath,
             "-y",
             "-i", videoPath,
-            "-i", overlayPath,
+            "-loop", "1", "-i", overlayPath,   // -loop 1: repeat PNG for all video frames
             "-filter_complex", filterComplex,
             "-c:a", "copy",
             "-c:v", "libx264",

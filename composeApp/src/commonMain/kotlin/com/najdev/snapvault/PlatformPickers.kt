@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 interface PlatformPickers {
     fun pickHtmlFile(onResult: (String?) -> Unit)
     fun pickFolder(onResult: (String?) -> Unit)
+    fun pickZipFile(onResult: (String?) -> Unit)
 }
 
 @Composable

@@ -1,5 +1,7 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
+val appVersion = (project.findProperty("app.version") as? String) ?: "0.0.0"
+
 plugins {
     kotlin("multiplatform")
     kotlin("plugin.serialization")
@@ -79,6 +81,7 @@ kotlin {
             dependencies {
                 implementation(compose.preview)
                 implementation(compose.desktop.currentOs)
+                implementation(compose.foundation)
                 implementation("io.ktor:ktor-client-cio:3.5.0")
             }
         }
@@ -104,7 +107,7 @@ android {
         minSdk = 24
         targetSdk = 37
         versionCode = 1
-        versionName = "1.0.0"
+        versionName = appVersion
     }
     sourceSets["main"].manifest.srcFile("src/androidMain/AndroidManifest.xml")
     sourceSets["main"].res.srcDirs("src/androidMain/res")
@@ -131,6 +134,28 @@ compose.desktop {
         }
     }
 }
+
+val generateBuildConfig by tasks.registering {
+    val outDir = layout.buildDirectory.dir("generated/buildConfig/commonMain/kotlin")
+    outputs.dir(outDir)
+    inputs.property("version", appVersion)
+    inputs.property("isDebug", gradle.startParameter.taskNames.none { "release" in it.lowercase() || "Dist" in it })
+    doLast {
+        val isDebug = gradle.startParameter.taskNames.none { "release" in it.lowercase() || "Dist" in it }
+        val dir = outDir.get().asFile
+        dir.mkdirs()
+        dir.resolve("AppBuildConfig.kt").writeText("""
+            package com.najdev.snapvault
+            object AppBuildConfig {
+                const val VERSION = "$appVersion"
+                const val IS_DEBUG = $isDebug
+            }
+        """.trimIndent())
+    }
+}
+
+kotlin.sourceSets.getByName("commonMain").kotlin
+    .srcDir(generateBuildConfig.map { it.outputs.files })
 
 tasks.register<JavaExec>("runCli") {
     group = "application"

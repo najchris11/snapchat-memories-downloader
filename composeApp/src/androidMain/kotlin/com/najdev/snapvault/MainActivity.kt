@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
+import com.najdev.snapvault.downloader.NoOpZipPipelineRunner
 import com.najdev.snapvault.metadata.AndroidMediaProcessor
 import okio.FileSystem
 import java.io.File
@@ -23,6 +24,7 @@ class MainActivity : ComponentActivity() {
             
             var onHtmlResult by remember { mutableStateOf<((String?) -> Unit)?>(null) }
             var onFolderResult by remember { mutableStateOf<((String?) -> Unit)?>(null) }
+            var onZipResult by remember { mutableStateOf<((String?) -> Unit)?>(null) }
 
             val htmlPickerLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.GetContent()
@@ -34,9 +36,15 @@ class MainActivity : ComponentActivity() {
             val folderPickerLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.OpenDocumentTree()
             ) { uri: Uri? ->
-                // Simplified for now
                 val path = context.getExternalFilesDir(null)?.absolutePath
                 onFolderResult?.invoke(path)
+            }
+
+            val zipPickerLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.GetContent()
+            ) { uri: Uri? ->
+                val path = uri?.let { copyUriToInternalStorage(context, it, "snapchat_export.zip") }
+                onZipResult?.invoke(path)
             }
 
             val pickers = remember {
@@ -50,12 +58,18 @@ class MainActivity : ComponentActivity() {
                         onFolderResult = onResult
                         folderPickerLauncher.launch(null)
                     }
+
+                    override fun pickZipFile(onResult: (String?) -> Unit) {
+                        onZipResult = onResult
+                        zipPickerLauncher.launch("application/zip")
+                    }
                 }
             }
 
             App(
                 pickers = pickers,
                 mediaProcessor = mediaProcessor,
+                zipPipelineRunner = NoOpZipPipelineRunner,
                 fileSystem = FileSystem.SYSTEM
             )
         }

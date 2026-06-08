@@ -9,6 +9,11 @@ class IosMediaProcessor : MediaProcessor {
         return false
     }
 
+    override fun writeDateMetadata(filePath: String, dateTimeUtc: String): Boolean {
+        // TODO: Implement using AVFoundation for iOS
+        return false
+    }
+
     override fun combineVideoWithOverlay(videoPath: String, overlayPath: String, outputPath: String): Boolean {
         // TODO: Implement using AVFoundation
         return false

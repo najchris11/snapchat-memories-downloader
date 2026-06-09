@@ -19,6 +19,8 @@ import okio.FileSystem
 import okio.Path.Companion.toPath
 import kotlin.time.TimeSource
 
+private class PipelineAbortException(message: String) : Exception(message)
+
 class DashboardViewModel(
     private val zipPipelineRunner: ZipPipelineRunner,
     private val mediaProcessor: MediaProcessor,
@@ -89,11 +91,7 @@ class DashboardViewModel(
 
         syncJob = scope.launch {
             try {
-                val outDir = downloadFolder ?: run {
-                    logs.add("[ERROR] No output folder selected.")
-                    isRunning = false
-                    return@launch
-                }
+                val outDir = downloadFolder ?: throw PipelineAbortException("No output folder selected.")
                 if (importMode == ImportMode.Zip) {
                     runZipPipeline(outDir, runMetadata, runCombine, runDedupe, dryRun, workerCount)
                 } else {
@@ -103,8 +101,16 @@ class DashboardViewModel(
                 progressText = "Pipeline Complete"
                 currentStep = 3
                 logs.add("[SUCCESS] Sync complete!")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: PipelineAbortException) {
+                logs.add("[ERROR] ${e.message}")
+                progressText = "Failed"
+                currentStep = 0
             } catch (e: Exception) {
                 logs.add("[ERROR] Pipeline failed: ${e.message}")
+                progressText = "Failed"
+                currentStep = 0
             } finally {
                 isRunning = false
             }
@@ -139,28 +145,16 @@ class DashboardViewModel(
         logs.add("[INFO] Scanning for ZIP file(s)…")
         val zipFiles: List<String> = when (zipSourceMode) {
             ZipSourceMode.SingleFile -> {
-                val f = singleZipFile ?: run {
-                    logs.add("[ERROR] No ZIP file selected.")
-                    isRunning = false
-                    return
-                }
-                listOf(f)
+                listOf(singleZipFile ?: throw PipelineAbortException("No ZIP file selected."))
             }
             ZipSourceMode.Folder -> {
-                val dir = zipFolder ?: run {
-                    logs.add("[ERROR] No ZIP folder selected.")
-                    isRunning = false
-                    return
-                }
-                zipPipelineRunner.listZipFiles(dir)
+                zipPipelineRunner.listZipFiles(
+                    zipFolder ?: throw PipelineAbortException("No ZIP folder selected.")
+                )
             }
         }
 
-        if (zipFiles.isEmpty()) {
-            logs.add("[WARN] No .zip files found in selected folder.")
-            isRunning = false
-            return
-        }
+        if (zipFiles.isEmpty()) throw PipelineAbortException("No .zip files found in selected folder.")
         logs.add("[INFO] Found ${zipFiles.size} zip file(s).")
 
         val numberedSuffixRegex = Regex("""-\d+\.zip$""")
@@ -409,7 +403,7 @@ class DashboardViewModel(
         progressText = "Reading memories…"
         logs.add("[INFO] Starting pipeline sequence…")
 
-        val htmlPath = htmlFile ?: return
+        val htmlPath = htmlFile ?: throw PipelineAbortException("No HTML/JSON file selected.")
         val fileContent = fileSystem.read(htmlPath.toPath()) { readUtf8() }
         val isJson = htmlPath.endsWith(".json", ignoreCase = true)
         logs.add("[INFO] Parsing memories history (${if (isJson) "JSON" else "HTML"})…")
@@ -422,12 +416,7 @@ class DashboardViewModel(
         if (AppBuildConfig.IS_DEBUG) logs.add("[DEBUG] Limiting to 5 items (debug mode)")
 
         val items = if (AppBuildConfig.IS_DEBUG) parsed.take(5) else parsed
-        if (items.isEmpty()) {
-            logs.add("[WARN] No items found. Use memories_history.json from your Snapchat export (mydata.snapchat.com).")
-            isRunning = false
-            currentStep = 3
-            return
-        }
+        if (items.isEmpty()) throw PipelineAbortException("No items found. Use memories_history.json from your Snapchat export (mydata.snapchat.com).")
 
         val vaultIndexPath = "$outDir/vault_index.json".toPath()
         val downloadedMeta: MutableMap<String, FileMeta> = runCatching {

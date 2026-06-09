@@ -68,6 +68,7 @@ kotlin {
             dependencies {
                 implementation(kotlin("test"))
                 implementation("io.ktor:ktor-client-mock:3.5.0")
+                implementation("com.squareup.okio:okio-fakefilesystem:3.17.0")
             }
         }
         

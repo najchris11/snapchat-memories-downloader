@@ -104,8 +104,8 @@ class DownloadEngine(
         val files = fileSystem.list(outputFolderPath)
         val alreadyDownloadedFile = files.find { file ->
             val filename = file.name
-            (filename == "${item.id}.mp4" || filename == "${item.id}.jpg" || filename == "${item.id}.png" || filename == "${item.id}.zip") ||
-            (prefix != null && (filename == "${prefix}_${item.id}.mp4" || filename == "${prefix}_${item.id}.jpg" || filename == "${prefix}_${item.id}.png" || filename == "${prefix}_${item.id}.zip"))
+            (filename == "${item.id}.mp4" || filename == "${item.id}.jpg" || filename == "${item.id}.jpeg" || filename == "${item.id}.png" || filename == "${item.id}.zip") ||
+            (prefix != null && (filename == "${prefix}_${item.id}.mp4" || filename == "${prefix}_${item.id}.jpg" || filename == "${prefix}_${item.id}.jpeg" || filename == "${prefix}_${item.id}.png" || filename == "${prefix}_${item.id}.zip"))
         }
 
         if (alreadyDownloadedFile != null) {

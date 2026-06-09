@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -64,7 +63,8 @@ fun LibraryScreen(
     downloadFolder: String?,
     onOpenFolder: () -> Unit
 ) {
-    val items = remember(downloadFolder) {
+    var refreshKey by remember { mutableStateOf(0) }
+    val items = remember(downloadFolder, refreshKey) {
         if (downloadFolder != null) scanMediaFiles(downloadFolder) else emptyList()
     }
 
@@ -96,28 +96,47 @@ fun LibraryScreen(
             // Stats row
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                StatChip(
-                    icon = Icons.Outlined.PhotoLibrary,
-                    label = "${items.size} Memories",
-                    tint = ElectricPurple
-                )
-                StatChip(
-                    icon = Icons.Outlined.Image,
-                    label = "${items.count { it.type == "photo" }} Photos",
-                    tint = ElectricPurple.copy(alpha = 0.7f)
-                )
-                StatChip(
-                    icon = Icons.Outlined.Videocam,
-                    label = "${items.count { it.type == "video" }} Videos",
-                    tint = InfoBlue
-                )
-                StatChip(
-                    icon = Icons.Outlined.GpsFixed,
-                    label = "${items.count { it.hasGps }} with GPS",
-                    tint = Color(0xFF4ADE80)
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    StatChip(
+                        icon = Icons.Outlined.PhotoLibrary,
+                        label = "${items.size} Memories",
+                        tint = ElectricPurple
+                    )
+                    StatChip(
+                        icon = Icons.Outlined.Image,
+                        label = "${items.count { it.type == "photo" }} Photos",
+                        tint = ElectricPurple.copy(alpha = 0.7f)
+                    )
+                    StatChip(
+                        icon = Icons.Outlined.Videocam,
+                        label = "${items.count { it.type == "video" }} Videos",
+                        tint = InfoBlue
+                    )
+                    StatChip(
+                        icon = Icons.Outlined.GpsFixed,
+                        label = "${items.count { it.hasGps }} with GPS",
+                        tint = Color(0xFF4ADE80)
+                    )
+                }
+                if (downloadFolder != null) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { refreshKey++ }
+                            .padding(horizontal = 8.dp, vertical = 5.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Outlined.Refresh,
+                            contentDescription = "Refresh library",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
             }
 
             // Filter + search bar
@@ -163,103 +182,46 @@ fun LibraryScreen(
                         }
                     }
 
-                    // Date filter
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                            .clickable { }
-                            .padding(horizontal = 10.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        Icon(
-                            Icons.Outlined.DateRange,
-                            null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Text(
-                            stringResource(Res.string.lib_filter_date),
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        )
-                        Icon(
-                            Icons.Default.KeyboardArrowDown,
-                            null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                            modifier = Modifier.size(13.dp)
-                        )
-                    }
                 }
 
+                // Search field
                 Row(
+                    modifier = Modifier
+                        .width(200.dp)
+                        .height(32.dp)
+                        .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // Search field
-                    Row(
-                        modifier = Modifier
-                            .width(200.dp)
-                            .height(32.dp)
-                            .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                            .padding(horizontal = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            Icons.Outlined.Search,
-                            null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                            modifier = Modifier.size(13.dp)
-                        )
-                        BasicTextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            textStyle = LocalTextStyle.current.copy(
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontSize = 12.sp
-                            ),
-                            cursorBrush = SolidColor(ElectricPurple),
-                            decorationBox = { inner ->
-                                if (searchQuery.isEmpty()) {
-                                    Text(
-                                        stringResource(Res.string.lib_search_placeholder),
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                                    )
-                                }
-                                inner()
+                    Icon(
+                        Icons.Outlined.Search,
+                        null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                        modifier = Modifier.size(13.dp)
+                    )
+                    BasicTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        textStyle = LocalTextStyle.current.copy(
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 12.sp
+                        ),
+                        cursorBrush = SolidColor(ElectricPurple),
+                        decorationBox = { inner ->
+                            if (searchQuery.isEmpty()) {
+                                Text(
+                                    stringResource(Res.string.lib_search_placeholder),
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                                )
                             }
-                        )
-                    }
-
-                    // Sort label
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp))
-                            .padding(horizontal = 10.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Outlined.Sort,
-                            null,
-                            tint = ElectricPurple,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Text(
-                            stringResource(Res.string.lib_sort_newest),
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
-                    }
+                            inner()
+                        }
+                    )
                 }
             }
 
@@ -590,25 +552,6 @@ private fun InspectorGlobalStats(items: List<LibraryItem>) {
             )
         }
 
-        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp)
-            ) {
-                Icon(Icons.Outlined.Build, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(11.dp))
-                Text(stringResource(Res.string.lib_vault_tools_label), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
-            }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ToolButton(Icons.Outlined.IosShare, stringResource(Res.string.lib_tool_export), Modifier.weight(1f))
-                ToolButton(Icons.Outlined.AutoAwesome, stringResource(Res.string.lib_tool_optimize), Modifier.weight(1f))
-            }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ToolButton(Icons.Outlined.VisibilityOff, stringResource(Res.string.lib_tool_privacy), Modifier.weight(1f))
-                ToolButton(Icons.Outlined.Link, stringResource(Res.string.lib_tool_vault_link), Modifier.weight(1f))
-            }
-        }
     }
 }
 
@@ -659,33 +602,6 @@ fun MetadataRow(
     }
 }
 
-@Composable
-fun ToolButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier.clickable { },
-        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.35f),
-        shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Icon(
-                icon,
-                null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                modifier = Modifier.size(16.dp)
-            )
-            Text(label, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-        }
-    }
-}
 
 @Composable
 fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {

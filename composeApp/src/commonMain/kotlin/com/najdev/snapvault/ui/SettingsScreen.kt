@@ -30,8 +30,9 @@ fun SettingsScreen(
     hasExifTool: Boolean,
     hasFFmpeg: Boolean,
     onVerifyDependencies: () -> Unit,
-    onRunInstaller: () -> Unit,
-    isInstalling: Boolean,
+    downloadFolder: String?,
+    onResetIndex: () -> Unit,
+    onEditOutputPath: () -> Unit,
     workers: Int,
     onWorkersChange: (Int) -> Unit,
     isDarkMode: Boolean,
@@ -178,47 +179,23 @@ fun SettingsScreen(
                     )
                 }
 
-                if (isInstalling) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            "Installing dependencies…",
-                            fontSize = 11.sp,
-                            color = ElectricPurple
-                        )
-                        LinearProgressIndicator(
-                            modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(100)),
-                            color = ElectricPurple,
-                            trackColor = ElectricPurple.copy(alpha = 0.1f)
-                        )
-                    }
-                } else {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Button(
-                            onClick = onRunInstaller,
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = ElectricPurple),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                        ) {
-                            Icon(Icons.Outlined.Download, null, modifier = Modifier.size(14.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                stringResource(Res.string.set_deps_install_btn),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                        Text(
-                            text = stringResource(Res.string.set_deps_refresh),
-                            fontSize = 12.sp,
-                            color = InfoBlue,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.clickable { onVerifyDependencies() }.padding(8.dp)
-                        )
-                    }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(Res.string.set_deps_refresh),
+                        fontSize = 12.sp,
+                        color = InfoBlue,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clickable { onVerifyDependencies() }.padding(vertical = 8.dp)
+                    )
                 }
+                Text(
+                    "Install ExifTool and FFmpeg via Homebrew (macOS/Linux) or from their official sites, then click Refresh to detect them.",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                )
             }
         }
 
@@ -258,51 +235,12 @@ fun SettingsScreen(
                     }
                     Spacer(Modifier.width(16.dp))
                     Button(
-                        onClick = {},
+                        onClick = onResetIndex,
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.85f)),
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                     ) {
                         Text(stringResource(Res.string.set_reset_index_btn), fontSize = 12.sp)
-                    }
-                }
-
-                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-
-                // Clear cache
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(
-                            Icons.Outlined.DeleteSweep,
-                            null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                            Text("Clear Cache", fontSize = 13.sp)
-                            Text(
-                                "Remove temporary storage and thumbnails",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                            )
-                        }
-                    }
-                    Spacer(Modifier.width(16.dp))
-                    OutlinedButton(
-                        onClick = {},
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                    ) {
-                        Text("Clear", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                     }
                 }
 
@@ -323,7 +261,7 @@ fun SettingsScreen(
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                         Text("Output Path", fontSize = 13.sp)
                         Text(
-                            "~/SnapVault/Library",
+                            downloadFolder ?: "Not set",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                             maxLines = 1,
@@ -331,7 +269,7 @@ fun SettingsScreen(
                         )
                     }
                     TextButton(
-                        onClick = {},
+                        onClick = onEditOutputPath,
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text("Edit", fontSize = 12.sp, color = ElectricPurple, fontWeight = FontWeight.SemiBold)

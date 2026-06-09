@@ -14,8 +14,6 @@ import com.najdev.snapvault.ui.components.AppSidebar
 import com.najdev.snapvault.ui.components.AppTopBar
 import com.najdev.snapvault.ui.theme.SnapVaultTheme
 import com.najdev.snapvault.viewmodel.DashboardViewModel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import okio.FileSystem
 
 enum class Screen { Dashboard, Library, Settings }
@@ -39,14 +37,11 @@ fun App(
 
     var hasExifTool by remember { mutableStateOf(false) }
     var hasFFmpeg by remember { mutableStateOf(false) }
-    var isInstalling by remember { mutableStateOf(false) }
 
     val dashboardViewModel = remember {
         DashboardViewModel(zipPipelineRunner, mediaProcessor, fileSystem, pickers)
     }
     DisposableEffect(Unit) { onDispose { dashboardViewModel.dispose() } }
-
-    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         hasExifTool = mediaProcessor.checkExifTool()
@@ -92,16 +87,9 @@ fun App(
                                 hasExifTool = mediaProcessor.checkExifTool()
                                 hasFFmpeg = mediaProcessor.checkFFmpeg()
                             },
-                            onRunInstaller = {
-                                coroutineScope.launch {
-                                    isInstalling = true
-                                    delay(2000)
-                                    hasExifTool = mediaProcessor.checkExifTool()
-                                    hasFFmpeg = mediaProcessor.checkFFmpeg()
-                                    isInstalling = false
-                                }
-                            },
-                            isInstalling = isInstalling,
+                            downloadFolder = dashboardViewModel.downloadFolder,
+                            onResetIndex = { dashboardViewModel.resetVaultIndex() },
+                            onEditOutputPath = { dashboardViewModel.pickOutputFolder() },
                             workers = workers,
                             onWorkersChange = { workers = it; saveWorkersPreference(it) },
                             isDarkMode = isDarkMode,

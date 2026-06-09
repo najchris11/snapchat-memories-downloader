@@ -127,6 +127,15 @@ class DashboardViewModel(
 
     fun dispose() = scope.cancel()
 
+    fun resetVaultIndex(): Boolean {
+        val folder = downloadFolder ?: return false
+        return runCatching {
+            val path = "$folder/vault_index.json".toPath()
+            if (fileSystem.exists(path)) fileSystem.delete(path)
+            true
+        }.getOrDefault(false)
+    }
+
     private fun formatEta(seconds: Long): String = when {
         seconds < 60 -> "${seconds}s"
         seconds < 3600 -> "${seconds / 60}m ${seconds % 60}s"

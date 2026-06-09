@@ -171,7 +171,9 @@ class DashboardViewModel(
 
         var jsonEntries: List<JsonMemoryEntry> = emptyList()
         var histEntries: List<HistMemoryEntry> = emptyList()
-        if (mainZip != null) {
+        if (mainZip == null) {
+            logs.add("[WARN] No unnumbered main zip found — metadata sources unavailable. GPS/datetime enrichment skipped.")
+        } else {
             val mainZipName = mainZip.substringAfterLast('/').substringAfterLast('\\')
             logs.add("[INFO] Reading metadata from $mainZipName…")
 
@@ -181,7 +183,10 @@ class DashboardViewModel(
                     logs.add("[WARN] Could not parse memories_history.html: ${e.message}")
                     emptyList()
                 }
-                logs.add("[INFO] Parsed ${histEntries.size} entries from memories_history.html (primary metadata source).")
+                val histWithGps = histEntries.count { it.latitude != null }
+                logs.add("[INFO] memories_history.html: ${histEntries.size} entries, $histWithGps with GPS (${if (histEntries.isEmpty()) 0 else histWithGps * 100 / histEntries.size}%).")
+            } else {
+                logs.add("[WARN] memories_history.html not found in main zip.")
             }
 
             val jsonContent = readZipEntry(mainZip, "json/memories_history.json")
@@ -190,22 +195,43 @@ class DashboardViewModel(
                     logs.add("[WARN] Could not parse memories_history.json: ${e.message}")
                     emptyList()
                 }
-                logs.add("[INFO] Parsed ${jsonEntries.size} entries from memories_history.json (fallback metadata source).")
+                logs.add("[INFO] memories_history.json: ${jsonEntries.size} entries (JSON fallback source).")
+            } else {
+                logs.add("[WARN] memories_history.json not found in main zip.")
             }
 
             if (histEntries.isEmpty() && jsonEntries.isEmpty()) {
-                logs.add("[WARN] No metadata sources found in main zip — GPS/datetime enrichment unavailable.")
+                logs.add("[WARN] No metadata sources found — GPS/datetime enrichment unavailable.")
             }
         }
 
         val itemsByZip = mutableMapOf<String, List<HtmlMemoryEntry>>()
         val allHtmlEntries = mutableListOf<HtmlMemoryEntry>()
+        val seenUuids = mutableMapOf<String, String>() // uuid -> first zip name
+        var dupUuidCount = 0
         for (zipPath in zipFiles) {
             val htmlContent = readZipEntry(zipPath, "memories/memories.html") ?: continue
             val entries = ZipImportParser.parseMemoriesHtml(htmlContent)
+            val zipName = zipPath.substringAfterLast('/').substringAfterLast('\\')
+            for (entry in entries) {
+                val prev = seenUuids.put(entry.uuid, zipName)
+                if (prev != null) {
+                    dupUuidCount++
+                    if (dupUuidCount <= 5) {
+                        logs.add("[WARN] Duplicate UUID ${entry.uuid.take(8)} in $zipName (first seen in $prev, date=${entry.date})")
+                    }
+                }
+            }
             itemsByZip[zipPath] = entries
             allHtmlEntries.addAll(entries)
+            val dateRange = if (entries.isNotEmpty()) {
+                val sorted = entries.map { it.date }.sorted()
+                "${sorted.first()} – ${sorted.last()}"
+            } else "no entries"
+            logs.add("[INFO] $zipName: ${entries.size} memories ($dateRange)")
         }
+        if (dupUuidCount > 5) logs.add("[WARN] … and ${dupUuidCount - 5} more duplicate UUIDs")
+        if (dupUuidCount > 0) logs.add("[WARN] $dupUuidCount duplicate UUIDs across zips — de-duplicated for correlation")
         logs.add("[INFO] Indexed ${allHtmlEntries.size} media items across ${itemsByZip.size} zip(s).")
 
         if (AppBuildConfig.IS_DEBUG) {
@@ -221,10 +247,23 @@ class DashboardViewModel(
             itemsByZip.putAll(trimmed)
         }
 
+        // De-duplicate by UUID so positional alignment uses only the first-seen occurrence of each
+        // memory. Duplicates across zips would otherwise corrupt the group ordering and assign the
+        // wrong timestamp to every subsequent entry in that (date, type) group.
+        val dedupedHtmlEntries = allHtmlEntries.distinctBy { it.uuid }
+
         val correlationMap = if (histEntries.isNotEmpty() || jsonEntries.isNotEmpty()) {
-            MetadataCorrelator.correlate(histEntries, jsonEntries, allHtmlEntries)
+            MetadataCorrelator.correlate(histEntries, jsonEntries, dedupedHtmlEntries)
         } else emptyMap()
-        logs.add("[INFO] Metadata correlated for ${correlationMap.size} items.")
+        val histMatched = correlationMap.values.count { it.source == CorrSource.Hist }
+        val jsonMatched = correlationMap.values.count { it.source == CorrSource.Json }
+        val unmatched = dedupedHtmlEntries.size - correlationMap.size
+        logs.add("[INFO] Correlation: $histMatched exact (hist), $jsonMatched approx (JSON), $unmatched unmatched.")
+        val corrWithGps = correlationMap.values.count { it.latitude != null }
+        if (correlationMap.isNotEmpty()) {
+            val gpsPct = corrWithGps * 100 / correlationMap.size
+            logs.add("[INFO] GPS coverage: $corrWithGps / ${correlationMap.size} correlated entries ($gpsPct%).")
+        }
 
         val vaultIndexPath = "$outDir/vault_index.json".toPath()
         val downloadedMeta: MutableMap<String, FileMeta> = runCatching {
@@ -234,6 +273,7 @@ class DashboardViewModel(
         logs.add("[INFO] Extracting media files…")
         var extractedCount = 0
         var skippedCount = 0
+        var extractErrorCount = 0
         val totalItems = itemsByZip.values.sumOf { list ->
             list.sumOf { entry -> if (entry.hasOverlay && entry.overlayFileName != null) 2 else 1 }
         }
@@ -242,6 +282,7 @@ class DashboardViewModel(
 
         zipPipelineRunner.extractAll(itemsByZip, outDir, workerCount) { result ->
             if (result.error != null) {
+                extractErrorCount++
                 logs.add("[ERROR] ${result.fileName}: ${result.error}")
             } else if (result.skipped) {
                 skippedCount++
@@ -264,7 +305,12 @@ class DashboardViewModel(
         }
         speedText = "SPEED: --"
         etaText = "ETA: --"
-        logs.add("[INFO] Extracted: $extractedCount, Skipped: $skippedCount")
+        val extractSummary = buildString {
+            append("[INFO] Extracted $extractedCount new, $skippedCount already existed")
+            if (extractErrorCount > 0) append(", $extractErrorCount errors")
+            append(".")
+        }
+        logs.add(extractSummary)
         currentStep = 2
 
         if (runMetadata) {
@@ -273,16 +319,30 @@ class DashboardViewModel(
             val metaTotal = metaEntries.size
             var metaCount = 0
             var metaDone = 0
+            var exactTimestampCount = 0
+            var gpsWrittenCount = 0
+            var dateMismatchCount = 0
+            var fileNotFoundCount = 0
             val metaEta = EtaEstimator()
             for (entry in metaEntries) {
                 currentCoroutineContext().ensureActive()
                 val outputPath = "$outDir/${entry.fileName}"
                 val corr = correlationMap[entry.uuid]
-                val dateTime = corr?.fullDateTime ?: "${entry.date} 00:00:00 UTC"
+                val validCorr = corr?.takeIf { it.fullDateTime.take(10) == entry.date }
+                if (corr != null && validCorr == null) {
+                    dateMismatchCount++
+                    logs.add("[WARN] Date mismatch ${entry.uuid.take(8)}: filename=${entry.date} corr=${corr.fullDateTime.take(10)} — using filename date")
+                }
+                if (validCorr != null && validCorr.source == CorrSource.Hist) exactTimestampCount++
+                val dateTime = validCorr?.fullDateTime ?: "${entry.date} 00:00:00 UTC"
                 val dateOk = mediaProcessor.writeDateMetadata(outputPath, dateTime)
+                if (!dateOk) fileNotFoundCount++
                 var gpsOk = false
-                if (corr?.latitude != null && corr.longitude != null) {
-                    gpsOk = mediaProcessor.writeGpsMetadata(outputPath, corr.latitude, corr.longitude, dateTime)
+                // Only write GPS when the date matched — a mismatched corr means we got the
+                // wrong entry's location, which would be worse than no GPS at all
+                if (validCorr?.latitude != null && validCorr.longitude != null) {
+                    gpsOk = mediaProcessor.writeGpsMetadata(outputPath, validCorr.latitude, validCorr.longitude, dateTime)
+                    if (gpsOk) gpsWrittenCount++
                 }
                 downloadedMeta[entry.fileName] = FileMeta(hasGps = gpsOk, hasOverlay = entry.hasOverlay)
                 if (dateOk) metaCount++
@@ -302,19 +362,29 @@ class DashboardViewModel(
             }
             speedText = "SPEED: --"
             etaText = "ETA: --"
-            logs.add("[INFO] Metadata written to $metaCount files.")
+            logs.add("[INFO] Metadata: $metaCount files tagged — exact timestamp: $exactTimestampCount, GPS: $gpsWrittenCount, date mismatches: $dateMismatchCount${if (fileNotFoundCount > 0) ", files not found: $fileNotFoundCount" else ""}.")
         }
 
         if (runCombine) {
-            logs.add("[INFO] Combining overlays…")
+            val overlayPairCount = itemsByZip.values.flatten().count { it.hasOverlay && it.overlayFileName != null }
+            logs.add("[INFO] Found $overlayPairCount overlay pairs. Combining…")
             var combinedCount = 0
+            var combineErrorCount = 0
             zipPipelineRunner.combineAll(outDir, deleteOriginals = true, workerCount = workerCount) { result ->
                 when {
-                    result.status == "combined" -> { combinedCount++; logs.add("[COMBINED] ${result.uuid}") }
-                    result.status.startsWith("error") -> logs.add("[ERROR] ${result.uuid}: ${result.status}")
+                    result.status == "combined" -> combinedCount++
+                    result.status.startsWith("error") -> {
+                        combineErrorCount++
+                        logs.add("[ERROR] Overlay combine ${result.uuid.take(8)}: ${result.status}")
+                    }
                 }
             }
-            logs.add("[INFO] Combined $combinedCount overlay pairs.")
+            val combineSummary = buildString {
+                append("[INFO] Combined $combinedCount overlay pairs")
+                if (combineErrorCount > 0) append(", $combineErrorCount errors")
+                append(".")
+            }
+            logs.add(combineSummary)
         }
 
         if (runDedupe) runDeduplication(outDir, dryRun)

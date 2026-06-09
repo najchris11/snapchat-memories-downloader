@@ -25,6 +25,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -56,7 +58,9 @@ fun DashboardScreen(
     var dryRun by remember { mutableStateOf(false) }
     var logsExpanded by remember { mutableStateOf(false) }
     var pipelineExpanded by remember { mutableStateOf(false) }
+    var logsCopied by remember { mutableStateOf(false) }
 
+    val clipboardManager = LocalClipboardManager.current
     val logListState = rememberLazyListState()
     val logScope = rememberCoroutineScope()
     LaunchedEffect(viewModel.logs.size) {
@@ -351,30 +355,64 @@ fun DashboardScreen(
                 Spacer(Modifier.height(10.dp))
 
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(6.dp))
-                        .clickable { logsExpanded = !logsExpanded }
-                        .padding(vertical = 4.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Icon(
-                        if (logsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text("View Logs", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
-                    if (viewModel.logs.isNotEmpty() && !logsExpanded) {
-                        Text(
-                            viewModel.logs.last(),
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { logsExpanded = !logsExpanded }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            if (logsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.size(14.dp)
                         )
+                        Text("View Logs", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                        if (viewModel.logs.isNotEmpty() && !logsExpanded) {
+                            Text(
+                                viewModel.logs.last(),
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    if (viewModel.logs.isNotEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .clickable {
+                                    clipboardManager.setText(AnnotatedString(viewModel.logs.joinToString("\n")))
+                                    logsCopied = true
+                                    logScope.launch {
+                                        kotlinx.coroutines.delay(2000)
+                                        logsCopied = false
+                                    }
+                                }
+                                .padding(horizontal = 6.dp, vertical = 3.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (logsCopied) {
+                                Text("Copied!", fontSize = 10.sp, color = Color(0xFF4ADE80), fontWeight = FontWeight.SemiBold)
+                            } else {
+                                Icon(
+                                    Icons.Outlined.ContentCopy,
+                                    contentDescription = "Copy logs",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                    modifier = Modifier.size(13.dp)
+                                )
+                            }
+                        }
                     }
                 }
 

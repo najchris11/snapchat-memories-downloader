@@ -1,10 +1,13 @@
 package com.najdev.snapvault.parser
 
+enum class CorrSource { Hist, Json }
+
 data class CorrelatedMeta(
     val uuid: String,
     val fullDateTime: String,
     val latitude: Double?,
-    val longitude: Double?
+    val longitude: Double?,
+    val source: CorrSource = CorrSource.Hist
 )
 
 object MetadataCorrelator {
@@ -43,6 +46,11 @@ object MetadataCorrelator {
             val histGroup = histByKey[key]?.reversed() ?: continue
             for ((i, htmlEntry) in htmlGroup.withIndex()) {
                 val histEntry = histGroup.getOrNull(i) ?: break
+                // Guard: hist date must match the filename date. By construction this should
+                // always hold (both sides are keyed by the same date), but cross-zip ordering
+                // anomalies can occasionally produce a mismatch. Discard rather than write
+                // the wrong date — the JSON fallback below will re-try with the correct key.
+                if (histEntry.date != key.first) continue
                 result[htmlEntry.uuid] = CorrelatedMeta(
                     uuid = htmlEntry.uuid,
                     fullDateTime = histEntry.fullDateTime,
@@ -52,7 +60,7 @@ object MetadataCorrelator {
             }
         }
 
-        // Fallback: JSON bucket-pop for any UUID not covered by hist alignment
+        // JSON bucket-pop: covers (a) entries with no hist match and (b) any cleared by the guard above
         val buckets = HashMap<Pair<String, String>, ArrayDeque<JsonMemoryEntry>>()
         for (entry in jsonEntries.reversed()) {
             val key = entry.dateOnly to entry.mediaType
@@ -66,7 +74,8 @@ object MetadataCorrelator {
                 uuid = htmlEntry.uuid,
                 fullDateTime = jsonEntry.date,
                 latitude = jsonEntry.latitude,
-                longitude = jsonEntry.longitude
+                longitude = jsonEntry.longitude,
+                source = CorrSource.Json
             )
         }
 

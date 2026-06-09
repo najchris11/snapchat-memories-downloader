@@ -4,7 +4,9 @@ import com.najdev.snapvault.parser.HtmlMemoryEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import java.io.File
@@ -39,12 +41,19 @@ class ZipExtractEngine {
             }
         }
 
+        val channel = Channel<ExtractResult>(Channel.UNLIMITED)
+
         coroutineScope {
+            // Single consumer — serializes all onProgress calls so callers don't need to be thread-safe
+            launch {
+                for (result in channel) onProgress(result)
+            }
+
             tasks.map { task ->
                 async(Dispatchers.IO) {
                     semaphore.withPermit {
                         val result = extractEntry(task.zipPath, task.entryName, task.destFileName, outDir)
-                        onProgress(
+                        channel.send(
                             ExtractResult(
                                 uuid = task.uuid,
                                 fileName = task.destFileName,
@@ -56,6 +65,8 @@ class ZipExtractEngine {
                     }
                 }
             }.awaitAll()
+
+            channel.close()
         }
     }
 

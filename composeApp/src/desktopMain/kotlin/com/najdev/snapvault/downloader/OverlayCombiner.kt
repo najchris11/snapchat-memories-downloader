@@ -5,7 +5,9 @@ import com.najdev.snapvault.metadata.MediaProcessor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import java.awt.AlphaComposite
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage  // needed for the combined RGB output
@@ -55,16 +57,24 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
         onProgress: (CombineResult) -> Unit
     ) {
         val pairs = findPairs(outputDir)
+        val channel = Channel<CombineResult>(Channel.UNLIMITED)
+
         coroutineScope {
+            launch {
+                for (result in channel) onProgress(result)
+            }
+
             pairs.chunked(workerCount).forEach { chunk ->
                 chunk.map { pair ->
                     async(Dispatchers.IO) {
                         val uuid = extractUuid(pair.mainFile.name) ?: pair.mainFile.nameWithoutExtension
                         val result = processPair(pair, deleteOriginals)
-                        onProgress(CombineResult(uuid, pair.outputFile.absolutePath, result))
+                        channel.send(CombineResult(uuid, pair.outputFile.absolutePath, result))
                     }
                 }.awaitAll()
             }
+
+            channel.close()
         }
     }
 

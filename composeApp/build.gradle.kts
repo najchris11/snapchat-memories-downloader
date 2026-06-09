@@ -1,6 +1,10 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 val appVersion = (project.findProperty("app.version") as? String) ?: "0.0.0"
+// packageVersion must be pure semver (no pre-release labels) for DMG/MSI/deb
+val packageSemVer = appVersion.replace(Regex("-[a-zA-Z].*"), "").let { v ->
+    if (v.count { it == '.' } < 2) "$v.0" else v
+}
 
 plugins {
     kotlin("multiplatform")
@@ -39,7 +43,7 @@ kotlin {
                 implementation(compose.runtime)
                 implementation(compose.foundation)
                 implementation(compose.material3)
-                implementation(compose.materialIconsExtended)
+                implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
                 implementation(compose.ui)
                 implementation(compose.components.resources)
                 
@@ -121,6 +125,9 @@ android {
 
 compose.desktop {
     application {
+        // AS JBR lacks jpackage; JDK 21 (Homebrew) is used for native distribution tasks
+        javaHome = (project.findProperty("compose.javaHome") as? String)
+            ?: "/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
         mainClass = "com.najdev.snapvault.MainKt"
         jvmArgs += listOf(
             "-Dsun.java2d.dpiaware=true",
@@ -130,7 +137,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "SnapVault"
-            packageVersion = "1.0.0"
+            packageVersion = packageSemVer
         }
     }
 }

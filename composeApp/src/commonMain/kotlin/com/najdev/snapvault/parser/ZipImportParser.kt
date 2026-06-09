@@ -52,11 +52,14 @@ object ZipImportParser {
                 val ext = m.groupValues[4].lowercase()
                 val isVideo = ext in listOf("mp4", "mov", "avi")
                 val overlayFileName = overlaySrc?.substringAfterLast('/')
+                // Prefer the date embedded in the filename (original creation date) over the
+                // HTML text-line date, which can reflect a save/receive date and mismatch the JSON.
+                val entryDate = m.groupValues[1].takeIf { it.isNotEmpty() } ?: date
                 entries.add(
                     HtmlMemoryEntry(
                         fileName = fileName,
                         uuid = uuid,
-                        date = date,
+                        date = entryDate,
                         isVideo = isVideo,
                         hasOverlay = overlayFileName != null,
                         overlayFileName = overlayFileName
@@ -67,11 +70,12 @@ object ZipImportParser {
                 val fileName = overlaySrc.substringAfterLast('/')
                 val m = nameRegex.find(fileName) ?: continue
                 val uuid = m.groupValues[2]
+                val entryDate = m.groupValues[1].takeIf { it.isNotEmpty() } ?: date
                 entries.add(
                     HtmlMemoryEntry(
                         fileName = fileName,
                         uuid = uuid,
-                        date = date,
+                        date = entryDate,
                         isVideo = false,
                         hasOverlay = false,
                         overlayFileName = null

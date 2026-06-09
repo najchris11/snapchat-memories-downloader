@@ -3,6 +3,9 @@ package com.najdev.snapvault.metadata
 import com.najdev.snapvault.BinaryExtractor
 import java.io.File
 import java.io.IOException
+import java.time.LocalDateTime
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 class DesktopMediaProcessor : MediaProcessor {
 
@@ -126,9 +129,8 @@ class DesktopMediaProcessor : MediaProcessor {
                 val prefix = parseDateToFilenamePrefix(dateStr)
                 if (prefix != null && prefix.length >= 15) {
                     try {
-                        val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss")
-                        val date = sdf.parse(prefix)
-                        file.setLastModified(date.time)
+                        val ldt = LocalDateTime.parse(prefix, DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
+                        file.setLastModified(ldt.toInstant(ZoneOffset.UTC).toEpochMilli())
                     } catch (_: Exception) {}
                 }
             }
@@ -172,9 +174,8 @@ class DesktopMediaProcessor : MediaProcessor {
                 val prefix = parseDateToFilenamePrefix(dateTimeUtc)
                 if (prefix != null && prefix.length >= 15) {
                     try {
-                        val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss")
-                        val date = sdf.parse(prefix)
-                        file.setLastModified(date.time)
+                        val ldt = LocalDateTime.parse(prefix, DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
+                        file.setLastModified(ldt.toInstant(ZoneOffset.UTC).toEpochMilli())
                     } catch (_: Exception) {}
                 }
             }

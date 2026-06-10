@@ -327,12 +327,21 @@ class DashboardViewModel(
             var dateMismatchCount = 0
             var fileNotFoundCount = 0
             val metaEta = EtaEstimator()
+            // Track UUIDs already processed so duplicate entries (same snap saved multiple
+            // times with different save-dates) reuse the corr from the first occurrence rather
+            // than hitting the date-mismatch guard.
+            val seenMetaUuids = mutableSetOf<String>()
             for (entry in metaEntries) {
                 currentCoroutineContext().ensureActive()
                 val outputPath = "$outDir/${entry.fileName}"
                 val corr = correlationMap[entry.uuid]
-                val validCorr = corr?.takeIf { it.fullDateTime.take(10) == entry.date }
-                if (corr != null && validCorr == null) {
+                val isDuplicateEntry = !seenMetaUuids.add(entry.uuid)
+                // For duplicate entries the UUID is the same snap saved on a different date;
+                // the correlation from the first occurrence is still correct, so bypass the
+                // date-match guard. For first-occurrence entries the guard catches genuine
+                // positional-alignment errors and prevents writing the wrong timestamp.
+                val validCorr = if (isDuplicateEntry) corr else corr?.takeIf { it.fullDateTime.take(10) == entry.date }
+                if (!isDuplicateEntry && corr != null && validCorr == null) {
                     dateMismatchCount++
                     logs.add("[WARN] Date mismatch ${entry.uuid.take(8)}: filename=${entry.date} corr=${corr.fullDateTime.take(10)} — using filename date")
                 }
@@ -341,8 +350,6 @@ class DashboardViewModel(
                 val dateOk = mediaProcessor.writeDateMetadata(outputPath, dateTime)
                 if (!dateOk) fileNotFoundCount++
                 var gpsOk = false
-                // Only write GPS when the date matched — a mismatched corr means we got the
-                // wrong entry's location, which would be worse than no GPS at all
                 if (validCorr?.latitude != null && validCorr.longitude != null) {
                     gpsOk = mediaProcessor.writeGpsMetadata(outputPath, validCorr.latitude, validCorr.longitude, dateTime)
                     if (gpsOk) gpsWrittenCount++
@@ -373,9 +380,11 @@ class DashboardViewModel(
             logs.add("[INFO] Found $overlayPairCount overlay pairs. Combining…")
             var combinedCount = 0
             var combineErrorCount = 0
+            var combineSkippedCount = 0
             zipPipelineRunner.combineAll(outDir, deleteOriginals = true, workerCount = workerCount) { result ->
                 when {
                     result.status == "combined" -> combinedCount++
+                    result.status.startsWith("skipped:") -> combineSkippedCount++
                     result.status.startsWith("error") -> {
                         combineErrorCount++
                         logs.add("[ERROR] Overlay combine ${result.uuid.take(8)}: ${result.status}")
@@ -384,6 +393,7 @@ class DashboardViewModel(
             }
             val combineSummary = buildString {
                 append("[INFO] Combined $combinedCount overlay pairs")
+                if (combineSkippedCount > 0) append(", $combineSkippedCount skipped (unsupported format)")
                 if (combineErrorCount > 0) append(", $combineErrorCount errors")
                 append(".")
             }

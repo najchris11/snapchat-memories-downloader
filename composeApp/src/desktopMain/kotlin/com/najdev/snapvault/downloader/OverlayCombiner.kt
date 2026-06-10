@@ -90,7 +90,14 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
                 combineImages(pair.mainFile, pair.overlayFile, pair.outputFile)
             }
 
-            if (!ok) return "error: combine failed"
+            if (!ok) {
+                val ext = pair.mainFile.extension.lowercase()
+                return if (ext in setOf("heic", "heif", "webp")) {
+                    "skipped: unsupported-format ($ext)"
+                } else {
+                    "error: combine failed (${pair.mainFile.name})"
+                }
+            }
 
             if (!pair.isVideo) {
                 // For images, combineVideoWithOverlay isn't called so we copy EXIF manually

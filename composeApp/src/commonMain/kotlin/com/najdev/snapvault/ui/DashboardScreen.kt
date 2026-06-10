@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.ImportMode
 import com.najdev.snapvault.ZipSourceMode
+import com.najdev.snapvault.isAndroidBuild
 import com.najdev.snapvault.ui.theme.ElectricPurple
 import com.najdev.snapvault.ui.theme.InfoBlue
 import com.najdev.snapvault.ui.theme.SecondaryBlue
@@ -60,6 +61,7 @@ fun DashboardScreen(
     var pipelineExpanded by remember { mutableStateOf(false) }
     var logsCopied by remember { mutableStateOf(false) }
 
+    @Suppress("DEPRECATION")
     val clipboardManager = LocalClipboardManager.current
     val logListState = rememberLazyListState()
     val logScope = rememberCoroutineScope()
@@ -78,6 +80,40 @@ fun DashboardScreen(
             modifier = Modifier.weight(0.4f).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Android preview banner
+            if (isAndroidBuild) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFFFFA726).copy(alpha = 0.12f))
+                        .border(1.dp, Color(0xFFFFA726).copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Icon(
+                        Icons.Outlined.Info,
+                        contentDescription = null,
+                        tint = Color(0xFFFFA726),
+                        modifier = Modifier.size(15.dp).padding(top = 1.dp)
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            "Android Preview",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFFA726)
+                        )
+                        Text(
+                            "Date metadata write and video overlay combining are not yet implemented on Android. ZIP extraction and GPS tagging for images work.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            }
+
             // Source & Destination card
             ControlCard {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -392,7 +428,10 @@ fun DashboardScreen(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(4.dp))
                                 .clickable {
-                                    clipboardManager.setText(AnnotatedString(viewModel.logs.joinToString("\n")))
+                                    @Suppress("DEPRECATION")
+                                    clipboardManager.setText(
+                                        AnnotatedString(viewModel.logs.joinToString("\n"))
+                                    )
                                     logsCopied = true
                                     logScope.launch {
                                         kotlinx.coroutines.delay(2000)

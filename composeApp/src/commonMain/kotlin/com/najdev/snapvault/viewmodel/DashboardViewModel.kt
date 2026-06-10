@@ -345,10 +345,10 @@ class DashboardViewModel(
                     dateMismatchCount++
                     logs.add("[WARN] Date mismatch ${entry.uuid.take(8)}: filename=${entry.date} corr=${corr.fullDateTime.take(10)} — using filename date")
                 }
-                if (validCorr != null && validCorr.source == CorrSource.Hist) exactTimestampCount++
                 val dateTime = validCorr?.fullDateTime ?: "${entry.date} 00:00:00 UTC"
                 val dateOk = mediaProcessor.writeDateMetadata(outputPath, dateTime)
                 if (!dateOk) fileNotFoundCount++
+                if (dateOk && validCorr != null && validCorr.source == CorrSource.Hist) exactTimestampCount++
                 var gpsOk = false
                 if (validCorr?.latitude != null && validCorr.longitude != null) {
                     gpsOk = mediaProcessor.writeGpsMetadata(outputPath, validCorr.latitude, validCorr.longitude, dateTime)

@@ -80,30 +80,29 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
 
     private fun processPair(pair: OverlayPair, deleteOriginals: Boolean): String {
         return try {
-            val ok = if (pair.isVideo) {
-                mediaProcessor.combineVideoWithOverlay(
-                    pair.mainFile.absolutePath,
-                    pair.overlayFile.absolutePath,
-                    pair.outputFile.absolutePath
-                )
+            val err = if (pair.isVideo) {
+                if (mediaProcessor.combineVideoWithOverlay(
+                        pair.mainFile.absolutePath,
+                        pair.overlayFile.absolutePath,
+                        pair.outputFile.absolutePath
+                    )
+                ) null else "video combine failed"
             } else {
                 combineImages(pair.mainFile, pair.overlayFile, pair.outputFile)
             }
 
-            if (!ok) {
-                val ext = pair.mainFile.extension.lowercase()
-                return if (ext in setOf("heic", "heif", "webp")) {
-                    "skipped: unsupported-format ($ext)"
+            if (err != null) {
+                // Treat unreadable HEIC/WebP (by extension or magic bytes) as skipped, not error
+                return if (isUnsupportedFormat(pair.mainFile) || isUnsupportedFormat(pair.overlayFile)) {
+                    "skipped: unsupported-format"
                 } else {
-                    "error: combine failed (${pair.mainFile.name})"
+                    "error: $err"
                 }
             }
 
             if (!pair.isVideo) {
-                // For images, combineVideoWithOverlay isn't called so we copy EXIF manually
                 copyExif(pair.mainFile.absolutePath, pair.outputFile.absolutePath)
             }
-            // Note: combineVideoWithOverlay already handles EXIF copy for video internally
 
             if (deleteOriginals) {
                 pair.mainFile.delete()
@@ -116,10 +115,13 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
         }
     }
 
-    private fun combineImages(mainFile: File, overlayFile: File, outputFile: File): Boolean {
+    // Returns null on success or a human-readable reason string on failure.
+    private fun combineImages(mainFile: File, overlayFile: File, outputFile: File): String? {
         return try {
-            val mainImg = ImageIO.read(mainFile) ?: return false
-            val overlayImg = ImageIO.read(overlayFile) ?: return false
+            val mainImg = ImageIO.read(mainFile)
+                ?: return "cannot read main (${mainFile.length()}B, detected: ${detectFormat(mainFile)})"
+            val overlayImg = ImageIO.read(overlayFile)
+                ?: return "cannot read overlay (${overlayFile.length()}B, detected: ${detectFormat(overlayFile)})"
 
             val w = mainImg.width
             val h = mainImg.height
@@ -131,7 +133,6 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
             g.setRenderingHint(RenderingHints.KEY_ALPHA_INTERPOLATION, RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY)
             g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY)
 
-            // Draw main at native size
             g.drawImage(mainImg, 0, 0, null)
 
             // Scale overlay to match main in one step — no intermediate ARGB buffer, which
@@ -145,10 +146,39 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
             val ext = outputFile.extension.lowercase()
             val format = if (ext == "png") "PNG" else "JPEG"
             ImageIO.write(combined, format, outputFile)
-            true
+            null
         } catch (e: Exception) {
-            false
+            e.message ?: "unknown exception"
         }
+    }
+
+    // Checks extension and reads magic bytes to detect formats ImageIO cannot decode.
+    private fun isUnsupportedFormat(file: File): Boolean {
+        val ext = file.extension.lowercase()
+        if (ext in setOf("heic", "heif", "webp")) return true
+        return try {
+            val header = file.inputStream().use { it.readNBytes(12) }
+            val isHeic = header.size >= 8 && String(header.copyOfRange(4, 8)) == "ftyp"
+            val isWebp = header.size >= 4 &&
+                header[0] == 'R'.code.toByte() && header[1] == 'I'.code.toByte() &&
+                header[2] == 'F'.code.toByte() && header[3] == 'F'.code.toByte()
+            isHeic || isWebp
+        } catch (_: Exception) { false }
+    }
+
+    // Returns a short human-readable format name from magic bytes.
+    private fun detectFormat(file: File): String {
+        return try {
+            val h = file.inputStream().use { it.readNBytes(12) }
+            when {
+                h.isEmpty() -> "empty"
+                h.size >= 2 && h[0] == 0xFF.toByte() && h[1] == 0xD8.toByte() -> "jpeg"
+                h.size >= 8 && String(h.copyOfRange(4, 8)) == "ftyp" -> "heic/mp4"
+                h.size >= 4 && h[0] == 'R'.code.toByte() && h[1] == 'I'.code.toByte() -> "webp"
+                h.size >= 8 && h[0] == 0x89.toByte() && h[1] == 0x50.toByte() -> "png"
+                else -> "unknown(0x%02X%02X)".format(h[0], h[1])
+            }
+        } catch (_: Exception) { "unreadable" }
     }
 
     private fun copyExif(sourcePath: String, destPath: String) {

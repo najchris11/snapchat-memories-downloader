@@ -30,16 +30,18 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
         val allFiles = dir.listFiles() ?: return emptyList()
 
         val mainFiles = allFiles.filter { "-main." in it.name }
-        val overlayByUuid = allFiles
+        // Key by "DATE_UUID" so duplicate UUIDs with different date prefixes (the same snap
+        // saved to Memories on multiple dates) are matched as independent pairs and don't
+        // accidentally share the same overlay file.
+        val overlayByKey = allFiles
             .filter { "-overlay." in it.name }
-            .mapNotNull { f -> extractUuid(f.name)?.let { it to f } }
+            .mapNotNull { f -> extractPairKey(f.name)?.let { it to f } }
             .toMap()
 
         return mainFiles.mapNotNull { mainFile ->
-            val uuid = extractUuid(mainFile.name) ?: return@mapNotNull null
-            val overlayFile = overlayByUuid[uuid] ?: return@mapNotNull null
+            val key = extractPairKey(mainFile.name) ?: return@mapNotNull null
+            val overlayFile = overlayByKey[key] ?: return@mapNotNull null
             val ext = mainFile.extension
-            // Output: drop -main suffix, keep date_uuid.ext
             val outputName = mainFile.name.replace("-main.$ext", ".$ext")
             OverlayPair(
                 mainFile = mainFile,
@@ -197,10 +199,23 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
         } catch (_: Exception) {}
     }
 
+    // Returns just the UUID portion — used for CombineResult logging.
     private fun extractUuid(name: String): String? {
         val afterDate = name.substringAfter("_", "")
         if (afterDate.isEmpty()) return null
         return afterDate.substringBefore("-main").substringBefore("-overlay")
             .takeIf { it.isNotEmpty() }
+    }
+
+    // Returns "DATE_UUID" as the pairing key so main and overlay files with the same UUID
+    // but different date prefixes (duplicate saves) are matched as separate, independent pairs.
+    private fun extractPairKey(name: String): String? {
+        val underscoreIdx = name.indexOf('_')
+        if (underscoreIdx < 0) return null
+        val date = name.substring(0, underscoreIdx)
+        val uuid = name.substring(underscoreIdx + 1)
+            .substringBefore("-main").substringBefore("-overlay")
+            .takeIf { it.isNotEmpty() } ?: return null
+        return "${date}_${uuid}"
     }
 }

@@ -316,6 +316,11 @@ class DashboardViewModel(
         logs.add(extractSummary)
         currentStep = 2
 
+        var pipelineGpsCount = 0
+        var pipelineCombinedCount = 0
+        var pipelineCombineSkipped = 0
+        var pipelineCombineErrors = 0
+
         if (runMetadata) {
             logs.add("[INFO] Writing metadata to extracted files…")
             val metaEntries = itemsByZip.values.flatten()
@@ -373,6 +378,7 @@ class DashboardViewModel(
             speedText = "SPEED: --"
             etaText = "ETA: --"
             logs.add("[INFO] Metadata: $metaCount files tagged — exact timestamp: $exactTimestampCount, GPS: $gpsWrittenCount, date mismatches: $dateMismatchCount${if (fileNotFoundCount > 0) ", files not found: $fileNotFoundCount" else ""}.")
+            pipelineGpsCount = gpsWrittenCount
         }
 
         if (runCombine) {
@@ -426,6 +432,9 @@ class DashboardViewModel(
                 append(".")
             }
             logs.add(combineSummary)
+            pipelineCombinedCount = combinedCount
+            pipelineCombineSkipped = combineSkippedCount
+            pipelineCombineErrors = combineErrorCount
         }
 
         if (runDedupe) runDeduplication(outDir, dryRun)
@@ -436,6 +445,19 @@ class DashboardViewModel(
             }
             logs.add("[INFO] Vault index saved (${downloadedMeta.size} entries).")
         }.onFailure { e -> logs.add("[WARN] Could not write vault index: ${e.message}") }
+
+        val summary = buildString {
+            append("[SUCCESS] Done — ${dedupedHtmlEntries.size} memories")
+            append(", ${extractedCount + skippedCount} files on disk")
+            if (runMetadata && pipelineGpsCount > 0) append(", $pipelineGpsCount with GPS")
+            if (runCombine && pipelineCombinedCount > 0) {
+                append(", $pipelineCombinedCount overlays combined")
+                if (pipelineCombineSkipped > 0) append(" ($pipelineCombineSkipped skipped)")
+            }
+            if (pipelineCombineErrors > 0) append(", $pipelineCombineErrors combine errors")
+            append(".")
+        }
+        logs.add(summary)
     }
 
     // ── Legacy pipeline ──────────────────────────────────────────────────────

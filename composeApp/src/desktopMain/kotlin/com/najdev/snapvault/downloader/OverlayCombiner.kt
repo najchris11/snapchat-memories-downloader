@@ -10,7 +10,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import java.awt.AlphaComposite
 import java.awt.RenderingHints
-import java.awt.image.BufferedImage  // needed for the combined RGB output
+import java.awt.image.BufferedImage
 import java.io.File
 import javax.imageio.ImageIO
 
@@ -29,27 +29,36 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
 
         val allFiles = dir.listFiles() ?: return emptyList()
 
-        val mainFiles = allFiles.filter { "-main." in it.name }
-        // Key by "DATE_UUID" so duplicate UUIDs with different date prefixes (the same snap
-        // saved to Memories on multiple dates) are matched as independent pairs and don't
-        // accidentally share the same overlay file.
-        val overlayByKey = allFiles
+        // Stem-based matching: "2017-07-13_UUID" is the stem shared by the main and overlay
+        // files for the same memory.  No UUID parsing is required — this is a physical
+        // file-matching operation that naturally handles duplicate UUIDs (different date
+        // prefixes produce different stems) and any future filename format changes.
+        val overlayByStem = allFiles
             .filter { "-overlay." in it.name }
-            .mapNotNull { f -> extractPairKey(f.name)?.let { it to f } }
+            .mapNotNull { f ->
+                val stem = f.name.substringBefore("-overlay.").takeIf { it != f.name && it.isNotEmpty() }
+                stem?.let { it to f }
+            }
             .toMap()
 
-        return mainFiles.mapNotNull { mainFile ->
-            val key = extractPairKey(mainFile.name) ?: return@mapNotNull null
-            val overlayFile = overlayByKey[key] ?: return@mapNotNull null
-            val ext = mainFile.extension
-            val outputName = mainFile.name.replace("-main.$ext", ".$ext")
-            OverlayPair(
-                mainFile = mainFile,
-                overlayFile = overlayFile,
-                outputFile = File(outputDir, outputName),
-                isVideo = ext.lowercase() in listOf("mp4", "mov", "avi", "mkv")
-            )
-        }
+        return allFiles
+            .filter { "-main." in it.name }
+            .mapNotNull { mainFile ->
+                val stem = mainFile.name.substringBefore("-main.")
+                    .takeIf { it != mainFile.name && it.isNotEmpty() } ?: return@mapNotNull null
+                val overlayFile = overlayByStem[stem] ?: return@mapNotNull null
+                val extLc = mainFile.extension.lowercase()
+                val isVideo = extLc in setOf("mp4", "mov", "avi", "mkv")
+                // HEIC/WebP cannot be written by Java ImageIO; the FFmpeg fallback outputs JPEG.
+                // Set the output extension to .jpg upfront so the output path is always correct.
+                val outputExt = if (!isVideo && extLc in setOf("heic", "heif", "webp")) "jpg" else mainFile.extension
+                OverlayPair(
+                    mainFile = mainFile,
+                    overlayFile = overlayFile,
+                    outputFile = File(outputDir, "$stem.$outputExt"),
+                    isVideo = isVideo
+                )
+            }
     }
 
     suspend fun combineAll(
@@ -72,8 +81,8 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
                 chunk.map { pair ->
                     async(Dispatchers.IO) {
                         val uuid = extractUuid(pair.mainFile.name) ?: pair.mainFile.nameWithoutExtension
-                        val result = processPair(pair, deleteOriginals)
-                        channel.send(CombineResult(uuid, pair.outputFile.absolutePath, result))
+                        val status = processPair(pair, deleteOriginals)
+                        channel.send(CombineResult(uuid, pair.outputFile.absolutePath, status))
                     }
                 }.awaitAll()
             }
@@ -92,17 +101,12 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
                     )
                 ) null else "video combine failed"
             } else {
-                combineImages(pair.mainFile, pair.overlayFile, pair.outputFile)
+                // Two-tier: ImageIO (fast, handles JPG/PNG) → FFmpeg (universal fallback)
+                val imageIoErr = combineImages(pair.mainFile, pair.overlayFile, pair.outputFile)
+                imageIoErr?.let { combineImagesFfmpeg(pair.mainFile, pair.overlayFile, pair.outputFile) }
             }
 
-            if (err != null) {
-                // Treat unreadable HEIC/WebP (by extension or magic bytes) as skipped, not error
-                return if (isUnsupportedFormat(pair.mainFile) || isUnsupportedFormat(pair.overlayFile)) {
-                    "skipped: unsupported-format"
-                } else {
-                    "error: $err"
-                }
-            }
+            if (err != null) return if (err.startsWith("skipped:")) err else "error: $err"
 
             if (!pair.isVideo) {
                 copyExif(pair.mainFile.absolutePath, pair.outputFile.absolutePath)
@@ -119,7 +123,7 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
         }
     }
 
-    // Returns null on success or a human-readable reason string on failure.
+    // Returns null on success or a reason string on failure.
     private fun combineImages(mainFile: File, overlayFile: File, outputFile: File): String? {
         return try {
             val mainImg = ImageIO.read(mainFile)
@@ -129,26 +133,17 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
 
             val w = mainImg.width
             val h = mainImg.height
-
             val combined = BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)
             val g = combined.createGraphics()
-            // Quality hints so bilinear scaling handles semi-transparent edges correctly
             g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR)
             g.setRenderingHint(RenderingHints.KEY_ALPHA_INTERPOLATION, RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY)
             g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY)
-
             g.drawImage(mainImg, 0, 0, null)
-
-            // Scale overlay to match main in one step — no intermediate ARGB buffer, which
-            // would otherwise interpolate in non-premultiplied space and produce dark fringes
-            // on transparent edges when the overlay dimensions differ from the main.
             g.composite = AlphaComposite.getInstance(AlphaComposite.SRC_OVER)
             g.drawImage(overlayImg, 0, 0, w, h, null)
-
             g.dispose()
 
-            val ext = outputFile.extension.lowercase()
-            val format = if (ext == "png") "PNG" else "JPEG"
+            val format = if (outputFile.extension.lowercase() == "png") "PNG" else "JPEG"
             ImageIO.write(combined, format, outputFile)
             null
         } catch (e: Exception) {
@@ -156,21 +151,33 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
         }
     }
 
-    // Checks extension and reads magic bytes to detect formats ImageIO cannot decode.
-    private fun isUnsupportedFormat(file: File): Boolean {
-        val ext = file.extension.lowercase()
-        if (ext in setOf("heic", "heif", "webp")) return true
+    // FFmpeg fallback: handles HEIC, WebP, and any other format ImageIO cannot decode.
+    // Returns null on success, a reason string on failure, or "skipped:…" if FFmpeg is absent.
+    private fun combineImagesFfmpeg(mainFile: File, overlayFile: File, outputFile: File): String? {
+        val ffmpegPath = BinaryExtractor.checkCommand("ffmpeg")
+            ?: return "skipped: install FFmpeg to combine ${mainFile.extension.uppercase()} overlays"
+        // Same scale2ref+overlay filter used for video, but -frames:v 1 produces a single image.
+        val filterComplex = "[1:v][0:v]scale2ref[ovr][base];[base][ovr]overlay=0:0:format=auto"
+        val args = listOf(
+            ffmpegPath, "-y",
+            "-i", mainFile.absolutePath,
+            "-i", overlayFile.absolutePath,
+            "-filter_complex", filterComplex,
+            "-frames:v", "1",
+            "-q:v", "2",
+            outputFile.absolutePath
+        )
         return try {
-            val header = file.inputStream().use { it.readNBytes(12) }
-            val isHeic = header.size >= 8 && String(header.copyOfRange(4, 8)) == "ftyp"
-            val isWebp = header.size >= 4 &&
-                header[0] == 'R'.code.toByte() && header[1] == 'I'.code.toByte() &&
-                header[2] == 'F'.code.toByte() && header[3] == 'F'.code.toByte()
-            isHeic || isWebp
-        } catch (_: Exception) { false }
+            val proc = ProcessBuilder(args).redirectErrorStream(true).start()
+            val output = proc.inputStream.bufferedReader().readText()
+            val exitCode = proc.waitFor()
+            if (exitCode == 0) null
+            else "ffmpeg exit $exitCode${if (output.isNotBlank()) ": ${output.takeLast(120)}" else ""}"
+        } catch (e: Exception) {
+            e.message ?: "ffmpeg exception"
+        }
     }
 
-    // Returns a short human-readable format name from magic bytes.
     private fun detectFormat(file: File): String {
         return try {
             val h = file.inputStream().use { it.readNBytes(12) }
@@ -189,33 +196,16 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
         val exiftoolPath = BinaryExtractor.checkCommand("exiftool") ?: return
         try {
             ProcessBuilder(
-                exiftoolPath,
-                "-overwrite_original",
-                "-q",
-                "-TagsFromFile", sourcePath,
-                "-all:all",
-                destPath
+                exiftoolPath, "-overwrite_original", "-q",
+                "-TagsFromFile", sourcePath, "-all:all", destPath
             ).start().waitFor()
         } catch (_: Exception) {}
     }
 
-    // Returns just the UUID portion — used for CombineResult logging.
     private fun extractUuid(name: String): String? {
         val afterDate = name.substringAfter("_", "")
         if (afterDate.isEmpty()) return null
         return afterDate.substringBefore("-main").substringBefore("-overlay")
             .takeIf { it.isNotEmpty() }
-    }
-
-    // Returns "DATE_UUID" as the pairing key so main and overlay files with the same UUID
-    // but different date prefixes (duplicate saves) are matched as separate, independent pairs.
-    private fun extractPairKey(name: String): String? {
-        val underscoreIdx = name.indexOf('_')
-        if (underscoreIdx < 0) return null
-        val date = name.substring(0, underscoreIdx)
-        val uuid = name.substring(underscoreIdx + 1)
-            .substringBefore("-main").substringBefore("-overlay")
-            .takeIf { it.isNotEmpty() } ?: return null
-        return "${date}_${uuid}"
     }
 }

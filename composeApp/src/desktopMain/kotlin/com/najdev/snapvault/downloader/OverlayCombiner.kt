@@ -54,9 +54,11 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
         outputDir: String,
         deleteOriginals: Boolean,
         workerCount: Int,
+        onStart: (total: Int) -> Unit = {},
         onProgress: (CombineResult) -> Unit
     ) {
         val pairs = findPairs(outputDir)
+        onStart(pairs.size)
         val channel = Channel<CombineResult>(Channel.UNLIMITED)
 
         coroutineScope {

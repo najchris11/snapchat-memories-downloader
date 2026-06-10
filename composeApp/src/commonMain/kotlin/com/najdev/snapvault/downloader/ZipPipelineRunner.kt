@@ -30,6 +30,7 @@ interface ZipPipelineRunner {
         outputDir: String,
         deleteOriginals: Boolean,
         workerCount: Int,
+        onStart: (total: Int) -> Unit = {},
         onProgress: (CombineResult) -> Unit
     )
 }
@@ -48,6 +49,7 @@ object NoOpZipPipelineRunner : ZipPipelineRunner {
         outputDir: String,
         deleteOriginals: Boolean,
         workerCount: Int,
+        onStart: (total: Int) -> Unit,
         onProgress: (CombineResult) -> Unit
     ) = Unit
 }

@@ -376,12 +376,25 @@ class DashboardViewModel(
         }
 
         if (runCombine) {
-            val overlayPairCount = itemsByZip.values.flatten().count { it.hasOverlay && it.overlayFileName != null }
-            logs.add("[INFO] Found $overlayPairCount overlay pairs. Combining…")
+            val scannedPairCount = itemsByZip.values.flatten().count { it.hasOverlay && it.overlayFileName != null }
             var combinedCount = 0
             var combineErrorCount = 0
             var combineSkippedCount = 0
-            zipPipelineRunner.combineAll(outDir, deleteOriginals = true, workerCount = workerCount) { result ->
+            var combineDone = 0
+            var combineTotal = scannedPairCount.coerceAtLeast(1)
+            val combineEta = EtaEstimator()
+            progress = 0f
+            progressText = "Combining overlays…"
+            zipPipelineRunner.combineAll(
+                outDir,
+                deleteOriginals = true,
+                workerCount = workerCount,
+                onStart = { actual ->
+                    combineTotal = actual.coerceAtLeast(1)
+                    logs.add("[INFO] Found $actual overlay pairs. Combining…")
+                    progressText = "Combining: 0 / $actual"
+                }
+            ) { result ->
                 when {
                     result.status == "combined" -> combinedCount++
                     result.status.startsWith("skipped:") -> combineSkippedCount++
@@ -390,7 +403,22 @@ class DashboardViewModel(
                         logs.add("[ERROR] Overlay combine ${result.uuid.take(8)}: ${result.status}")
                     }
                 }
+                combineDone++
+                combineEta.record(combineDone)
+                progress = combineDone.toFloat() / combineTotal
+                progressText = "Combining: $combineDone / $combineTotal"
+                val rate = combineEta.ratePerSec()
+                if (rate != null) {
+                    speedText = "${rate.toInt().coerceAtLeast(1)} pairs/s"
+                    etaText = when (val etaSec = combineEta.etaSeconds(combineTotal, combineDone)) {
+                        null -> "ETA: --"
+                        0L -> "ETA: done"
+                        else -> "ETA: ${formatEta(etaSec)}"
+                    }
+                }
             }
+            speedText = "SPEED: --"
+            etaText = "ETA: --"
             val combineSummary = buildString {
                 append("[INFO] Combined $combinedCount overlay pairs")
                 if (combineSkippedCount > 0) append(", $combineSkippedCount skipped (unsupported format)")

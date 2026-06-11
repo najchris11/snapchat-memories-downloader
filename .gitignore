@@ -53,3 +53,7 @@ test-data/
 .vscode/
 *.swp
 *.swo
+
+# ── Xcode ─────────────────────────────────────────────────────────────────────
+xcuserdata/
+DerivedData/

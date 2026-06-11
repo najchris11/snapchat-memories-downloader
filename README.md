@@ -1,151 +1,170 @@
-# Snapchat Memories Downloader
-Since snapchat wants you to pay for more than 5gb of snapchat memories, I made a script to download all your memories since the version snapchat provided has a bug where it says 100% is downloaded but in reality it didn't download anything (at least in my case)
+# SnapVault — Snapchat Memories Downloader
+
+A Kotlin Multiplatform app (macOS · Android · iOS) for exporting, organizing, and enriching your Snapchat memories with GPS metadata and timestamp data from your Snapchat data export.
+
+> **Why?** Snapchat's own download tool is notoriously broken. SnapVault reads your data export ZIP(s), extracts the media files, writes correct EXIF timestamps and GPS coordinates, and combines video overlays — all without touching Snapchat's servers.
+
+---
+
+## Platforms
+
+| Platform | Status | How to run |
+|----------|--------|-----------|
+| macOS (Desktop) | ✅ Full support | `./gradlew :composeApp:run` |
+| Android | ✅ Supported | `./gradlew :composeApp:runAndroid` |
+| iOS Simulator | ✅ Supported | `./gradlew :composeApp:runIosSimulator` |
+
+---
+
+## Getting Your Snapchat Export
+
+Snapchat now exports multiple 2 GB ZIP files instead of a single HTML with CDN links.
+
+1. Go to [accounts.snapchat.com](https://accounts.snapchat.com) → **My Data**
+2. Select **Export your Memories** → **Request Only Memories** → **All Time**
+3. Check your email — the download link arrives within 24 hours
+4. Download all ZIP files (named `mydata~{timestamp}-{N}.zip`)
+
+The ZIPs contain:
+- `memories/memories.html` — local media file references
+- `YYYY-MM-DD_UUID-{main|overlay}.{ext}` — media files
+- `html/memories_history.html` — GPS + timestamp metadata
+- `json/memories_history.json` — JSON metadata fallback
+
+---
+
+## Running the App
+
+### Prerequisites
+
+- **JDK 17+** (Android Studio's bundled JBR is configured automatically via `gradle.properties`)
+- **Android Studio** or any IDE with KMP support (for Android dev)
+- **Xcode 15+** (for iOS builds, macOS only)
+- **Android SDK** (installed via Android Studio)
+
+### macOS Desktop
+
+```bash
+./gradlew :composeApp:run
+```
+
+Produces a full desktop app with a sidebar, dependency management (ExifTool + FFmpeg auto-bundled), and full pipeline support.
+
+To build a distributable DMG:
+```bash
+./gradlew :composeApp:createDistributable
+```
+
+### Android
+
+```bash
+./gradlew :composeApp:runAndroid
+```
+
+This builds the debug APK, installs it on the connected device or running emulator, and launches the app. Requires `adb` on your `PATH` and a connected device or a running emulator.
+
+To only build the APK:
+```bash
+./gradlew :composeApp:assembleDebug
+# Output: composeApp/build/outputs/apk/debug/composeApp-debug.apk
+```
+
+### iOS Simulator
+
+```bash
+./gradlew :composeApp:runIosSimulator
+```
+
+This builds the Kotlin framework via `embedAndSignAppleFrameworkForXcode`, builds the `iosApp` Xcode project, boots a simulator if none is running, installs, and launches the app.
+
+Alternatively, open `iosApp/iosApp.xcodeproj` in Xcode and press **Run** (`⌘R`).
+
+> **Note:** The Xcode project links `ComposeApp.framework` via `OTHER_LDFLAGS`. The framework is built by a Run Script phase that calls `./gradlew :composeApp:embedAndSignAppleFrameworkForXcode`. No manual framework copy is needed.
+
+---
+
+## App Architecture
+
+```
+composeApp/
+  src/
+    commonMain/         ← Shared UI + business logic (Compose Multiplatform)
+      ui/               ← DashboardScreen, LibraryScreen, SettingsScreen, PhoneRoot
+      viewmodel/        ← DashboardViewModel (pipeline state)
+      downloader/       ← ZipPipelineRunner, DownloadEngine, Deduplicator
+      parser/           ← ZipImportParser, ZipHistParser, ZipJsonParser, MetadataCorrelator
+      metadata/         ← MediaProcessor (expect/actual GPS + date writing)
+      model/            ← FileMeta, PipelineState, MemoryItem
+    androidMain/        ← Android actuals (ExifInterface, pickers, MediaScanner stub)
+    iosMain/            ← iOS actuals (NSUserDefaults, pickers stub, AVFoundation stubs)
+    desktopMain/        ← Desktop actuals (ExifTool, FFmpeg, Skia thumbnails, full pipeline)
+iosApp/
+  iosApp.xcodeproj/     ← Xcode project (wraps ComposeApp.framework)
+  iosApp/
+    iOSApp.swift        ← SwiftUI @main entry point
+    ContentView.swift   ← UIViewControllerRepresentable wrapping MainViewController
+```
+
+### Responsive layout
+
+The app adapts automatically based on window width:
+
+| Width | Layout |
+|-------|--------|
+| < 600 dp | Mobile: bottom navigation bar (`PhoneRoot`) |
+| 600–839 dp | Medium desktop layout |
+| ≥ 840 dp | Expanded desktop: sidebar + content |
+
+You can override the layout via **Settings → Layout Override**.
+
+---
+
+## Pipeline (ZIP Import Mode)
+
+1. **Select ZIP(s)** — single file or a folder of `mydata~*.zip` files
+2. **Select output folder** — where extracted media lands
+3. **Run** — the pipeline:
+   - Extracts media from all ZIPs (parallel workers)
+   - Correlates each file against `memories_history.html`/`.json` for GPS + exact timestamp
+   - Writes EXIF metadata to extracted files
+   - Combines video + overlay pairs into a single file
+   - Deduplicates identical files
+   - Saves a `vault_index.json` and `vault_pipeline.json` for resume support
+
+---
+
+## Development
+
+### Gradle tasks
+
+| Task | Description |
+|------|-------------|
+| `:composeApp:run` | Run the desktop app |
+| `:composeApp:runCli` | Run the CLI pipeline (headless) |
+| `:composeApp:runAndroid` | Install + launch on Android device/emulator |
+| `:composeApp:runIosSimulator` | Build + run in iOS Simulator |
+| `:composeApp:assembleDebug` | Build Android debug APK |
+| `:composeApp:installDebug` | Install Android debug APK |
+| `:composeApp:embedAndSignAppleFrameworkForXcode` | Build iOS framework (called by Xcode) |
+| `:composeApp:check` | Run all tests |
+| `:composeApp:createDistributable` | Build macOS .app bundle |
+
+### Running tests
+
+```bash
+./gradlew :composeApp:check
+```
+
+Tests live in `composeApp/src/commonTest/` and cover the parsers, deduplicator, and download engine.
+
+---
+
+## Legacy (Python / Electron)
+
+The original Python CLI and Electron GUI are preserved in the `legacy/` directory for reference. They are no longer maintained. The KMP app supersedes them with a cross-platform UI, built-in dependency bundling, and resume support.
+
+---
 
 ## Credits
 
-This is a fork of [ManuelPuchner/snapchat-memories-downloader](https://github.com/ManuelPuchner/snapchat-memories-downloader) with improvements for zero-setup usage and test mode. Thanks to Manuel and [Nick](https://github.com/nrc2358) for the original implementation! 🙏
-
-# How to Run
-
-## GUI (Recommended)
-
-The GUI provides a one‑click setup and an easy workflow runner.
-
-```bash
-cd gui
-npm install
-npm run electron-dev
-```
-
-- Click "Setup Environment" to install all required tools.
-- Then select your `memories_history.html` and click "Start Download".
-
-### Requirements (GUI enforces these)
-- Python 3.10+ with `pip`
-- `exiftool` (required for writing GPS metadata to files)
-- `ffmpeg` (required for combining video overlays)
-
-### OS‑Specific Setup
-- **macOS:** The GUI runs `installer.sh` which uses Homebrew to install Python, ExifTool, and FFmpeg, sets up `.venv`, and installs `requirements.txt`.
-- **Windows:** The GUI runs `installer.ps1` which uses `winget` to install Python, ExifTool, and FFmpeg, sets up `.venv`, and installs `requirements.txt`.
-- **Linux:** The GUI shows a modal with exact commands. Install the required packages manually:
-	- `sudo apt update && sudo apt install python3 python3-pip python3-venv exiftool ffmpeg`
-	- `python3 -m venv .venv && source .venv/bin/activate`
-	- `pip install -r requirements.txt`
-
-The installers prepare the environment only; the GUI handles running workflows.
-
-### Packaged App: Bundled Runtime (No User Setup)
-
-The packaged Electron app can bundle the Python runtime, pip dependencies, and
-native tools so users do not need to install anything manually.
-
-Expected layout in the repo before running `npm run electron-build`:
-
-```
-runtime/
-	python/
-		...full Python distribution with site-packages...
-	tools/
-		darwin/
-			exiftool
-			ffmpeg
-		win32/
-			exiftool.exe
-			ffmpeg.exe
-		linux/
-			exiftool
-			ffmpeg
-```
-
-Notes:
-- Put a full Python runtime in `runtime/python` and pre-install `requirements.txt` into it.
-- Place OS-specific `exiftool` and `ffmpeg` binaries in `runtime/tools/<platform>`.
-- The packaged app will prefer these bundled binaries and fall back to system installs only in dev.
-
-CI prepares the `runtime/` directory during release builds using the scripts in `scripts/`.
-The bundled runtime is not committed to git; it is assembled on each release runner.
-
-Optional checksum validation:
-- Set `PYTHON_SHA256`, `EXIFTOOL_SHA256`, and `FFMPEG_SHA256` in the build environment.
-- If provided, the runtime scripts will validate each download and fail on mismatch.
-	- ExifTool 13.58 checksums (from https://exiftool.org/checksums-13.58.txt):
-		- macOS/Linux tarball (`Image-ExifTool-13.58.tar.gz`): `c84fb6b613a480a638225d44979bf44cd2f91c92b79f4d2aa43773c89fa4199e`
-		- Windows zip (`exiftool-13.58_64.zip`): `fd3b47a01e6ffc6160f2d5fde5ff0c003f6c4c2ba85eee1ce8928ccb51fa3e6`
-
-## CLI (Alternative)
-
-Manual setup for CLI usage (outside the GUI):
-
-1) Create a Python venv:
-```bash
-python3 -m venv .venv
-```
-
-2) Activate the venv:
-```bash
-# macOS/Linux
-source .venv/bin/activate
-
-# Windows
-.\.venv\Scripts\Activate.ps1
-```
-
-3) Install Python dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-4) Install required system tools:
-```bash
-# macOS
-brew install exiftool ffmpeg
-
-# Linux
-sudo apt install exiftool ffmpeg
-
-# Windows: install via winget or use Chocolatey/manual installers
-#   winget install -e --id PhilHarvey.ExifTool
-#   winget install -e --id FFmpeg.FFmpeg
-```
-
-## Request & Download Data
-
-1. Go to [https://accounts.snapchat.com](https://accounts.snapchat.com)
-2. Click **My Data**
-3. Select **Export your Memories** → **Request Only Memories** → **All Time**
-4. Check your email for the download link
-5. Download and extract the HTML file
-6. Place `memories_history.html` in the project root
-
-## Run the Orchestrator (CLI)
-
-```bash
-python3 run_all.py              # Interactive menu
-python3 run_all.py --full       # Run all steps sequentially
-python3 run_all.py --test 10    # Download only 10 items first (sanity check)
-```
-
-Or use individual scripts:
-- `python3 snapchat-downloader.py` – Download memories only
-- `python3 metadata.py` – Write GPS metadata
-- `python3 combine_overlays.py` – Merge overlays (set `DRY_RUN=False` first)
-- `python3 delete-dupes.py` – Remove duplicates (set `DRY_RUN=False` first)
-
-### Parallel Workers
-
-Pass `--workers=N` to any script to control concurrency:
-```bash
-python3 combine_overlays.py --workers=8
-python3 metadata.py --workers=8
-python3 delete-dupes.py --workers=8
-```
-
-## Post-Processing
-
-Correct file timestamps to match creation date (macOS):
-```bash
-mdimport -r snapchat_memories/
-exiftool "-FileCreateDate<CreateDate" "-FileModifyDate<CreateDate" -ext mp4 -r snapchat_memories/
-exiftool "-FileCreateDate<CreateDate" "-FileModifyDate<CreateDate" -ext jpg -r snapchat_memories/
-```
+Forked from [ManuelPuchner/snapchat-memories-downloader](https://github.com/ManuelPuchner/snapchat-memories-downloader). Thanks to Manuel and [Nick](https://github.com/nrc2358) for the original implementation.

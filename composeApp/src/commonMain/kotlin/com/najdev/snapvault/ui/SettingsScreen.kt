@@ -2,6 +2,7 @@ package com.najdev.snapvault.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -20,6 +21,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.AppBuildConfig
+import com.najdev.snapvault.LayoutOverride
 import com.najdev.snapvault.ui.theme.ElectricPurple
 import com.najdev.snapvault.ui.theme.InfoBlue
 import org.jetbrains.compose.resources.stringResource
@@ -36,7 +38,9 @@ fun SettingsScreen(
     workers: Int,
     onWorkersChange: (Int) -> Unit,
     isDarkMode: Boolean,
-    onToggleDarkMode: (Boolean) -> Unit
+    onToggleDarkMode: (Boolean) -> Unit,
+    layoutOverride: LayoutOverride,
+    onLayoutOverrideChange: (LayoutOverride) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -98,6 +102,55 @@ fun SettingsScreen(
                             uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
                         )
                     )
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+
+                // Interface Layout
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.AspectRatio,
+                        null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Text("Interface Layout", fontSize = 13.sp)
+                        Text(
+                            "Choose between compact mobile navigation and full desktop views.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                    }
+                    Row(
+                        modifier = Modifier
+                            .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                            .padding(3.dp)
+                    ) {
+                        LayoutOverride.entries.forEach { mode ->
+                            val active = layoutOverride == mode
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (active) ElectricPurple.copy(alpha = 0.15f) else Color.Transparent)
+                                    .clickable { onLayoutOverrideChange(mode) }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = mode.name,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = if (active) ElectricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+                    }
                 }
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))

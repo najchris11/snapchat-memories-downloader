@@ -14,6 +14,7 @@ import com.najdev.snapvault.ui.components.AppSidebar
 import com.najdev.snapvault.ui.components.AppTopBar
 import com.najdev.snapvault.ui.theme.SnapVaultTheme
 import com.najdev.snapvault.viewmodel.DashboardViewModel
+import com.najdev.snapvault.ui.PhoneRoot
 import okio.FileSystem
 
 enum class Screen { Dashboard, Library, Settings }
@@ -34,6 +35,7 @@ fun App(
     var currentScreen by remember { mutableStateOf(Screen.Dashboard) }
     var isDarkMode by remember { mutableStateOf(loadThemePreference()) }
     var workers by remember { mutableStateOf(loadWorkersPreference()) }
+    var layoutOverride by remember { mutableStateOf(loadLayoutOverride()) }
 
     var hasExifTool by remember { mutableStateOf(false) }
     var hasFFmpeg by remember { mutableStateOf(false) }
@@ -52,6 +54,7 @@ fun App(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.systemBars)
                 .background(MaterialTheme.colorScheme.background)
         ) {
             AppTopBar(
@@ -61,40 +64,63 @@ fun App(
                 onMaximize = onMaximizeWindow,
             )
 
-            Row(modifier = Modifier.fillMaxSize()) {
-                AppSidebar(
-                    currentScreen = currentScreen,
-                    isRunning = dashboardViewModel.isRunning,
-                    currentStep = dashboardViewModel.currentStep,
-                    onNavigate = { currentScreen = it },
-                )
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val activeWindowSize = getActiveWindowSize(maxWidth, layoutOverride)
+                if (activeWindowSize == WindowSize.Compact) {
+                    PhoneRoot(
+                        dashboardViewModel = dashboardViewModel,
+                        hasExifTool = hasExifTool,
+                        hasFFmpeg = hasFFmpeg,
+                        onVerifyDependencies = {
+                            hasExifTool = mediaProcessor.checkExifTool()
+                            hasFFmpeg = mediaProcessor.checkFFmpeg()
+                        },
+                        workers = workers,
+                        onWorkersChange = { workers = it; saveWorkersPreference(it) },
+                        isDarkMode = isDarkMode,
+                        onToggleDarkMode = { isDarkMode = it; saveThemePreference(it) },
+                        layoutOverride = layoutOverride,
+                        onLayoutOverrideChange = { layoutOverride = it; saveLayoutOverride(it) }
+                    )
+                } else {
+                    Row(modifier = Modifier.fillMaxSize()) {
+                        AppSidebar(
+                            currentScreen = currentScreen,
+                            isRunning = dashboardViewModel.isRunning,
+                            currentStep = dashboardViewModel.currentStep,
+                            onNavigate = { currentScreen = it },
+                        )
 
-                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                    when (currentScreen) {
-                        Screen.Dashboard -> DashboardScreen(
-                            viewModel = dashboardViewModel,
-                            workers = workers,
-                            onNavigateToSettings = { currentScreen = Screen.Settings },
-                        )
-                        Screen.Library -> LibraryScreen(
-                            downloadFolder = dashboardViewModel.downloadFolder,
-                            onOpenFolder = dashboardViewModel::pickOutputFolder,
-                        )
-                        Screen.Settings -> SettingsScreen(
-                            hasExifTool = hasExifTool,
-                            hasFFmpeg = hasFFmpeg,
-                            onVerifyDependencies = {
-                                hasExifTool = mediaProcessor.checkExifTool()
-                                hasFFmpeg = mediaProcessor.checkFFmpeg()
-                            },
-                            downloadFolder = dashboardViewModel.downloadFolder,
-                            onResetIndex = { dashboardViewModel.resetVaultIndex() },
-                            onEditOutputPath = { dashboardViewModel.pickOutputFolder() },
-                            workers = workers,
-                            onWorkersChange = { workers = it; saveWorkersPreference(it) },
-                            isDarkMode = isDarkMode,
-                            onToggleDarkMode = { isDarkMode = it; saveThemePreference(it) },
-                        )
+                        Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                            when (currentScreen) {
+                                Screen.Dashboard -> DashboardScreen(
+                                    viewModel = dashboardViewModel,
+                                    workers = workers,
+                                    onNavigateToSettings = { currentScreen = Screen.Settings },
+                                )
+                                Screen.Library -> LibraryScreen(
+                                    downloadFolder = dashboardViewModel.downloadFolder,
+                                    onOpenFolder = dashboardViewModel::pickOutputFolder,
+                                )
+                                Screen.Settings -> SettingsScreen(
+                                    hasExifTool = hasExifTool,
+                                    hasFFmpeg = hasFFmpeg,
+                                    onVerifyDependencies = {
+                                        hasExifTool = mediaProcessor.checkExifTool()
+                                        hasFFmpeg = mediaProcessor.checkFFmpeg()
+                                    },
+                                    downloadFolder = dashboardViewModel.downloadFolder,
+                                    onResetIndex = { dashboardViewModel.resetVaultIndex() },
+                                    onEditOutputPath = { dashboardViewModel.pickOutputFolder() },
+                                    workers = workers,
+                                    onWorkersChange = { workers = it; saveWorkersPreference(it) },
+                                    isDarkMode = isDarkMode,
+                                    onToggleDarkMode = { isDarkMode = it; saveThemePreference(it) },
+                                    layoutOverride = layoutOverride,
+                                    onLayoutOverrideChange = { layoutOverride = it; saveLayoutOverride(it) },
+                                )
+                            }
+                        }
                     }
                 }
             }

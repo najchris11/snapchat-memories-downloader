@@ -7,6 +7,8 @@ import com.najdev.snapvault.downloader.DownloadEngine
 import com.najdev.snapvault.downloader.ZipPipelineRunner
 import com.najdev.snapvault.metadata.MediaProcessor
 import com.najdev.snapvault.model.FileMeta
+import com.najdev.snapvault.model.PhaseRecord
+import com.najdev.snapvault.model.PipelineState
 import com.najdev.snapvault.parser.*
 import io.ktor.client.*
 import kotlinx.coroutines.*
@@ -130,10 +132,18 @@ class DashboardViewModel(
     fun resetVaultIndex(): Boolean {
         val folder = downloadFolder ?: return false
         return runCatching {
-            val path = "$folder/vault_index.json".toPath()
-            if (fileSystem.exists(path)) fileSystem.delete(path)
+            val indexPath = "$folder/vault_index.json".toPath()
+            val pipelinePath = "$folder/vault_pipeline.json".toPath()
+            if (fileSystem.exists(indexPath)) fileSystem.delete(indexPath)
+            if (fileSystem.exists(pipelinePath)) fileSystem.delete(pipelinePath)
             true
         }.getOrDefault(false)
+    }
+
+    private fun savePipelineState(pathStr: String, state: PipelineState) {
+        runCatching {
+            fileSystem.write(pathStr.toPath()) { writeUtf8(Json.encodeToString(state)) }
+        }.onFailure { e -> logs.add("[WARN] Could not write pipeline state: ${e.message}") }
     }
 
     private fun formatEta(seconds: Long): String = when {
@@ -273,6 +283,27 @@ class DashboardViewModel(
             Json.decodeFromString<Map<String, FileMeta>>(fileSystem.read(vaultIndexPath) { readUtf8() })
         }.getOrDefault(emptyMap()).toMutableMap()
 
+        val vaultPipelinePath = "$outDir/vault_pipeline.json"
+        var pipelineState: PipelineState = runCatching {
+            Json.decodeFromString<PipelineState>(fileSystem.read(vaultPipelinePath.toPath()) { readUtf8() })
+        }.getOrDefault(PipelineState())
+
+        pipelineState.extract?.let { rec ->
+            val extracted = rec.stats["extracted"] ?: 0
+            val skipped = rec.stats["skipped"] ?: 0
+            logs.add("[INFO] Previous run: extract completed on ${rec.completedAt} ($extracted extracted, $skipped already existed).")
+        }
+        pipelineState.metadata?.let { rec ->
+            val tagged = rec.stats["tagged"] ?: 0
+            val gps = rec.stats["gps"] ?: 0
+            logs.add("[INFO] Previous run: metadata completed on ${rec.completedAt} ($tagged files tagged, $gps with GPS).")
+        }
+        pipelineState.combine?.let { rec ->
+            val combined = rec.stats["combined"] ?: 0
+            val errors = rec.stats["errors"] ?: 0
+            logs.add("[INFO] Previous run: combine completed on ${rec.completedAt} ($combined overlays combined${if (errors > 0) ", $errors errors" else ""}).")
+        }
+
         logs.add("[INFO] Extracting media files…")
         var extractedCount = 0
         var skippedCount = 0
@@ -315,6 +346,11 @@ class DashboardViewModel(
         }
         logs.add(extractSummary)
         currentStep = 2
+        pipelineState = pipelineState.copy(extract = PhaseRecord(
+            completedAt = nowIsoString(),
+            stats = mapOf("extracted" to extractedCount, "skipped" to skippedCount, "errors" to extractErrorCount)
+        ))
+        savePipelineState(vaultPipelinePath, pipelineState)
 
         var pipelineGpsCount = 0
         var pipelineCombinedCount = 0
@@ -338,9 +374,16 @@ class DashboardViewModel(
             val seenMetaUuids = mutableSetOf<String>()
             for (entry in metaEntries) {
                 currentCoroutineContext().ensureActive()
+                val isDuplicateEntry = !seenMetaUuids.add(entry.uuid)
+                if (downloadedMeta[entry.fileName]?.metadataWritten == true) {
+                    metaDone++
+                    metaEta.record(metaDone)
+                    progress = metaDone.toFloat() / metaTotal.coerceAtLeast(1)
+                    progressText = "Metadata: $metaDone / $metaTotal"
+                    continue
+                }
                 val outputPath = "$outDir/${entry.fileName}"
                 val corr = correlationMap[entry.uuid]
-                val isDuplicateEntry = !seenMetaUuids.add(entry.uuid)
                 // For duplicate entries the UUID is the same snap saved on a different date;
                 // the correlation from the first occurrence is still correct, so bypass the
                 // date-match guard. For first-occurrence entries the guard catches genuine
@@ -359,7 +402,7 @@ class DashboardViewModel(
                     gpsOk = mediaProcessor.writeGpsMetadata(outputPath, validCorr.latitude, validCorr.longitude, dateTime)
                     if (gpsOk) gpsWrittenCount++
                 }
-                downloadedMeta[entry.fileName] = FileMeta(hasGps = gpsOk, hasOverlay = entry.hasOverlay)
+                downloadedMeta[entry.fileName] = FileMeta(hasGps = gpsOk, hasOverlay = entry.hasOverlay, metadataWritten = dateOk)
                 if (dateOk) metaCount++
                 metaDone++
                 metaEta.record(metaDone)
@@ -379,6 +422,11 @@ class DashboardViewModel(
             etaText = "ETA: --"
             logs.add("[INFO] Metadata: $metaCount files tagged — exact timestamp: $exactTimestampCount, GPS: $gpsWrittenCount, date mismatches: $dateMismatchCount${if (fileNotFoundCount > 0) ", files not found: $fileNotFoundCount" else ""}.")
             pipelineGpsCount = gpsWrittenCount
+            pipelineState = pipelineState.copy(metadata = PhaseRecord(
+                completedAt = nowIsoString(),
+                stats = mapOf("tagged" to metaCount, "gps" to gpsWrittenCount, "mismatches" to dateMismatchCount)
+            ))
+            savePipelineState(vaultPipelinePath, pipelineState)
         }
 
         if (runCombine) {
@@ -435,6 +483,11 @@ class DashboardViewModel(
             pipelineCombinedCount = combinedCount
             pipelineCombineSkipped = combineSkippedCount
             pipelineCombineErrors = combineErrorCount
+            pipelineState = pipelineState.copy(combine = PhaseRecord(
+                completedAt = nowIsoString(),
+                stats = mapOf("combined" to combinedCount, "skipped" to combineSkippedCount, "errors" to combineErrorCount)
+            ))
+            savePipelineState(vaultPipelinePath, pipelineState)
         }
 
         if (runDedupe) runDeduplication(outDir, dryRun)

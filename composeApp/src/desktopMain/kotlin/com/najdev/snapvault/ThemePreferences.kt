@@ -18,3 +18,16 @@ actual fun loadWorkersPreference(): Int {
 actual fun saveWorkersPreference(workers: Int) {
     prefs.putInt("workers", workers)
 }
+
+actual fun loadLayoutOverride(): LayoutOverride {
+    val name = prefs.get("layoutOverride", LayoutOverride.Auto.name)
+    return try {
+        LayoutOverride.valueOf(name)
+    } catch (e: Exception) {
+        LayoutOverride.Auto
+    }
+}
+
+actual fun saveLayoutOverride(override: LayoutOverride) {
+    prefs.put("layoutOverride", override.name)
+}

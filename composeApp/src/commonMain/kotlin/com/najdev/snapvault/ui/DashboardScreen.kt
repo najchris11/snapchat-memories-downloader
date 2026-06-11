@@ -71,13 +71,10 @@ fun DashboardScreen(
         }
     }
 
-    Row(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        horizontalArrangement = Arrangement.spacedBy(24.dp)
-    ) {
-        // ── Left column: controls (40%) ──────────────────────────────────────
+    @Composable
+    fun SetupControls(modifier: Modifier = Modifier) {
         Column(
-            modifier = Modifier.weight(0.4f).verticalScroll(rememberScrollState()),
+            modifier = modifier.verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Android preview banner
@@ -317,10 +314,12 @@ fun DashboardScreen(
                 }
             }
         }
+    }
 
-        // ── Right column: status-first layout (60%) ──────────────────────────
+    @Composable
+    fun StatusControls(modifier: Modifier = Modifier) {
         Surface(
-            modifier = Modifier.weight(0.6f).fillMaxHeight(),
+            modifier = modifier,
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f),
             shape = RoundedCornerShape(14.dp),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
@@ -482,6 +481,49 @@ fun DashboardScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isCompact = maxWidth < 600.dp
+        if (isCompact) {
+            var activeTab by remember { mutableStateOf(0) }
+            Column(
+                modifier = Modifier.fillMaxSize().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                TabRow(
+                    selectedTabIndex = activeTab,
+                    containerColor = Color.Transparent,
+                    contentColor = ElectricPurple,
+                    divider = { HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)) }
+                ) {
+                    Tab(
+                        selected = activeTab == 0,
+                        onClick = { activeTab = 0 },
+                        text = { Text("Configure", fontWeight = FontWeight.Bold) }
+                    )
+                    Tab(
+                        selected = activeTab == 1,
+                        onClick = { activeTab = 1 },
+                        text = { Text("Status & Logs", fontWeight = FontWeight.Bold) }
+                    )
+                }
+
+                if (activeTab == 0) {
+                    SetupControls(modifier = Modifier.weight(1f).fillMaxWidth())
+                } else {
+                    StatusControls(modifier = Modifier.weight(1f).fillMaxWidth())
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxSize().padding(24.dp),
+                horizontalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                SetupControls(modifier = Modifier.weight(0.4f).fillMaxHeight())
+                StatusControls(modifier = Modifier.weight(0.6f).fillMaxHeight())
             }
         }
     }

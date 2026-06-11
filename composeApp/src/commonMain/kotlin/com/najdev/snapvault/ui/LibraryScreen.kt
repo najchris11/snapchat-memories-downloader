@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,6 +59,7 @@ data class LibraryItem(
     val fileSizeBytes: Long = 0L
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
     downloadFolder: String?,
@@ -87,192 +89,221 @@ fun LibraryScreen(
             }
     }
 
-    Row(modifier = Modifier.fillMaxSize()) {
-        // ── Main content ─────────────────────────────────────────────────────
-        Column(
-            modifier = Modifier.weight(1f).fillMaxHeight().padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Stats row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isCompact = maxWidth < 600.dp
+
+        Row(modifier = Modifier.fillMaxSize()) {
+            // ── Main content ─────────────────────────────────────────────────────
+            Column(
+                modifier = Modifier.weight(1f).fillMaxHeight().padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    StatChip(
-                        icon = Icons.Outlined.PhotoLibrary,
-                        label = "${items.size} Memories",
-                        tint = ElectricPurple
-                    )
-                    StatChip(
-                        icon = Icons.Outlined.Image,
-                        label = "${items.count { it.type == "photo" }} Photos",
-                        tint = ElectricPurple.copy(alpha = 0.7f)
-                    )
-                    StatChip(
-                        icon = Icons.Outlined.Videocam,
-                        label = "${items.count { it.type == "video" }} Videos",
-                        tint = InfoBlue
-                    )
-                    StatChip(
-                        icon = Icons.Outlined.GpsFixed,
-                        label = "${items.count { it.hasGps }} with GPS",
-                        tint = Color(0xFF4ADE80)
-                    )
-                }
-                if (downloadFolder != null) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .clickable { refreshKey++ }
-                            .padding(horizontal = 8.dp, vertical = 5.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Outlined.Refresh,
-                            contentDescription = "Refresh library",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.size(16.dp)
+                // Stats row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        StatChip(
+                            icon = Icons.Outlined.PhotoLibrary,
+                            label = "${items.size} Memories",
+                            tint = ElectricPurple
+                        )
+                        StatChip(
+                            icon = Icons.Outlined.Image,
+                            label = "${items.count { it.type == "photo" }} Photos",
+                            tint = ElectricPurple.copy(alpha = 0.7f)
+                        )
+                        StatChip(
+                            icon = Icons.Outlined.Videocam,
+                            label = "${items.count { it.type == "video" }} Videos",
+                            tint = InfoBlue
+                        )
+                        StatChip(
+                            icon = Icons.Outlined.GpsFixed,
+                            label = "${items.count { it.hasGps }} with GPS",
+                            tint = Color(0xFF4ADE80)
                         )
                     }
+                    if (downloadFolder != null) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { refreshKey++ }
+                                .padding(horizontal = 8.dp, vertical = 5.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Outlined.Refresh,
+                                contentDescription = "Refresh library",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
                 }
-            }
 
-            // Filter + search bar
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+                // Filter + search bar
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Type filter tabs
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // Type filter tabs
+                        Row(
+                            modifier = Modifier
+                                .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                                .padding(3.dp)
+                        ) {
+                            listOf("All", "Photos", "Videos").forEach { filter ->
+                                val active = selectedFilter == filter
+                                val label = when (filter) {
+                                    "All" -> stringResource(Res.string.lib_filter_all)
+                                    "Photos" -> stringResource(Res.string.lib_filter_photos)
+                                    "Videos" -> stringResource(Res.string.lib_filter_videos)
+                                    else -> filter
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(5.dp))
+                                        .background(if (active) ElectricPurple.copy(alpha = 0.15f) else Color.Transparent)
+                                        .clickable { selectedFilter = filter }
+                                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                                        color = if (active) ElectricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                    )
+                                }
+                            }
+                        }
+
+                    }
+
+                    // Search field
                     Row(
                         modifier = Modifier
+                            .width(200.dp)
+                            .height(32.dp)
                             .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
                             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                            .padding(3.dp)
+                            .padding(horizontal = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        listOf("All", "Photos", "Videos").forEach { filter ->
-                            val active = selectedFilter == filter
-                            val label = when (filter) {
-                                "All" -> stringResource(Res.string.lib_filter_all)
-                                "Photos" -> stringResource(Res.string.lib_filter_photos)
-                                "Videos" -> stringResource(Res.string.lib_filter_videos)
-                                else -> filter
+                        Icon(
+                            Icons.Outlined.Search,
+                            null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.size(13.dp)
+                        )
+                        BasicTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            textStyle = LocalTextStyle.current.copy(
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 12.sp
+                            ),
+                            cursorBrush = SolidColor(ElectricPurple),
+                            decorationBox = { inner ->
+                                if (searchQuery.isEmpty()) {
+                                    Text(
+                                        stringResource(Res.string.lib_search_placeholder),
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                                    )
+                                }
+                                inner()
                             }
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(5.dp))
-                                    .background(if (active) ElectricPurple.copy(alpha = 0.15f) else Color.Transparent)
-                                    .clickable { selectedFilter = filter }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = label,
-                                    fontSize = 12.sp,
-                                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = if (active) ElectricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                )
+                        )
+                    }
+                }
+
+                // Grid or empty state
+                if (filteredItems.isEmpty()) {
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                Icons.Outlined.PhotoLibrary,
+                                null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Text(
+                                stringResource(Res.string.lib_empty_state),
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                modifier = Modifier.widthIn(max = 280.dp)
+                            )
+                            if (downloadFolder == null) {
+                                TextButton(onClick = onOpenFolder) {
+                                    Text(
+                                        "Select Download Folder",
+                                        fontSize = 12.sp,
+                                        color = ElectricPurple,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
                             }
                         }
                     }
-
-                }
-
-                // Search field
-                Row(
-                    modifier = Modifier
-                        .width(200.dp)
-                        .height(32.dp)
-                        .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                        .padding(horizontal = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(
-                        Icons.Outlined.Search,
-                        null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                        modifier = Modifier.size(13.dp)
-                    )
-                    BasicTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        textStyle = LocalTextStyle.current.copy(
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 12.sp
-                        ),
-                        cursorBrush = SolidColor(ElectricPurple),
-                        decorationBox = { inner ->
-                            if (searchQuery.isEmpty()) {
-                                Text(
-                                    stringResource(Res.string.lib_search_placeholder),
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                                )
-                            }
-                            inner()
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 160.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        items(filteredItems) { item ->
+                            MediaCard(
+                                item = item,
+                                selected = item == selectedItem,
+                                onClick = {
+                                    selectedItem = item
+                                }
+                            )
                         }
-                    )
+                    }
                 }
             }
 
-            // Grid or empty state
-            if (filteredItems.isEmpty()) {
-                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(
-                            Icons.Outlined.PhotoLibrary,
-                            null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
-                            modifier = Modifier.size(48.dp)
-                        )
-                        Text(
-                            stringResource(Res.string.lib_empty_state),
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            modifier = Modifier.widthIn(max = 280.dp)
-                        )
-                        if (downloadFolder == null) {
-                            TextButton(onClick = onOpenFolder) {
-                                Text(
-                                    "Select Download Folder",
-                                    fontSize = 12.sp,
-                                    color = ElectricPurple,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        }
-                    }
-                }
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 160.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    modifier = Modifier.weight(1f)
+            if (!isCompact) {
+                // ── Inspector panel ──────────────────────────────────────────────────
+                Surface(
+                    modifier = Modifier.width(280.dp).fillMaxHeight(),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(0.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
-                    items(filteredItems) { item ->
-                        MediaCard(
-                            item = item,
-                            selected = item == selectedItem,
-                            onClick = {
-                                selectedItem = item
-                                showPreview = true
-                            }
-                        )
+                    AnimatedContent(
+                        targetState = selectedItem,
+                        transitionSpec = { fadeIn() togetherWith fadeOut() },
+                        label = "inspector"
+                    ) { selected ->
+                        if (selected != null) {
+                            InspectorItemDetail(
+                                item = selected,
+                                onPreview = { showPreview = true },
+                                onClearSelection = { selectedItem = null }
+                            )
+                        } else {
+                            InspectorGlobalStats(items = items)
+                        }
                     }
                 }
             }
@@ -285,27 +316,17 @@ fun LibraryScreen(
             )
         }
 
-        // ── Inspector panel ──────────────────────────────────────────────────
-        Surface(
-            modifier = Modifier.width(280.dp).fillMaxHeight(),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-            shape = RoundedCornerShape(0.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            AnimatedContent(
-                targetState = selectedItem,
-                transitionSpec = { fadeIn() togetherWith fadeOut() },
-                label = "inspector"
-            ) { selected ->
-                if (selected != null) {
-                    InspectorItemDetail(
-                        item = selected,
-                        onPreview = { showPreview = true },
-                        onClearSelection = { selectedItem = null }
-                    )
-                } else {
-                    InspectorGlobalStats(items = items)
-                }
+        if (isCompact && selectedItem != null) {
+            ModalBottomSheet(
+                onDismissRequest = { selectedItem = null },
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                tonalElevation = 8.dp
+            ) {
+                InspectorItemDetail(
+                    item = selectedItem!!,
+                    onPreview = { showPreview = true },
+                    onClearSelection = { selectedItem = null }
+                )
             }
         }
     }

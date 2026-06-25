@@ -1,32 +1,66 @@
-# Virtual environment
+# ── Gradle ───────────────────────────────────────────────────────────────────
+.gradle/
+build/
+**/build/
+local.properties
+
+# ── Kotlin ───────────────────────────────────────────────────────────────────
+.kotlin/
+*.class
+
+# ── Android ──────────────────────────────────────────────────────────────────
+*.apk
+*.ap_
+*.aab
+
+# ── Python ───────────────────────────────────────────────────────────────────
 .venv/
 venv/
 env/
-
-# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 
-# Downloaded memories (large files, don't commit)
+# ── App data (user files, not source) ────────────────────────────────────────
 snapchat_memories/
-
-# Bundled runtime (generated in CI)
-runtime/
-
-# Progress/state files
 downloaded_files.json
 download_errors.json
 metadata.json
-
-# User's data file
 memories_history.html
 
-# macOS
+# ── Bundled runtime (generated in CI) ────────────────────────────────────────
+runtime/
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
 .DS_Store
 
-# IDE
+# ── Android signing ───────────────────────────────────────────────────────────
+*.jks
+keystore.properties
+
+# ── Test data ─────────────────────────────────────────────────────────────────
+test-run/
+test-data/
+
+# ── Development artifacts (planning docs, investigation scripts) ───────────────
+plan*.md
+investigate_*.py
+
+# ── Linux bundled binaries (large; downloaded by scripts/prepare-runtime-linux.sh) ──
+composeApp/src/desktopMain/resources/bin/linux-x64/*.zip
+composeApp/src/desktopMain/resources/bin/linux-x64/*.tar.xz
+composeApp/src/desktopMain/resources/bin/linux-x64/*.tar.gz
+
+# ── iOS scaffold (desktop-only for v1.0) ──────────────────────────────────────
+iosApp/
+
+# ── Release artifacts (also covered by build/) ────────────────────────────────
+*.dmg
+*.msi
+*.deb
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
 .idea/
 .vscode/
 *.swp

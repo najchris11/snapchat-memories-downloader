@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SnapVault Pro - Library</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind Config Verbatim -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-container": "#152031",
+                    "primary-fixed-dim": "#d0bcff",
+                    "on-secondary-fixed-variant": "#3f465c",
+                    "on-tertiary": "#00354a",
+                    "on-error-container": "#ffdad6",
+                    "inverse-on-surface": "#263143",
+                    "outline-variant": "#494454",
+                    "on-tertiary-fixed": "#001e2c",
+                    "background": "#081425",
+                    "tertiary-fixed-dim": "#7bd0ff",
+                    "on-background": "#d8e3fb",
+                    "surface-bright": "#2f3a4c",
+                    "on-primary-container": "#340080",
+                    "secondary-container": "#3f465c",
+                    "surface": "#081425",
+                    "on-secondary-fixed": "#131b2e",
+                    "on-secondary": "#283044",
+                    "on-primary-fixed": "#23005c",
+                    "primary-fixed": "#e9ddff",
+                    "on-primary": "#3c0091",
+                    "error": "#ffb4ab",
+                    "secondary-fixed-dim": "#bec6e0",
+                    "tertiary-container": "#009bd1",
+                    "error-container": "#93000a",
+                    "tertiary": "#7bd0ff",
+                    "surface-variant": "#2a3548",
+                    "on-surface-variant": "#cbc3d7",
+                    "surface-container-low": "#111c2d",
+                    "on-secondary-container": "#adb4ce",
+                    "on-error": "#690005",
+                    "surface-container-lowest": "#040e1f",
+                    "on-tertiary-fixed-variant": "#004c69",
+                    "surface-container-high": "#1f2a3c",
+                    "tertiary-fixed": "#c4e7ff",
+                    "surface-dim": "#081425",
+                    "outline": "#958ea0",
+                    "on-tertiary-container": "#002d40",
+                    "on-surface": "#d8e3fb",
+                    "on-primary-fixed-variant": "#5516be",
+                    "secondary": "#bec6e0",
+                    "surface-container-highest": "#2a3548",
+                    "primary": "#d0bcff",
+                    "surface-tint": "#d0bcff",
+                    "inverse-primary": "#6d3bd7",
+                    "secondary-fixed": "#dae2fd",
+                    "primary-container": "#a078ff",
+                    "inverse-surface": "#d8e3fb"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "xs": "4px",
+                    "sm": "8px",
+                    "md": "16px",
+                    "gutter": "16px",
+                    "xl": "32px",
+                    "unit": "4px",
+                    "margin": "32px",
+                    "lg": "24px"
+            },
+            "fontFamily": {
+                    "headline-sm": ["Inter"],
+                    "body-md": ["Inter"],
+                    "label-md": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "code-md": ["JetBrains Mono"],
+                    "headline-md": ["Inter"],
+                    "body-lg": ["Inter"]
+            },
+            "fontSize": {
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "500"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "code-md": ["13px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.4);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(255, 255, 255, 0.15);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .hover-glow:hover {
+            box-shadow: 0px 10px 30px rgba(139, 92, 246, 0.15);
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(208, 188, 255, 0.3);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md text-body-md overflow-hidden selection:bg-primary-container selection:text-on-primary-container">
+<div class="flex h-screen w-full">
+<!-- SideNavBar -->
+<aside class="flex flex-col h-screen p-md overflow-y-auto w-60 border-r border-white/15 bg-surface/40 backdrop-blur-xl shrink-0">
+<div class="mb-xl flex flex-col gap-xs">
+<span class="font-headline-md text-headline-md font-black text-on-surface tracking-tight">SnapVault</span>
+<span class="font-label-md text-label-md text-primary opacity-80">Pro Utility</span>
+</div>
+<nav class="flex-1 space-y-2">
+<a class="flex items-center gap-md p-md text-on-surface-variant/70 hover:text-on-surface hover:bg-white/5 transition-all duration-200 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-md text-label-md">Dashboard</span>
+</a>
+<a class="flex items-center gap-md p-md bg-white/10 text-primary font-bold rounded-lg transition-all duration-200 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined">photo_library</span>
+<span class="font-label-md text-label-md">Library</span>
+</a>
+<a class="flex items-center gap-md p-md text-on-surface-variant/70 hover:text-on-surface hover:bg-white/5 transition-all duration-200 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined">terminal</span>
+<span class="font-label-md text-label-md">Environment</span>
+</a>
+<a class="flex items-center gap-md p-md text-on-surface-variant/70 hover:text-on-surface hover:bg-white/5 transition-all duration-200 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-md text-label-md">Settings</span>
+</a>
+</nav>
+<button class="mt-auto mb-md bg-primary text-on-primary py-sm px-md rounded-xl font-bold flex items-center justify-center gap-2 hover:brightness-110 transition-all active:scale-95 shadow-[0px_4px_20px_rgba(139,92,246,0.3)]">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">sync</span>
+<span class="font-label-md text-label-md">Start Sync</span>
+</button>
+<div class="flex items-center gap-md p-sm border-t border-white/10 pt-md">
+<img alt="User profile" class="w-8 h-8 rounded-full bg-surface-container" src="https://lh3.googleusercontent.com/aida-public/AB6AXuArhBqGLsYXNm_xbQFF29UBG6jF899sNzLgINX0BQqwjmw9R2oTMeEOgbuWYgKIuBCTxZ72jIdOMKWTqZ-qvY7uGKmiaW5OTx8e3P2R8F_FxncU1T-ja1WaxZTnj1D7J_fKxS-t65ohDzbQ7lMK2UQDhekWpTn6SOvbizfcheHH6ZGWIjIH1wDYci1Ebc7XGK9MZHuFmXwY6O0DzapbydZ9lCaEgZb11Za8rNxzORsSaksxnqQg6i44mecgAYyVWscdwRndbeDJDy4"/>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-bold">Pro User</span>
+<span class="text-[10px] opacity-50">Enterprise Tier</span>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col min-w-0 bg-background relative overflow-hidden">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center px-xl w-full h-14 z-10 bg-surface-dim/30 backdrop-blur-md border-b border-white/10">
+<div class="flex items-center gap-lg">
+<h1 class="font-headline-sm text-headline-sm font-black text-on-surface">SnapVault Pro</h1>
+<div class="hidden md:flex gap-md">
+<span class="text-primary border-b-2 border-primary py-xs font-label-md text-label-md cursor-pointer">Memories</span>
+<span class="text-on-surface-variant hover:bg-surface-bright/50 px-sm py-xs transition-colors rounded-lg font-label-md text-label-md cursor-pointer">Stories</span>
+<span class="text-on-surface-variant hover:bg-surface-bright/50 px-sm py-xs transition-colors rounded-lg font-label-md text-label-md cursor-pointer">Maps</span>
+</div>
+</div>
+<div class="flex items-center gap-lg">
+<div class="relative hidden sm:block">
+<span class="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-on-surface-variant/50 text-[18px]">search</span>
+<input class="bg-surface-container-low border border-white/10 rounded-full pl-xl pr-md py-xs text-label-md focus:outline-none focus:border-primary transition-all w-64" placeholder="Search memories..." type="text"/>
+</div>
+<div class="flex items-center gap-md">
+<button class="material-symbols-outlined text-on-surface-variant hover:text-on-surface transition-colors">notifications</button>
+<button class="material-symbols-outlined text-on-surface-variant hover:text-on-surface transition-colors">help_outline</button>
+</div>
+</div>
+</header>
+<!-- Library Content -->
+<div class="flex-1 flex flex-col p-xl gap-lg overflow-y-auto">
+<!-- Filters Bar -->
+<section class="flex flex-wrap items-center justify-between gap-md">
+<div class="flex items-center gap-sm">
+<div class="flex p-xs bg-surface-container-lowest rounded-lg border border-white/5">
+<button class="px-md py-sm bg-white/10 text-primary font-bold rounded-md font-label-md text-label-md shadow-sm">All</button>
+<button class="px-md py-sm text-on-surface-variant hover:text-on-surface transition-colors font-label-md text-label-md">Photos</button>
+<button class="px-md py-sm text-on-surface-variant hover:text-on-surface transition-colors font-label-md text-label-md">Videos</button>
+</div>
+<div class="h-6 w-px bg-white/10 mx-xs"></div>
+<button class="flex items-center gap-xs px-md py-sm bg-surface-container-low border border-white/10 rounded-lg text-on-surface-variant hover:border-primary/50 transition-all font-label-md text-label-md">
+<span class="material-symbols-outlined text-[16px]">calendar_today</span>
+<span>Filter by Date</span>
+<span class="material-symbols-outlined text-[16px]">expand_more</span>
+</button>
+</div>
+<div class="flex items-center gap-md">
+<span class="text-on-surface-variant font-label-md text-label-md">View:</span>
+<div class="flex items-center bg-surface-container-lowest rounded-md border border-white/5">
+<button class="p-xs text-primary"><span class="material-symbols-outlined text-[20px]">grid_view</span></button>
+<button class="p-xs text-on-surface-variant/50"><span class="material-symbols-outlined text-[20px]">view_agenda</span></button>
+</div>
+<button class="text-on-surface-variant font-label-md text-label-md flex items-center gap-xs hover:text-primary transition-colors">
+<span>Sort: Newest First</span>
+<span class="material-symbols-outlined text-[16px]">swap_vert</span>
+</button>
+</div>
+</section>
+<!-- Masonry-like Grid -->
+<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-md">
+<!-- Card 1 -->
+<div class="glass-panel rounded-xl overflow-hidden group hover-glow transition-all duration-300">
+<div class="relative aspect-[3/4] overflow-hidden">
+<img class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" data-alt="A cinematic, low-angle shot of a vibrant red sports shoe floating in a dark, atmospheric space with neon purple accents. The lighting is sophisticated and moody, highlighting the sleek textures and premium design of the product in a high-end macOS utility aesthetic. Particles of light dance around the shoe to create a sense of dynamic energy." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBFPdNRnouPlaV26K94DFMq8Vcm3_5f9zQg7gqpitboyZMR7i37YrwsJTDuyDzSCY7leuyHwPrm0d7m0dJF9BQ2c9hQDJBPj1rKqaAdPNBrNAhrmZLg0dtKKSpR0s66mC8JTNFH9cPS1vGwf4PsxLr-1lOP-uWToCK7zxTfN1d4BVdAI1es9AAi3J6voMX9CEjhXBKBecLo9XqnO769mzOhJXpHC-m4AMX-jwJxrJ_Mn-z3RjWPpVzCVEQPV_okgsIQwhSn7Qo8LWQ"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-highest/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="absolute top-sm right-sm flex gap-xs">
+<span class="bg-primary/20 backdrop-blur-md text-primary text-[10px] px-sm py-[2px] rounded-full border border-primary/20 uppercase font-bold">Photo</span>
+</div>
+</div>
+<div class="p-md flex flex-col gap-xs">
+<div class="flex justify-between items-center">
+<span class="font-code-md text-[11px] text-on-surface-variant">OCT 12, 2023</span>
+<div class="flex gap-1">
+<span class="material-symbols-outlined text-[14px] text-primary" style="font-variation-settings: 'FILL' 1;" title="GPS Metadata">location_on</span>
+<span class="material-symbols-outlined text-[14px] text-tertiary" title="Overlay Active">layers</span>
+</div>
+</div>
+<p class="font-label-md text-label-md text-on-surface truncate">Mountain Peak Sunset</p>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="glass-panel rounded-xl overflow-hidden group hover-glow transition-all duration-300">
+<div class="relative aspect-[3/4] overflow-hidden">
+<img class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" data-alt="A high-density urban cityscape at night, viewed through a rain-streaked window. The glowing neon signs in deep blues and electric purples create a futuristic, professional vibe. The scene is shot with a shallow depth of field, emphasizing the refractive light on the glass surface. The overall atmosphere is moody and technologically sophisticated." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDgl1-0mYrZRxypWrsio_Q_-3LKhbVvfAEM6mPOT7hSdEaXLUwkULUghYHkpSV7tpXmKuCio8T-OvuZqBqUxxIeu-Vbb42A3SX1-Orv7gGfVLVTLisWak2qDG3RzQsP-EnzF-FK7AfghYLNyd94-MFJsruJSVUacnKYcRR82LlSfeJbpgFE4M2RrPfGz4sGGpiXOm24z5SqEmrk405OTLuBCZPNry-IdSeqG5isCzfjEFc21xSVLKHiij0fKTojhNSpi3OeZqOJzCs"/>
+<div class="absolute top-sm left-sm bg-black/40 backdrop-blur-md p-xs rounded-lg border border-white/10">
+<span class="material-symbols-outlined text-white text-[16px]">play_circle</span>
+</div>
+<div class="absolute top-sm right-sm flex gap-xs">
+<span class="bg-tertiary-container/30 backdrop-blur-md text-tertiary text-[10px] px-sm py-[2px] rounded-full border border-tertiary/20 uppercase font-bold">Video</span>
+</div>
+<div class="absolute bottom-sm left-sm">
+<span class="text-[10px] bg-black/50 backdrop-blur-sm px-sm py-[2px] rounded-md font-code-md text-white">00:15</span>
+</div>
+</div>
+<div class="p-md flex flex-col gap-xs">
+<div class="flex justify-between items-center">
+<span class="font-code-md text-[11px] text-on-surface-variant">SEPT 28, 2023</span>
+<div class="flex gap-1">
+<span class="material-symbols-outlined text-[14px] text-outline-variant">info</span>
+</div>
+</div>
+<p class="font-label-md text-label-md text-on-surface truncate">Midnight City Walk</p>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="glass-panel rounded-xl overflow-hidden group hover-glow transition-all duration-300">
+<div class="relative aspect-[3/4] overflow-hidden">
+<img class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" data-alt="A minimalist abstract art background featuring fluid, glass-like waves in shades of electric purple and deep navy. The lighting is diffused, creating a soft glow that accentuates the curves and depths of the shapes. This high-end visual style represents a professional digital canvas, blending glassmorphism with premium dark mode aesthetics." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDdQz4Kcq4DQi1acvyTOT0TS5IaocQN7qQ2M9WtHfMaEL8h9sVpT8sm4yF3pwneuE6x4WnBVPhz_tuk6is6ymQl5kAenN_1OjxpJLctJy26oeKjt2ktEKdch8hcpK3fkh67ZUw93EUQ-PEEybsr2fueKQkZI3NbzAbUV4g_IEsnjzSz4S47y3y-ATuroSfVuNKZST0VVsknR6HVYqkdblWURDATGk5ijCwRMqyIPrlH2wgM6MyLsdsKtnJuryXzO3SWlXGL7wcrSTs"/>
+<div class="absolute top-sm right-sm flex gap-xs">
+<span class="bg-primary/20 backdrop-blur-md text-primary text-[10px] px-sm py-[2px] rounded-full border border-primary/20 uppercase font-bold">Photo</span>
+</div>
+</div>
+<div class="p-md flex flex-col gap-xs">
+<div class="flex justify-between items-center">
+<span class="font-code-md text-[11px] text-on-surface-variant">AUG 15, 2023</span>
+<div class="flex gap-1">
+<span class="material-symbols-outlined text-[14px] text-primary" style="font-variation-settings: 'FILL' 1;">favorite</span>
+</div>
+</div>
+<p class="font-label-md text-label-md text-on-surface truncate">Abstract Flows #04</p>
+</div>
+</div>
+<!-- Card 4 -->
+<div class="glass-panel rounded-xl overflow-hidden group hover-glow transition-all duration-300">
+<div class="relative aspect-[3/4] overflow-hidden">
+<img class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" data-alt="A breathtaking landscape of jagged, snow-capped mountains under a clear starlit sky. The moon illuminates the peaks with a cool, silver light, while the valley below remains in deep shadow. This serene and powerful composition utilizes a wide color palette of deep blues and crisp whites, echoing a premium, reliable workstation aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA1L5W4qAQE-17UoSWCseaRRwmLgSWppZe9FfDdkiovB4051jdcw10xAeU37mMNqIjXNb-pFmwOa6Fs_8x5LQQe6inb8CX5JrYbEwGEjnnXapFBnnTOBAkQ44gqwuYk5Yh1QTiR2dyJ9YykrdkYAuBo2FdF6LsNFOU-lIqEcqZvOxi8rFdggGPa4SMbnaXtG0SZBi5XKLCob-y4wD6N7oImguMI9IPiTvHF_T55mwsFIVjalPpxx8-m0vIAjy8yNLO2RYbD4nz7Ht0"/>
+<div class="absolute top-sm right-sm flex gap-xs">
+<span class="bg-primary/20 backdrop-blur-md text-primary text-[10px] px-sm py-[2px] rounded-full border border-primary/20 uppercase font-bold">Photo</span>
+</div>
+</div>
+<div class="p-md flex flex-col gap-xs">
+<div class="flex justify-between items-center">
+<span class="font-code-md text-[11px] text-on-surface-variant">JUL 22, 2023</span>
+<div class="flex gap-1">
+<span class="material-symbols-outlined text-[14px] text-primary" style="font-variation-settings: 'FILL' 1;">location_on</span>
+</div>
+</div>
+<p class="font-label-md text-label-md text-on-surface truncate">Alpine Expedition</p>
+</div>
+</div>
+<!-- Card 5 -->
+<div class="glass-panel rounded-xl overflow-hidden group hover-glow transition-all duration-300">
+<div class="relative aspect-[3/4] overflow-hidden">
+<img class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" data-alt="A detailed macro shot of high-tech computer internal circuits illuminated by sharp, directional blue and purple LEDs. The metallic surfaces and complex pathways are rendered with extreme clarity, representing the 'Pro Utility' nature of the software. The lighting is moody and focused, emphasizing precision and power within a dark tech environment." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBmqkRXz5lryVaC6gycP2Vsh3U9E1hclXYH-A_Ba-4HnqPGwvUTW8UyxsjP0LjfxMmLv-8veMOgDanbk5GpwSl442Ci3_Ldn6r1DB0dS0jDhUPBgVwJhKoF_yOIoNuUzkas0gcfWcKsPvEtqlCnMYv3vWmPQkRSsndurEYGsZa8u_9LUhWSNR4MMj4oRhun6eeo4GGtNEBHwCkDZD7V-P3L2iBSXaveKIKlvkxBg0gjpHRpi8X_nWtHgZE8InEXAA3R8FCwDtnxEaA"/>
+<div class="absolute top-sm left-sm bg-black/40 backdrop-blur-md p-xs rounded-lg border border-white/10">
+<span class="material-symbols-outlined text-white text-[16px]">play_circle</span>
+</div>
+<div class="absolute top-sm right-sm flex gap-xs">
+<span class="bg-tertiary-container/30 backdrop-blur-md text-tertiary text-[10px] px-sm py-[2px] rounded-full border border-tertiary/20 uppercase font-bold">Video</span>
+</div>
+<div class="absolute bottom-sm left-sm">
+<span class="text-[10px] bg-black/50 backdrop-blur-sm px-sm py-[2px] rounded-md font-code-md text-white">00:42</span>
+</div>
+</div>
+<div class="p-md flex flex-col gap-xs">
+<div class="flex justify-between items-center">
+<span class="font-code-md text-[11px] text-on-surface-variant">JUN 08, 2023</span>
+<div class="flex gap-1">
+<span class="material-symbols-outlined text-[14px] text-tertiary" title="Overlay Active">layers</span>
+</div>
+</div>
+<p class="font-label-md text-label-md text-on-surface truncate">Tech Rig Showcase</p>
+</div>
+</div>
+<!-- Card 6 -->
+<div class="glass-panel rounded-xl overflow-hidden group hover-glow transition-all duration-300">
+<div class="relative aspect-[3/4] overflow-hidden">
+<img class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" data-alt="A vibrant cosmic nebula with swirling clouds of magenta and violet gas set against a deep black void filled with countless bright stars. The scene is majestic and expansive, illuminated by the internal light of newborn stars. The color palette is rich and intense, perfectly suited for a premium dark mode utility interface." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAuQu-H7byAPPn7O7S6V7m9YRB0yn5TLCeIup77VL7kVqxSEUH7gXA_26sVANpUtDxS_Q4-10a2oZBXpJyr-foCEoDj2CRLNRKivmgv566jM96RFSb79TN71o6_T2Xqp57cOrk1pnaRiOt90K56bs_rqzVL4v98SaCEtmnUed_01gLMbtkPuiR8IH1VDaWFzKK_i4W8171YNok-tYd9TZP27Vm6IIv9wzKdIgQ4lvj7pLfqQ34pG5GGAPMmQ1bHNjSceo3yBD3-Wcs"/>
+<div class="absolute top-sm right-sm flex gap-xs">
+<span class="bg-primary/20 backdrop-blur-md text-primary text-[10px] px-sm py-[2px] rounded-full border border-primary/20 uppercase font-bold">Photo</span>
+</div>
+</div>
+<div class="p-md flex flex-col gap-xs">
+<div class="flex justify-between items-center">
+<span class="font-code-md text-[11px] text-on-surface-variant">MAY 19, 2023</span>
+<div class="flex gap-1">
+<span class="material-symbols-outlined text-[14px] text-primary" style="font-variation-settings: 'FILL' 1;">location_on</span>
+</div>
+</div>
+<p class="font-label-md text-label-md text-on-surface truncate">Nebula Dreams</p>
+</div>
+</div>
+<!-- Card 7 -->
+<div class="glass-panel rounded-xl overflow-hidden group hover-glow transition-all duration-300">
+<div class="relative aspect-[3/4] overflow-hidden">
+<img class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" data-alt="A clean, minimalist 3D rendering of smooth geometric spheres and planes in a monochromatic dark grey environment. A single beam of electric purple light strikes one of the spheres, creating a sharp highlight and a soft, glowing shadow. This aesthetic emphasizes clarity, focus, and a professional digital workbench environment." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDfTNCWlCzfVtRD04JK28_C720QFGpCstDS0qMxn8bCQNxeyjDyD1BGx7kS39ZpAFpo0Q67_lEQgQEMuIVI-M8gDHIPH2O_scggvtRs59DITvxmjYNuvteUIshnb3Us81m0mhcLx9q0KIt3Us75N_Sbcuxa0tE9K3hXFx_g7g3TGg3c4M3pCLTzXyEzaTTLeYZ_CYwLyrbUL0Ra59B1y-yf3-KraYKf5HsjF5SEdjRtJTaW1vqRLqyaOZ9AsSbnZKtSa9aWByT6G-M"/>
+<div class="absolute top-sm right-sm flex gap-xs">
+<span class="bg-primary/20 backdrop-blur-md text-primary text-[10px] px-sm py-[2px] rounded-full border border-primary/20 uppercase font-bold">Photo</span>
+</div>
+</div>
+<div class="p-md flex flex-col gap-xs">
+<div class="flex justify-between items-center">
+<span class="font-code-md text-[11px] text-on-surface-variant">APR 30, 2023</span>
+<div class="flex gap-1">
+<span class="material-symbols-outlined text-[14px] text-outline-variant">info</span>
+</div>
+</div>
+<p class="font-label-md text-label-md text-on-surface truncate">Minimalist Spheres</p>
+</div>
+</div>
+<!-- Card 8 -->
+<div class="glass-panel rounded-xl overflow-hidden group hover-glow transition-all duration-300">
+<div class="relative aspect-[3/4] overflow-hidden">
+<img class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" data-alt="An expansive digital representation of a global network, with light trails connecting major cities across a darkened earth. The lighting is high-key and sharp, with electric blues and deep cyans forming the core palette. The style is futuristic and data-driven, fitting for a 'Pro Utility' tool that manages vast amounts of digital information." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBGXVK3_t7H8eBsjYjT88dFLWj2f6XVj7KqGs0GuCVNo1_kVCyGPXSbvRi9TMzk1jXuQrC-hgyVun6jCvPKcYb-XJO4RAjZA5SeeOWPZNsPMl_I-nXfQ9Ni75F7udd5TDuwVOdkwCQDc0wJAFH_3K4L_T1zpYegjrvIJv8xDEI4dHpMYNNNEhM-JDomdfR6hLn-He-e14rtSFzLlu_XtaMLKtzsqrWP-JCG4WtJuJQx__s0dGZZxkRX0xOwB6ixnuHs04_enHpTzWY"/>
+<div class="absolute top-sm left-sm bg-black/40 backdrop-blur-md p-xs rounded-lg border border-white/10">
+<span class="material-symbols-outlined text-white text-[16px]">play_circle</span>
+</div>
+<div class="absolute top-sm right-sm flex gap-xs">
+<span class="bg-tertiary-container/30 backdrop-blur-md text-tertiary text-[10px] px-sm py-[2px] rounded-full border border-tertiary/20 uppercase font-bold">Video</span>
+</div>
+<div class="absolute bottom-sm left-sm">
+<span class="text-[10px] bg-black/50 backdrop-blur-sm px-sm py-[2px] rounded-md font-code-md text-white">01:05</span>
+</div>
+</div>
+<div class="p-md flex flex-col gap-xs">
+<div class="flex justify-between items-center">
+<span class="font-code-md text-[11px] text-on-surface-variant">MAR 12, 2023</span>
+<div class="flex gap-1">
+<span class="material-symbols-outlined text-[14px] text-primary" style="font-variation-settings: 'FILL' 1;">location_on</span>
+</div>
+</div>
+<p class="font-label-md text-label-md text-on-surface truncate">Global Sync Demo</p>
+</div>
+</div>
+</div>
+<!-- Pagination/Load More (Subtle) -->
+<div class="flex justify-center py-xl">
+<button class="px-xl py-md glass-panel rounded-xl text-on-surface-variant hover:text-primary hover:border-primary/50 transition-all font-label-md text-label-md flex items-center gap-md active:scale-95">
+<span class="material-symbols-outlined text-[20px]">expand_more</span>
+                        Load More Memories
+                    </button>
+</div>
+</div>
+<!-- Contextual FAB (Hidden by default, shown on specific contexts if needed) -->
+<!-- We suppress FAB on Library as it's a detail/management screen, per rules -->
+</main>
+<!-- Right Inspector Panel (Pro Utility Specific) -->
+<aside class="hidden lg:flex flex-col w-80 border-l border-white/10 bg-surface-container-low/50 backdrop-blur-xl p-md overflow-y-auto">
+<h3 class="font-headline-sm text-headline-sm text-on-surface mb-md">Inspector</h3>
+<div class="space-y-lg">
+<!-- Selection Status -->
+<div class="p-md glass-panel rounded-xl">
+<div class="flex items-center justify-between mb-sm">
+<span class="text-[11px] text-on-surface-variant font-bold uppercase tracking-wider">Storage Usage</span>
+<span class="text-[11px] text-primary font-bold">84% Full</span>
+</div>
+<div class="h-1 w-full bg-white/5 rounded-full overflow-hidden mb-sm">
+<div class="h-full bg-gradient-to-r from-primary to-tertiary w-[84%]"></div>
+</div>
+<div class="flex justify-between text-[10px] text-on-surface-variant/60">
+<span>42.1 GB used</span>
+<span>50 GB total</span>
+</div>
+</div>
+<!-- Recent Activity Section -->
+<div>
+<h4 class="font-label-md text-label-md text-on-surface-variant font-bold mb-md">Metadata Extraction</h4>
+<div class="space-y-sm">
+<div class="flex items-start gap-sm p-sm hover:bg-white/5 rounded-lg transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-primary text-[18px]">verified</span>
+<div class="flex flex-col">
+<span class="text-[12px] text-on-surface font-medium">GPS Data Verified</span>
+<span class="text-[10px] text-on-surface-variant opacity-70">214 items updated</span>
+</div>
+</div>
+<div class="flex items-start gap-sm p-sm hover:bg-white/5 rounded-lg transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-tertiary text-[18px]">auto_fix_high</span>
+<div class="flex flex-col">
+<span class="text-[12px] text-on-surface font-medium">Overlay Detected</span>
+<span class="text-[10px] text-on-surface-variant opacity-70">12 new assets found</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Pro Actions -->
+<div class="pt-md border-t border-white/10">
+<h4 class="font-label-md text-label-md text-on-surface-variant font-bold mb-md">Vault Tools</h4>
+<div class="grid grid-cols-2 gap-sm">
+<button class="flex flex-col items-center gap-xs p-md glass-panel rounded-xl hover:bg-white/5 transition-all text-on-surface-variant hover:text-primary">
+<span class="material-symbols-outlined">download</span>
+<span class="text-[10px] font-bold">Export All</span>
+</button>
+<button class="flex flex-col items-center gap-xs p-md glass-panel rounded-xl hover:bg-white/5 transition-all text-on-surface-variant hover:text-primary">
+<span class="material-symbols-outlined">cleaning_services</span>
+<span class="text-[10px] font-bold">Optimize</span>
+</button>
+<button class="flex flex-col items-center gap-xs p-md glass-panel rounded-xl hover:bg-white/5 transition-all text-on-surface-variant hover:text-primary">
+<span class="material-symbols-outlined">security</span>
+<span class="text-[10px] font-bold">Privacy Check</span>
+</button>
+<button class="flex flex-col items-center gap-xs p-md glass-panel rounded-xl hover:bg-white/5 transition-all text-on-surface-variant hover:text-primary">
+<span class="material-symbols-outlined">share</span>
+<span class="text-[10px] font-bold">Vault Link</span>
+</button>
+</div>
+</div>
+</div>
+</aside>
+</div>
+<!-- Micro-interaction Scripts -->
+<script>
+        document.querySelectorAll('.group').forEach(card => {
+            card.addEventListener('mouseenter', () => {
+                // Subtle scale effect already handled by Tailwind group-hover
+            });
+            card.addEventListener('click', () => {
+                // Visual feedback on click
+                card.style.transform = 'scale(0.98)';
+                setTimeout(() => {
+                    card.style.transform = '';
+                }, 100);
+            });
+        });
+
+        // Search Bar Focus Effect
+        const searchInput = document.querySelector('input[type="text"]');
+        searchInput.addEventListener('focus', () => {
+            searchInput.parentElement.classList.add('ring-2', 'ring-primary/30');
+        });
+        searchInput.addEventListener('blur', () => {
+            searchInput.parentElement.classList.remove('ring-2', 'ring-primary/30');
+        });
+    </script>
+</body></html>

@@ -1,0 +1,447 @@
+<!DOCTYPE html><html class="dark" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>SnapVault Pro - Professional Memories Utility</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "surface-bright": "#2f3a4c",
+                      "on-primary-container": "#340080",
+                      "secondary-container": "#3f465c",
+                      "surface": "#081425",
+                      "on-secondary": "#283044",
+                      "on-primary-fixed": "#23005c",
+                      "on-secondary-fixed": "#131b2e",
+                      "error": "#ffb4ab",
+                      "secondary-fixed-dim": "#bec6e0",
+                      "on-primary": "#3c0091",
+                      "primary-fixed": "#e9ddff",
+                      "on-tertiary": "#00354a",
+                      "primary-fixed-dim": "#d0bcff",
+                      "surface-container": "#152031",
+                      "on-secondary-fixed-variant": "#3f465c",
+                      "inverse-on-surface": "#263143",
+                      "on-error-container": "#ffdad6",
+                      "background": "#081425",
+                      "on-tertiary-fixed": "#001e2c",
+                      "tertiary-fixed-dim": "#7bd0ff",
+                      "outline-variant": "#494454",
+                      "on-background": "#d8e3fb",
+                      "outline": "#958ea0",
+                      "on-tertiary-container": "#002d40",
+                      "surface-dim": "#081425",
+                      "tertiary-fixed": "#c4e7ff",
+                      "secondary": "#bec6e0",
+                      "on-surface": "#d8e3fb",
+                      "on-primary-fixed-variant": "#5516be",
+                      "surface-container-highest": "#2a3548",
+                      "inverse-primary": "#6d3bd7",
+                      "surface-tint": "#d0bcff",
+                      "primary-container": "#a078ff",
+                      "inverse-surface": "#d8e3fb",
+                      "secondary-fixed": "#dae2fd",
+                      "primary": "#d0bcff",
+                      "error-container": "#93000a",
+                      "on-surface-variant": "#cbc3d7",
+                      "tertiary": "#7bd0ff",
+                      "surface-variant": "#2a3548",
+                      "tertiary-container": "#009bd1",
+                      "surface-container-low": "#111c2d",
+                      "surface-container-lowest": "#040e1f",
+                      "on-tertiary-fixed-variant": "#004c69",
+                      "on-secondary-container": "#adb4ce",
+                      "on-error": "#690005",
+                      "surface-container-high": "#1f2a3c"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "gutter": "16px",
+                      "xs": "4px",
+                      "sm": "8px",
+                      "md": "16px",
+                      "lg": "24px",
+                      "unit": "4px",
+                      "xl": "32px",
+                      "margin": "32px"
+              },
+              "fontFamily": {
+                      "body-lg": ["Inter"],
+                      "headline-md": ["Inter"],
+                      "body-md": ["Inter"],
+                      "headline-sm": ["Inter"],
+                      "headline-lg": ["Inter"],
+                      "label-md": ["Inter"],
+                      "code-md": ["JetBrains Mono"]
+              },
+              "fontSize": {
+                      "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                      "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                      "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                      "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                      "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "500"}],
+                      "code-md": ["13px", {"lineHeight": "20px", "fontWeight": "400"}]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+        .glass-panel {
+            background: rgba(21, 32, 49, 0.4);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(255, 255, 255, 0.15);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .pro-shadow {
+            box-shadow: 0px 10px 30px rgba(139, 92, 246, 0.05);
+        }
+        .active-glow {
+            box-shadow: 0px 0px 15px rgba(208, 188, 255, 0.3);
+        }
+        .progress-gradient {
+            background: linear-gradient(90deg, #a078ff 0%, #7bd0ff 100%);
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        .terminal-cursor {
+            display: inline-block;
+            width: 8px;
+            height: 1.2em;
+            background-color: #d0bcff;
+            vertical-align: middle;
+            animation: blink 1s step-end infinite;
+        }
+        @keyframes blink {
+            from, to { opacity: 1; }
+            50% { opacity: 0; }
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background h-screen flex flex-col overflow-hidden font-body-md selection:bg-primary/30">
+<!-- TopAppBar from JSON Guidance -->
+<header class="flex justify-between items-center px-xl w-full z-10 bg-surface-dim/30 backdrop-blur-md h-14 border-b border-white/10">
+<div class="flex items-center gap-md">
+<span class="font-headline-sm text-headline-sm font-black text-on-surface tracking-tight">SnapVault Pro</span>
+<div class="h-4 w-px bg-white/10 mx-xs"></div>
+<span class="font-label-md text-label-md text-on-surface-variant/70 uppercase tracking-widest">Utility v2.4.0</span>
+</div>
+<div class="flex items-center gap-lg">
+<div class="relative group">
+<span class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors cursor-pointer" data-icon="search">search</span>
+</div>
+<div class="flex gap-md">
+<span class="material-symbols-outlined text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer" data-icon="notifications">notifications</span>
+<span class="material-symbols-outlined text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer" data-icon="help_outline">help_outline</span>
+</div>
+
+</div>
+</header>
+<div class="flex-1 flex overflow-hidden">
+<!-- SideNav Shell Implementation -->
+<nav class="hidden md:flex flex-col h-full p-md overflow-y-auto w-60 border-r border-white/15 bg-surface/40 backdrop-blur-xl">
+<div class="space-y-sm">
+<!-- Dashboard Active State Logic Applied -->
+<a class="flex items-center gap-md p-sm bg-white/10 text-primary font-bold rounded-lg transition-all duration-200 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-label-md text-label-md">Dashboard</span>
+</a>
+<a class="flex items-center gap-md p-sm text-on-surface-variant/70 hover:text-on-surface hover:bg-white/5 transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="photo_library">photo_library</span>
+<span class="font-label-md text-label-md">Library</span>
+</a>
+<a class="flex items-center gap-md p-sm text-on-surface-variant/70 hover:text-on-surface hover:bg-white/5 transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="terminal">terminal</span>
+<span class="font-label-md text-label-md">Environment</span>
+</a>
+<a class="flex items-center gap-md p-sm text-on-surface-variant/70 hover:text-on-surface hover:bg-white/5 transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-label-md text-label-md">Settings</span>
+</a>
+</div>
+<div class="mt-auto pt-xl">
+<button class="w-full bg-primary py-sm rounded-lg text-on-primary-container font-bold flex items-center justify-center gap-sm transition-all hover:brightness-110 active:scale-95 shadow-[0px_0px_20px_rgba(208,188,255,0.2)]">
+<span class="material-symbols-outlined text-[18px]" data-icon="sync">sync</span>
+<span class="font-label-md">Start Sync</span>
+</button>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col p-xl gap-xl overflow-y-auto bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-surface-container/20 via-background to-background">
+<div class="flex flex-col lg:flex-row gap-xl">
+<!-- Left Column: Controls (approx 40%) -->
+<div class="w-full lg:w-[40%] flex flex-col gap-lg">
+<!-- Setup Section -->
+<div class="glass-panel p-lg rounded-xl pro-shadow space-y-md">
+<div class="flex justify-between items-start">
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold">Setup</h2>
+<p class="font-label-md text-on-surface-variant/60">Initialize your local environment</p>
+</div>
+<button class="bg-white/5 border border-white/10 px-md py-xs rounded-lg text-on-surface hover:bg-white/10 transition-colors font-label-md flex items-center gap-xs">
+<span class="material-symbols-outlined text-[16px]" data-icon="build">build</span>
+                                Configure Environment
+                            </button>
+</div>
+</div>
+<!-- Source Card -->
+<div class="glass-panel p-lg rounded-xl pro-shadow space-y-lg">
+<h3 class="font-label-md text-primary uppercase tracking-widest font-bold">Source &amp; Destination</h3>
+<div class="space-y-md">
+<div>
+<label class="font-label-md text-on-surface-variant block mb-xs">History Data</label>
+<div class="flex items-center gap-sm bg-surface-container-lowest border border-white/5 p-sm rounded-lg group focus-within:border-primary/50 transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="file_open">file_open</span>
+<span class="font-body-md text-on-surface-variant/80 flex-1 truncate">memories_history.html</span>
+<span class="text-primary font-label-md">Browse</span>
+</div>
+</div>
+<div>
+<label class="font-label-md text-on-surface-variant block mb-xs">Output Folder</label>
+<div class="flex items-center gap-sm bg-surface-container-lowest border border-white/5 p-sm rounded-lg focus-within:border-primary/50 transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="folder_special">folder_special</span>
+<span class="font-body-md text-on-surface-variant/80 flex-1 truncate">/Users/admin/SnapVault/Export</span>
+<span class="text-primary font-label-md">Select</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Pipeline Card -->
+<div class="glass-panel p-lg rounded-xl pro-shadow space-y-lg">
+<h3 class="font-label-md text-primary uppercase tracking-widest font-bold">Pipeline Options</h3>
+<div class="space-y-sm">
+<!-- Toggle Item -->
+<div class="flex items-center justify-between p-sm hover:bg-white/5 rounded-lg transition-colors group">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-tertiary" data-icon="cloud_download">cloud_download</span>
+<span class="font-body-md text-on-surface">Download Memories</span>
+</div>
+<div class="w-10 h-5 bg-primary rounded-full relative cursor-pointer flex items-center px-[2px]">
+<div class="w-4 h-4 bg-white rounded-full translate-x-5"></div>
+</div>
+</div>
+<!-- Checkbox Item -->
+<div class="flex items-center justify-between p-sm hover:bg-white/5 rounded-lg transition-colors group">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-tertiary" data-icon="location_on">location_on</span>
+<span class="font-body-md text-on-surface">Add GPS Metadata</span>
+</div>
+<div class="w-5 h-5 border-2 border-primary bg-primary/20 rounded flex items-center justify-center cursor-pointer">
+<span class="material-symbols-outlined text-[16px] text-primary font-bold" data-icon="check">check</span>
+</div>
+</div>
+<!-- Toggle Item -->
+<div class="flex items-center justify-between p-sm hover:bg-white/5 rounded-lg transition-colors group">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-tertiary" data-icon="layers">layers</span>
+<span class="font-body-md text-on-surface">Combine Overlays</span>
+</div>
+<div class="w-10 h-5 bg-surface-container-highest rounded-full relative cursor-pointer flex items-center px-[2px]">
+<div class="w-4 h-4 bg-white/40 rounded-full"></div>
+</div>
+</div>
+<!-- Checkbox Item -->
+<div class="flex items-center justify-between p-sm hover:bg-white/5 rounded-lg transition-colors group">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-tertiary" data-icon="auto_delete">auto_delete</span>
+<span class="font-body-md text-on-surface">Remove Duplicates</span>
+</div>
+<div class="w-5 h-5 border-2 border-primary bg-primary/20 rounded flex items-center justify-center cursor-pointer">
+<span class="material-symbols-outlined text-[16px] text-primary font-bold" data-icon="check">check</span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex gap-md pt-md">
+<button class="flex-1 bg-primary py-md rounded-xl text-on-primary-container font-black text-headline-sm flex items-center justify-center gap-md transition-all hover:scale-[1.02] active:scale-95 shadow-[0px_0px_30px_rgba(208,188,255,0.3)]">
+<span class="material-symbols-outlined" data-icon="play_arrow" data-weight="fill">play_arrow</span>
+                            Start Sync
+                        </button>
+<button class="px-xl bg-surface-container-highest/50 border border-white/10 text-on-surface rounded-xl hover:bg-error/10 hover:border-error/30 hover:text-error transition-all group active:scale-90">
+<span class="material-symbols-outlined group-hover:animate-pulse" data-icon="stop" data-weight="fill">stop</span>
+</button>
+</div>
+</div>
+<!-- Right Column: Terminal (approx 60%) -->
+<div class="flex-1 flex flex-col gap-lg min-h-[400px]">
+<div class="glass-panel flex-1 rounded-xl pro-shadow flex flex-col overflow-hidden border border-white/5">
+<!-- Terminal Header -->
+<div class="bg-surface-container-high px-md py-sm flex items-center justify-between border-b border-white/5">
+<div class="flex items-center gap-sm">
+<div class="flex gap-[6px]">
+<div class="w-3 h-3 rounded-full bg-red-500/50"></div>
+<div class="w-3 h-3 rounded-full bg-amber-500/50"></div>
+<div class="w-3 h-3 rounded-full bg-green-500/50"></div>
+</div>
+<span class="ml-md font-code-md text-label-md text-on-surface-variant/80">bash — snapvault-pro — 80x24</span>
+</div>
+<div class="flex gap-md text-on-surface-variant/50">
+<span class="material-symbols-outlined text-[18px] cursor-pointer hover:text-on-surface" data-icon="content_copy">content_copy</span>
+<span class="material-symbols-outlined text-[18px] cursor-pointer hover:text-on-surface" data-icon="delete_sweep">delete_sweep</span>
+</div>
+</div>
+<!-- Terminal Body -->
+<div class="flex-1 bg-black/40 p-md font-code-md text-code-md overflow-y-auto space-y-xs">
+<div class="flex gap-md">
+<span class="text-tertiary">[INFO]</span>
+<span class="text-on-surface/90">Initializing download sequence for user: snap_user_99...</span>
+</div>
+<div class="flex gap-md">
+<span class="text-green-400">[SUCCESS]</span>
+<span class="text-on-surface/90">Environment verified. (Node.js v20.10.0 detected)</span>
+</div>
+<div class="flex gap-md">
+<span class="text-tertiary">[INFO]</span>
+<span class="text-on-surface/90">Parsing 'memories_history.html' (1,200 entries found)</span>
+</div>
+<div class="flex gap-md">
+<span class="text-tertiary">[INFO]</span>
+<span class="text-on-surface/90">Fetching media from CDN...</span>
+</div>
+<div class="flex gap-md">
+<span class="text-error">[ERROR]</span>
+<span class="text-on-surface/90">Metadata mismatch on file 042. Attempting fallback...</span>
+</div>
+<div class="flex gap-md">
+<span class="text-tertiary">[INFO]</span>
+<span class="text-on-surface/90">Retrying download for file 042...</span>
+</div>
+<div class="flex gap-md">
+<span class="text-green-400">[SUCCESS]</span>
+<span class="text-on-surface/90">File 042 downloaded with fallback source.</span>
+</div>
+<div class="flex gap-md">
+<span class="text-tertiary">[INFO]</span>
+<span class="text-on-surface/90">Processing batch 4 (Files 400-500)...</span>
+</div>
+<div class="flex gap-md opacity-50">
+<span class="text-tertiary">[INFO]</span>
+<span class="text-on-surface/90">Worker thread #3: Processing GPS tags...</span>
+</div>
+<div class="flex gap-md">
+<span class="text-on-surface-variant font-bold">$</span>
+<span class="text-on-surface/90">syncing_in_progress<span class="terminal-cursor"></span></span>
+</div>
+</div>
+</div>
+<!-- Stepper & Progress Section -->
+<div class="glass-panel p-lg rounded-xl pro-shadow">
+<!-- Stepper -->
+<div class="flex items-center justify-between mb-lg relative">
+<div class="absolute top-1/2 left-0 w-full h-[2px] bg-white/5 -z-10 -translate-y-1/2"></div>
+<!-- Step 1 (Checked) -->
+<div class="flex flex-col items-center gap-xs">
+<div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-on-primary-container font-bold z-10 shadow-[0_0_10px_rgba(208,188,255,0.4)]">
+<span class="material-symbols-outlined text-[18px]" data-icon="check">check</span>
+</div>
+<span class="font-label-md text-on-surface font-bold">Setup</span>
+</div>
+<!-- Step 2 (Active) -->
+<div class="flex flex-col items-center gap-xs">
+<div class="w-8 h-8 rounded-full border-2 border-primary bg-primary/20 flex items-center justify-center text-primary font-bold z-10 animate-pulse active-glow">
+<span class="material-symbols-outlined text-[18px]" data-icon="sync">sync</span>
+</div>
+<span class="font-label-md text-primary font-bold">Syncing</span>
+</div>
+<!-- Step 3 (Pending) -->
+<div class="flex flex-col items-center gap-xs">
+<div class="w-8 h-8 rounded-full border-2 border-white/10 bg-surface flex items-center justify-center text-on-surface-variant/40 font-bold z-10">
+                                    3
+                                </div>
+<span class="font-label-md text-on-surface-variant/40">Processing</span>
+</div>
+<!-- Step 4 (Pending) -->
+<div class="flex flex-col items-center gap-xs">
+<div class="w-8 h-8 rounded-full border-2 border-white/10 bg-surface flex items-center justify-center text-on-surface-variant/40 font-bold z-10">
+<span class="material-symbols-outlined text-[18px]" data-icon="flag">flag</span>
+</div>
+<span class="font-label-md text-on-surface-variant/40">Complete</span>
+</div>
+</div>
+<!-- Progress Bar -->
+<div class="space-y-sm">
+<div class="flex justify-between items-end">
+<span class="font-label-md text-on-surface font-bold">Downloading: 420 of 1200 files...</span>
+<span class="font-label-md text-tertiary">35%</span>
+</div>
+<div class="h-2 w-full bg-white/5 rounded-full overflow-hidden">
+<div class="h-full w-[35%] progress-gradient active-glow transition-all duration-1000 ease-in-out"></div>
+</div>
+<div class="flex justify-between text-[10px] text-on-surface-variant/40 font-code-md">
+<span class="">SPEED: 12.4 MB/s</span>
+<span class="">ETA: 02m 45s</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+<!-- Decorative Bottom Gradient -->
+<div class="fixed bottom-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-primary/50 to-transparent pointer-events-none"></div>
+<script>
+        // Micro-interaction for the Terminal Log Generation
+        const terminal = document.querySelector('.bg-black\\/40');
+        const logs = [
+            { type: 'INFO', text: 'Processing frame encryption for batch 08...' },
+            { type: 'SUCCESS', text: 'Auth token refreshed successfully.' },
+            { type: 'INFO', text: 'Thread #2: Optimized chunk delivery initiated.' },
+            { type: 'ERROR', text: 'Socket timeout on asset_901. Retrying...' },
+            { type: 'INFO', text: 'Memory mapping complete for cache synchronization.' }
+        ];
+
+        function addLog() {
+            if (!terminal) return;
+            const log = logs[Math.floor(Math.random() * logs.length)];
+            const colorClass = log.type === 'INFO' ? 'text-tertiary' : (log.type === 'SUCCESS' ? 'text-green-400' : 'text-error');
+            
+            const logElement = document.createElement('div');
+            logElement.className = 'flex gap-md opacity-0 transition-opacity duration-300';
+            logElement.innerHTML = `<span class="${colorClass}">[${log.type}]</span><span class="text-on-surface/90">${log.text}</span>`;
+            
+            const cursorLine = terminal.querySelector('.font-bold').parentElement;
+            terminal.insertBefore(logElement, cursorLine);
+            
+            setTimeout(() => logElement.classList.remove('opacity-0'), 10);
+            terminal.scrollTop = terminal.scrollHeight;
+
+            if (terminal.children.length > 20) {
+                terminal.removeChild(terminal.children[0]);
+            }
+        }
+
+        setInterval(addLog, 4500);
+
+        // Subtle parallax/glow effect follow
+        document.addEventListener('mousemove', (e) => {
+            const glow = document.createElement('div');
+            // This would normally be a single persistent element, but for a one-off:
+            // Let's just simulate the lighting shift via CSS vars if we wanted more complexity
+        });
+    </script>
+
+
+</body></html>

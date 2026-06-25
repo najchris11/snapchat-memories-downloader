@@ -26,12 +26,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # Get the last commit message
+
           COMMIT_MSG=$(git log -1 --pretty=%B)
           echo "Commit message: $COMMIT_MSG"
-          
-          # Determine version bump
+
           if [[ "$COMMIT_MSG" == *"MAJOR:"* ]]; then
             BUMP="major"
           elif [[ "$COMMIT_MSG" == *"MINOR:"* ]] || [[ "$COMMIT_MSG" == *"FEAT:"* ]]; then
@@ -39,50 +37,50 @@ jobs:
           else
             BUMP="patch"
           fi
-          
+
           echo "Bumping version ($BUMP)..."
-          
-          # Run python inline script to bump packageVersion in composeApp/build.gradle.kts
+
           NEW_VERSION=$(python3 -c "
           import re, sys
-          with open('composeApp/build.gradle.kts', 'r') as f:
-              content = f.read()
-          version_match = re.search(r'packageVersion\s*=\s*\"([^\"]+)\"', content)
+          with open('gradle.properties', 'r') as f:
+              prop_content = f.read()
+          version_match = re.search(r'app\.version\s*=\s*([^\r\n]+)', prop_content)
           if not version_match:
-              sys.exit('packageVersion not found')
-          version = version_match.group(1)
-          major, minor, patch = map(int, version.split('.'))
+              sys.exit('app.version not found in gradle.properties')
+          version = version_match.group(1).strip()
+          version_core = version.split('-')[0]
+          major, minor, patch = map(int, version_core.split('.'))
           bump = '$BUMP'
           if bump == 'major':
-              major += 1
-              minor = 0
-              patch = 0
+              major += 1; minor = 0; patch = 0
           elif bump == 'minor':
-              minor += 1
-              patch = 0
+              minor += 1; patch = 0
           else:
               patch += 1
           new_version = f'{major}.{minor}.{patch}'
-          content = re.sub(r'packageVersion\s*=\s*\"[^\"]+\"', f'packageVersion = \"{new_version}\"', content)
-          content = re.sub(r'versionName\s*=\s*\"[^\"]+\"', f'versionName = \"{new_version}\"', content)
-          code_match = re.search(r'versionCode\s*=\s*(\d+)', content)
+
+          prop_content = re.sub(r'app\.version\s*=\s*.*', f'app.version={new_version}', prop_content)
+          with open('gradle.properties', 'w') as f:
+              f.write(prop_content)
+
+          with open('composeApp/build.gradle.kts', 'r') as f:
+              build_content = f.read()
+          code_match = re.search(r'versionCode\s*=\s*(\d+)', build_content)
           if code_match:
               code = int(code_match.group(1)) + 1
-              content = re.sub(r'versionCode\s*=\s*\d+', f'versionCode = {code}', content)
-          with open('composeApp/build.gradle.kts', 'w') as f:
-              f.write(content)
+              build_content = re.sub(r'versionCode\s*=\s*\d+', f'versionCode = {code}', build_content)
+              with open('composeApp/build.gradle.kts', 'w') as f:
+                  f.write(build_content)
+
           print(new_version)
           ")
-          
+
           NEW_TAG="v$NEW_VERSION"
-          echo "New Version: $NEW_VERSION"
           echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
-          
-          # Commit and Push
-          git add composeApp/build.gradle.kts
+
+          git add gradle.properties composeApp/build.gradle.kts
           git commit -m "chore: release $NEW_TAG [skip ci]"
           git tag $NEW_TAG
-          
           git push origin main
           git push origin $NEW_TAG
 
@@ -90,13 +88,15 @@ jobs:
     needs: bump-version
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [macos-latest, windows-latest, ubuntu-latest]
+
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.bump-version.outputs.new_tag }}
-      
+
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
@@ -106,40 +106,41 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      # Install Linux dependencies if running on Ubuntu
-      - name: Install Linux Deps
-        if: matrix.os == 'ubuntu-latest'
+      # Strip local-machine JDK paths that don't exist on CI runners.
+      # org.gradle.java.home controls the Gradle daemon JVM; without this the
+      # daemon fails to start because it tries to use the Android Studio JBR path.
+      - name: Patch gradle.properties for CI
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libarchive-tools xz-utils zip unzip
+          sed -i.bak '/^org\.gradle\.java\.home/d' gradle.properties
+          sed -i.bak '/^org\.gradle\.java\.installations/d' gradle.properties
 
-      # Make sure packaging dependencies are installed on macOS
-      - name: Install macOS Deps
-        if: matrix.os == 'macos-latest'
-        run: |
-          echo "No extra dependencies needed"
+      - name: Make Gradle wrapper executable
+        if: runner.os != 'Windows'
+        run: chmod +x gradlew
 
-      - name: Prepare Bundled Runtime (macOS)
-        if: matrix.os == 'macos-latest'
-        run: |
-          bash scripts/prepare-runtime-macos.sh
+      - name: Install Linux native deps
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libarchive-tools xz-utils zip unzip
 
-      - name: Prepare Bundled Runtime (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          bash scripts/prepare-runtime-linux.sh
+      - name: Prepare bundled runtime (macOS)
+        if: runner.os == 'macOS'
+        run: bash scripts/prepare-runtime-macos.sh
 
-      - name: Prepare Bundled Runtime (Windows)
-        if: matrix.os == 'windows-latest'
+      - name: Prepare bundled runtime (Linux)
+        if: runner.os == 'Linux'
+        run: bash scripts/prepare-runtime-linux.sh
+
+      - name: Prepare bundled runtime (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
-        run: |
-          .\scripts\prepare-runtime-windows.ps1
-          
-      - name: Build & Package Desktop Distribution
-        run: |
-          ./gradlew packageDistributionForCurrentOS
+        run: .\scripts\prepare-runtime-windows.ps1
 
-      - name: Upload Release Assets
+      - name: Build & package desktop distribution
+        shell: bash
+        run: ./gradlew packageDistributionForCurrentOS -Pcompose.javaHome="$JAVA_HOME"
+
+      - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.bump-version.outputs.new_tag }}

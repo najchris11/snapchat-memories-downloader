@@ -1,7 +1,9 @@
 package com.najdev.snapvault
 
-expect fun loadThemePreference(): Boolean
-expect fun saveThemePreference(dark: Boolean)
+enum class ThemeMode { SYSTEM, DARK, LIGHT }
+
+expect fun loadThemeModePreference(): ThemeMode
+expect fun saveThemeModePreference(mode: ThemeMode)
 
 expect fun loadWorkersPreference(): Int
 expect fun saveWorkersPreference(workers: Int)

@@ -11,6 +11,8 @@ object BinaryExtractor {
     private val userHome = System.getProperty("user.home")
     val binDir = File(userHome, ".snapvault/bin")
 
+    private val commandCache = HashMap<String, String?>()
+
     init {
         if (!binDir.exists()) {
             binDir.mkdirs()
@@ -29,7 +31,12 @@ object BinaryExtractor {
         }
     }
 
-    fun checkCommand(commandName: String): String? {
+    fun checkCommand(commandName: String): String? = synchronized(commandCache) {
+        if (commandName in commandCache) commandCache[commandName]
+        else resolveCommand(commandName).also { commandCache[commandName] = it }
+    }
+
+    private fun resolveCommand(commandName: String): String? {
         // 1. Check system PATH
         if (isCommandInPath(commandName)) {
             return commandName
@@ -48,17 +55,14 @@ object BinaryExtractor {
         val success = extractZipResource(zipResourcePath, binDir)
         if (success && localFile.exists()) {
             localFile.setExecutable(true, false)
-            
-            // Set execution permissions recursively for files in the bin directory if Unix
+
             if (!platform.startsWith("windows")) {
                 localFile.setExecutable(true, false)
                 binDir.listFiles()?.forEach { file ->
-                    if (file.isFile) {
-                        file.setExecutable(true, false)
-                    }
+                    if (file.isFile) file.setExecutable(true, false)
                 }
             }
-            
+
             return localFile.absolutePath
         }
 

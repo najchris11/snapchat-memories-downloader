@@ -31,6 +31,8 @@ interface ZipPipelineRunner {
         deleteOriginals: Boolean,
         workerCount: Int,
         onStart: (total: Int) -> Unit = {},
+        onMetaStart: (total: Int) -> Unit = {},
+        onMetaError: ((String) -> Unit)? = null,
         onProgress: (CombineResult) -> Unit
     )
 }
@@ -50,6 +52,8 @@ object NoOpZipPipelineRunner : ZipPipelineRunner {
         deleteOriginals: Boolean,
         workerCount: Int,
         onStart: (total: Int) -> Unit,
+        onMetaStart: (total: Int) -> Unit,
+        onMetaError: ((String) -> Unit)?,
         onProgress: (CombineResult) -> Unit
     ) = Unit
 }

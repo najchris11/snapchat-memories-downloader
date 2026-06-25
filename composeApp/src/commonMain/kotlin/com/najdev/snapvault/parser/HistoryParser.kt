@@ -21,6 +21,8 @@ object HistoryParser {
         """Latitude,\s*Longitude:\s*([+-]?\d+\.?\d*),\s*([+-]?\d+\.?\d*)"""
     )
 
+    //META legacy HTML parse: extracts download URLs, dateStr ("YYYY-MM-DD HH:MM:SS UTC"), and GPS from memories_history.html
+    //META GPS extracted from table row cells matching "Latitude, Longitude: X, Y" pattern
     fun parse(htmlContent: String): List<MemoryItem> {
         val doc = Ksoup.parse(htmlContent)
 
@@ -100,6 +102,8 @@ object HistoryParser {
         }
     }
 
+    //META legacy JSON parse: extracts download URLs, dateStr, and GPS from memories_history.json ("Saved Media" array)
+    //META no 0.0,0.0 guard here — null lat/lon means no location field; 0.0,0.0 is passed through as-is (unlike ZipJsonParser)
     fun parseJson(jsonContent: String): List<MemoryItem> {
         return runCatching {
             val root = Json.parseToJsonElement(jsonContent).jsonObject

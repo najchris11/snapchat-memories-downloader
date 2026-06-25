@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.AppBuildConfig
 import com.najdev.snapvault.DraggableArea
 import com.najdev.snapvault.ui.theme.ElectricPurple
+import com.najdev.snapvault.ui.theme.SnapVaultColors
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import snapchat_memories_downloader.composeapp.generated.resources.*
@@ -114,10 +115,10 @@ private fun VersionBadge(version: String) {
     Box(
         Modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(ElectricPurple.copy(alpha = 0.15f))
+            .background(SnapVaultColors.electricPurple.copy(alpha = 0.15f))
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
-        Text(version, fontSize = 10.sp, color = ElectricPurple, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+        Text(version, fontSize = 10.sp, color = SnapVaultColors.electricPurple, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
     }
 }
 
@@ -126,10 +127,10 @@ private fun DebugBadge() {
     Box(
         Modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(Color(0xFFFBBF24).copy(alpha = 0.15f))
+            .background(SnapVaultColors.warning.copy(alpha = 0.15f))
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
-        Text("DEBUG", fontSize = 9.sp, color = Color(0xFFFBBF24), fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+        Text("DEBUG", fontSize = 9.sp, color = SnapVaultColors.warning, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
     }
 }
 

@@ -128,6 +128,7 @@ compose.desktop {
     application {
         // AS JBR lacks jpackage; JDK 21 (Homebrew) is used for native distribution tasks
         javaHome = (project.findProperty("compose.javaHome") as? String)
+            ?: System.getenv("JAVA_HOME")
             ?: "/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
         mainClass = "com.najdev.snapvault.MainKt"
         jvmArgs += listOf(
@@ -139,6 +140,15 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "SnapVault"
             packageVersion = packageSemVer
+            macOS {
+                iconFile.set(project.file("src/desktopMain/resources/AppIcon.icns"))
+            }
+            windows {
+                iconFile.set(project.file("src/desktopMain/resources/AppIcon.ico"))
+            }
+            linux {
+                iconFile.set(project.file("src/desktopMain/resources/AppIcon.png"))
+            }
         }
     }
 }

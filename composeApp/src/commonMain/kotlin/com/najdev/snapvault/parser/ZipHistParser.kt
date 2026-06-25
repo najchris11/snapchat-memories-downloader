@@ -18,6 +18,8 @@ object ZipHistParser {
         """Latitude,\s*Longitude:\s*([+-]?\d+\.?\d*),\s*([+-]?\d+\.?\d*)"""
     )
 
+    //META parses html/memories_history.html from ZIP: extracts fullDateTime ("YYYY-MM-DD HH:MM:SS UTC"), mediaType, and GPS coordinates
+    //META fullDateTime is the source of truth for time-of-day in the ZIP pipeline if correlate() were wired up
     fun parse(html: String): List<HistMemoryEntry> {
         return rowRegex.findAll(html).mapNotNull { m ->
             val datetime = m.groupValues[1]
@@ -31,6 +33,7 @@ object ZipHistParser {
             if (loc != null) {
                 val la = loc.groupValues[1].toDoubleOrNull()
                 val lo = loc.groupValues[2].toDoubleOrNull()
+                //META GPS guard: treats (0.0, 0.0) as no-location (Snapchat default when location was off)
                 if (la != null && lo != null && !(la == 0.0 && lo == 0.0)) {
                     lat = la
                     lon = lo

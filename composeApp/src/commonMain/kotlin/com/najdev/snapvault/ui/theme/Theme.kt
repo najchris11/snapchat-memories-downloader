@@ -5,6 +5,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
 // ── Dark palette ─────────────────────────────────────────────────────────────
@@ -80,10 +82,36 @@ val SnapVaultLightColorScheme: ColorScheme = lightColorScheme(
     onError = Color(0xFFFFFFFF)
 )
 
+val LocalThemeIsDark = staticCompositionLocalOf { true }
+
+object SnapVaultColors {
+    val electricPurple: Color
+        @Composable
+        get() = if (LocalThemeIsDark.current) Color(0xFF8B5CF6) else Color(0xFF6D3BD7)
+
+    val success: Color
+        @Composable
+        get() = if (LocalThemeIsDark.current) Color(0xFF4ADE80) else Color(0xFF15803D)
+
+    val warning: Color
+        @Composable
+        get() = if (LocalThemeIsDark.current) Color(0xFFFBBF24) else Color(0xFFB45309)
+
+    val info: Color
+        @Composable
+        get() = if (LocalThemeIsDark.current) Color(0xFF38BDF8) else Color(0xFF0369A1)
+
+    val error: Color
+        @Composable
+        get() = if (LocalThemeIsDark.current) Color(0xFFF87171) else Color(0xFFB91C1C)
+}
+
 @Composable
 fun SnapVaultTheme(darkMode: Boolean = true, content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = if (darkMode) SnapVaultColorScheme else SnapVaultLightColorScheme,
-        content = content
-    )
+    CompositionLocalProvider(LocalThemeIsDark provides darkMode) {
+        MaterialTheme(
+            colorScheme = if (darkMode) SnapVaultColorScheme else SnapVaultLightColorScheme,
+            content = content
+        )
+    }
 }

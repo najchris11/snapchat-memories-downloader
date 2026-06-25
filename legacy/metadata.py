@@ -45,6 +45,7 @@ auto_confirm = parse_args()
 
 exiftool_available = check_exiftool() if USE_EXIFTOOL else False
 
+# META: legacy GPS extraction — parses memories_history.html table rows for "Latitude, Longitude: X, Y"
 def extract_locations_from_html(html_file):
     """Extract GPS coordinates from the HTML table."""
     if not os.path.exists(html_file):
@@ -100,6 +101,7 @@ def extract_urls_from_html(html_file):
     
     return [url for url, _ in matches]
 
+# META: legacy GPS write — calls exiftool subprocess with GPSLatitude/Longitude tags; date_str accepted but NOT written (args only include GPS)
 def write_metadata_to_file(filepath, latitude, longitude, date_str=None):
     """Write GPS data into the file's metadata via exiftool."""
     if not exiftool_available:
@@ -141,6 +143,7 @@ def write_metadata_to_file(filepath, latitude, longitude, date_str=None):
         print(f"[GPS ERROR] Failed to write for {os.path.basename(filepath)}: {e}")
         return False
 
+# META: legacy batch GPS write — walks a folder and calls write_metadata_to_file for each jpg/mp4/mov/avi; date_str passed but unused by write_metadata_to_file
 def process_files_in_folder(folder_path, latitude, longitude, date_str=None):
     """Write GPS/date data for all files in a folder (extracted ZIPs)."""
     if not os.path.isdir(folder_path):

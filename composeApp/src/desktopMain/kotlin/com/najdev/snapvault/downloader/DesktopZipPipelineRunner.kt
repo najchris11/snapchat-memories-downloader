@@ -38,6 +38,8 @@ class DesktopZipPipelineRunner(mediaProcessor: MediaProcessor) : ZipPipelineRunn
         deleteOriginals: Boolean,
         workerCount: Int,
         onStart: (total: Int) -> Unit,
+        onMetaStart: (total: Int) -> Unit,
+        onMetaError: ((String) -> Unit)?,
         onProgress: (CombineResult) -> Unit
-    ) = combiner.combineAll(outputDir, deleteOriginals, workerCount, onStart, onProgress)
+    ) = combiner.combineAll(outputDir, deleteOriginals, workerCount, onStart, onMetaStart, onMetaError, onProgress)
 }

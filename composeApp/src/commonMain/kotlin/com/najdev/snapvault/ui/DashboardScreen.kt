@@ -40,6 +40,7 @@ import com.najdev.snapvault.ui.theme.ElectricPurple
 import com.najdev.snapvault.ui.theme.InfoBlue
 import com.najdev.snapvault.ui.theme.SecondaryBlue
 import com.najdev.snapvault.ui.theme.TertiaryCyan
+import com.najdev.snapvault.ui.theme.SnapVaultColors
 import com.najdev.snapvault.viewmodel.DashboardViewModel
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -86,8 +87,8 @@ fun DashboardScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFFFFA726).copy(alpha = 0.12f))
-                        .border(1.dp, Color(0xFFFFA726).copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+                        .background(SnapVaultColors.warning.copy(alpha = 0.12f))
+                        .border(1.dp, SnapVaultColors.warning.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.Top
@@ -95,7 +96,7 @@ fun DashboardScreen(
                     Icon(
                         Icons.Outlined.Info,
                         contentDescription = null,
-                        tint = Color(0xFFFFA726),
+                        tint = SnapVaultColors.warning,
                         modifier = Modifier.size(15.dp).padding(top = 1.dp)
                     )
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -103,7 +104,7 @@ fun DashboardScreen(
                             "Android Preview",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFFFFA726)
+                            color = SnapVaultColors.warning
                         )
                         Text(
                             "Date metadata write and video overlay combining are not yet implemented on Android. ZIP extraction and GPS tagging for images work.",
@@ -146,31 +147,20 @@ fun DashboardScreen(
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             ModeToggleButton(
-                                label = "Single ZIP",
-                                selected = viewModel.zipSourceMode == ZipSourceMode.SingleFile,
-                                onClick = { viewModel.changeZipSourceMode(ZipSourceMode.SingleFile) },
-                                modifier = Modifier.weight(1f)
-                            )
-                            ModeToggleButton(
                                 label = "ZIP Folder",
                                 selected = viewModel.zipSourceMode == ZipSourceMode.Folder,
                                 onClick = { viewModel.changeZipSourceMode(ZipSourceMode.Folder) },
                                 modifier = Modifier.weight(1f)
                             )
+                            ModeToggleButton(
+                                label = "Pick Files",
+                                selected = viewModel.zipSourceMode == ZipSourceMode.MultipleFiles,
+                                onClick = { viewModel.changeZipSourceMode(ZipSourceMode.MultipleFiles) },
+                                modifier = Modifier.weight(1f)
+                            )
                         }
 
-                        if (viewModel.zipSourceMode == ZipSourceMode.SingleFile) {
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("ZIP File", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                FilePickerBox(
-                                    icon = Icons.Outlined.FolderZip,
-                                    label = viewModel.singleZipFile?.substringAfterLast('/')?.substringAfterLast('\\')
-                                        ?: "Select a mydata~*.zip file",
-                                    onClick = viewModel::pickSingleZip,
-                                    isSelected = viewModel.singleZipFile != null
-                                )
-                            }
-                        } else {
+                        if (viewModel.zipSourceMode == ZipSourceMode.Folder) {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text("ZIP Export Folder", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 FilePickerBox(
@@ -180,31 +170,62 @@ fun DashboardScreen(
                                     isSelected = viewModel.zipFolder != null
                                 )
                             }
-                        }
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                Icons.Outlined.Info,
-                                contentDescription = null,
-                                tint = InfoBlue,
-                                modifier = Modifier.size(12.dp)
-                            )
-                            Text(
-                                if (viewModel.zipSourceMode == ZipSourceMode.Folder)
-                                    "GPS data read from memories_history.json — matched by date"
-                                else
-                                    "GPS metadata requires the unnumbered main zip — single ZIPs may skip it",
-                                fontSize = 10.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
-                            )
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("ZIP Files", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (viewModel.selectedZipFiles.isNotEmpty()) {
+                                        Text(
+                                            "Clear",
+                                            fontSize = 11.sp,
+                                            color = SnapVaultColors.electricPurple,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.clickable { viewModel.changeZipSourceMode(ZipSourceMode.MultipleFiles) }
+                                        )
+                                    }
+                                }
+                                FilePickerBox(
+                                    icon = Icons.Outlined.FolderZip,
+                                    label = when (viewModel.selectedZipFiles.size) {
+                                        0 -> "Select mydata~*.zip files…"
+                                        1 -> viewModel.selectedZipFiles[0].substringAfterLast('/').substringAfterLast('\\')
+                                        else -> "${viewModel.selectedZipFiles.size} ZIP files selected"
+                                    },
+                                    onClick = viewModel::pickMultipleZips,
+                                    isSelected = viewModel.selectedZipFiles.isNotEmpty()
+                                )
+                                if (viewModel.selectedZipFiles.size > 1) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+                                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        viewModel.selectedZipFiles.take(4).forEach { path ->
+                                            Text(
+                                                path.substringAfterLast('/').substringAfterLast('\\'),
+                                                fontSize = 10.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                        if (viewModel.selectedZipFiles.size > 4) {
+                                            Text(
+                                                "+ ${viewModel.selectedZipFiles.size - 4} more",
+                                                fontSize = 10.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -264,7 +285,13 @@ fun DashboardScreen(
                             if (viewModel.importMode == ImportMode.Legacy) {
                                 PipelineItem(Icons.Outlined.CloudDownload, stringResource(Res.string.opt_download_memories), runDownload) { runDownload = it }
                             }
-                            PipelineItem(Icons.Outlined.GpsFixed, stringResource(Res.string.opt_inject_gps), runMetadata) { runMetadata = it }
+                            val isZipMode = viewModel.importMode != ImportMode.Legacy
+                            PipelineItem(
+                                icon = if (isZipMode) Icons.Outlined.CalendarMonth else Icons.Outlined.GpsFixed,
+                                label = if (isZipMode) stringResource(Res.string.opt_write_date_metadata) else stringResource(Res.string.opt_inject_gps),
+                                checked = runMetadata,
+                                onCheckedChange = { runMetadata = it }
+                            )
                             PipelineItem(Icons.Outlined.Layers, stringResource(Res.string.opt_combine_overlays), runCombine) { runCombine = it }
                             PipelineItem(Icons.Outlined.AutoDelete, stringResource(Res.string.opt_clean_duplicates), runDedupe) { runDedupe = it }
                         }
@@ -277,8 +304,8 @@ fun DashboardScreen(
             // Action buttons
             val canStart = viewModel.downloadFolder != null && when (viewModel.importMode) {
                 ImportMode.Zip -> when (viewModel.zipSourceMode) {
-                    ZipSourceMode.SingleFile -> viewModel.singleZipFile != null
                     ZipSourceMode.Folder -> viewModel.zipFolder != null
+                    ZipSourceMode.MultipleFiles -> viewModel.selectedZipFiles.isNotEmpty()
                 }
                 ImportMode.Legacy -> viewModel.htmlFile != null
             }
@@ -292,7 +319,7 @@ fun DashboardScreen(
                     enabled = !viewModel.isRunning && canStart,
                     modifier = Modifier.weight(1f).height(52.dp),
                     shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = ElectricPurple)
+                    colors = ButtonDefaults.buttonColors(containerColor = SnapVaultColors.electricPurple)
                 ) {
                     Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
@@ -349,7 +376,7 @@ fun DashboardScreen(
                         CircularProgressIndicator(
                             progress = { viewModel.progress.coerceIn(0f, 1f) },
                             modifier = Modifier.fillMaxSize(),
-                            color = ElectricPurple,
+                            color = SnapVaultColors.electricPurple,
                             trackColor = MaterialTheme.colorScheme.surfaceVariant,
                             strokeWidth = 9.dp
                         )
@@ -415,7 +442,7 @@ fun DashboardScreen(
                             Text(
                                 viewModel.logs.last(),
                                 fontSize = 10.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f)
@@ -442,7 +469,7 @@ fun DashboardScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             if (logsCopied) {
-                                Text("Copied!", fontSize = 10.sp, color = Color(0xFF4ADE80), fontWeight = FontWeight.SemiBold)
+                                Text("Copied!", fontSize = 10.sp, color = SnapVaultColors.success, fontWeight = FontWeight.SemiBold)
                             } else {
                                 Icon(
                                     Icons.Outlined.ContentCopy,
@@ -498,7 +525,7 @@ private fun MetricChip(text: String) {
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(4.dp))
             .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
-        Text(text, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f), fontFamily = FontFamily.Monospace)
+        Text(text, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
     }
 }
 
@@ -547,12 +574,12 @@ fun FilePickerBox(
         Text(
             text = label,
             fontSize = 12.sp,
-            color = if (isSelected) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+            color = if (isSelected) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
-        Text(stringResource(Res.string.browse_btn), fontSize = 10.sp, color = ElectricPurple, fontWeight = FontWeight.Bold)
+        Text(stringResource(Res.string.browse_btn), fontSize = 10.sp, color = SnapVaultColors.electricPurple, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -573,7 +600,7 @@ fun PipelineItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(icon, null, tint = if (checked) ElectricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(16.dp))
+            Icon(icon, null, tint = if (checked) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
             Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
         }
         Switch(
@@ -581,7 +608,7 @@ fun PipelineItem(
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = Color.White,
-                checkedTrackColor = ElectricPurple,
+                checkedTrackColor = SnapVaultColors.electricPurple,
                 uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
                 uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
             )
@@ -605,7 +632,7 @@ fun BlinkingCursor() {
         ),
         label = "blink"
     )
-    Box(Modifier.padding(start = 3.dp).width(7.dp).height(14.dp).alpha(alpha).background(ElectricPurple))
+    Box(Modifier.padding(start = 3.dp).width(7.dp).height(14.dp).alpha(alpha).background(SnapVaultColors.electricPurple))
 }
 
 @Composable
@@ -626,12 +653,12 @@ fun TerminalLogLine(log: String) {
             Text(
                 text = "[$tag]",
                 color = when (tag) {
-                    "SUCCESS", "DL", "DEDUPE" -> Color(0xFF4ADE80)
-                    "ERROR" -> Color(0xFFF87171)
-                    "WARN" -> Color(0xFFFBBF24)
-                    "META" -> TertiaryCyan
-                    "SKIP" -> SecondaryBlue.copy(alpha = 0.7f)
-                    else -> InfoBlue
+                    "SUCCESS", "DL", "DEDUPE" -> SnapVaultColors.success
+                    "ERROR" -> SnapVaultColors.error
+                    "WARN" -> SnapVaultColors.warning
+                    "META" -> SnapVaultColors.info
+                    "SKIP" -> SecondaryBlue.copy(alpha = 0.85f)
+                    else -> SnapVaultColors.info
                 },
                 fontFamily = FontFamily.Monospace,
                 fontSize = 11.sp,
@@ -658,28 +685,28 @@ fun StepItem(
             modifier = Modifier
                 .size(30.dp)
                 .clip(RoundedCornerShape(100))
-                .background(when { complete -> ElectricPurple; active -> ElectricPurple.copy(alpha = 0.2f); else -> MaterialTheme.colorScheme.surfaceContainerLowest })
-                .border(1.5.dp, if (active || complete) ElectricPurple else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(100)),
+                .background(when { complete -> SnapVaultColors.electricPurple; active -> SnapVaultColors.electricPurple.copy(alpha = 0.2f); else -> MaterialTheme.colorScheme.surfaceContainerLowest })
+                .border(1.5.dp, if (active || complete) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(100)),
             contentAlignment = Alignment.Center
         ) {
             when {
                 complete -> Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(15.dp))
-                active -> Icon(icon, null, tint = ElectricPurple, modifier = Modifier.size(15.dp))
-                else -> Text(step.toString(), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f))
+                active -> Icon(icon, null, tint = SnapVaultColors.electricPurple, modifier = Modifier.size(15.dp))
+                else -> Text(step.toString(), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
             }
         }
         Text(
             text = label,
             fontSize = 10.sp,
             fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (active || complete) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+            color = if (active || complete) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
         )
     }
 }
 
 @Composable
 fun StepperDivider(filled: Boolean = false) {
-    Box(Modifier.width(36.dp).height(1.5.dp).background(if (filled) ElectricPurple.copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant))
+    Box(Modifier.width(36.dp).height(1.5.dp).background(if (filled) SnapVaultColors.electricPurple.copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant))
 }
 
 @Composable
@@ -688,15 +715,15 @@ private fun ModeToggleButton(label: String, selected: Boolean, onClick: () -> Un
         onClick = onClick,
         modifier = modifier.height(32.dp),
         shape = RoundedCornerShape(6.dp),
-        color = if (selected) ElectricPurple.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceContainerLowest,
-        border = BorderStroke(1.dp, if (selected) ElectricPurple.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant)
+        color = if (selected) SnapVaultColors.electricPurple.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, if (selected) SnapVaultColors.electricPurple.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant)
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
             Text(
                 text = label,
                 fontSize = 11.sp,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (selected) ElectricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+                color = if (selected) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
             )
         }
     }

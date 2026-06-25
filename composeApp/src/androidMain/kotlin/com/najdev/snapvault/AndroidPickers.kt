@@ -15,8 +15,8 @@ actual fun rememberPlatformPickers(): PlatformPickers {
             override fun pickFolder(onResult: (String?) -> Unit) {
                 onResult(null)
             }
-            override fun pickZipFile(onResult: (String?) -> Unit) {
-                onResult(null)
+            override fun pickMultipleZips(onResult: (List<String>) -> Unit) {
+                onResult(emptyList())
             }
         }
     }

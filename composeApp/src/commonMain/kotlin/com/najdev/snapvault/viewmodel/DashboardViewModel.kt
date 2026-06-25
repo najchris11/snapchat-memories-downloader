@@ -10,8 +10,11 @@ import com.najdev.snapvault.model.FileMeta
 import com.najdev.snapvault.parser.*
 import io.ktor.client.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -34,11 +37,11 @@ class DashboardViewModel(
         private set
     var importMode by mutableStateOf(ImportMode.Zip)
         private set
-    var zipSourceMode by mutableStateOf(ZipSourceMode.SingleFile)
+    var zipSourceMode by mutableStateOf(ZipSourceMode.Folder)
         private set
     var zipFolder by mutableStateOf<String?>(null)
         private set
-    var singleZipFile by mutableStateOf<String?>(null)
+    var selectedZipFiles by mutableStateOf<List<String>>(emptyList())
         private set
 
     // ── Pipeline run state ───────────────────────────────────────────────────
@@ -62,15 +65,15 @@ class DashboardViewModel(
     // ── Picker actions ───────────────────────────────────────────────────────
     fun pickHtmlFile() = pickers.pickHtmlFile { it?.let { path -> htmlFile = path } }
     fun pickOutputFolder() = pickers.pickFolder { it?.let { path -> downloadFolder = path } }
-    fun pickZipFolder() = pickers.pickFolder { it?.let { path -> zipFolder = path; singleZipFile = null } }
-    fun pickSingleZip() = pickers.pickZipFile { it?.let { path -> singleZipFile = path; zipFolder = null } }
+    fun pickZipFolder() = pickers.pickFolder { it?.let { path -> zipFolder = path; selectedZipFiles = emptyList() } }
+    fun pickMultipleZips() = pickers.pickMultipleZips { paths -> if (paths.isNotEmpty()) { selectedZipFiles = paths; zipFolder = null } }
 
     fun changeImportMode(mode: ImportMode) { importMode = mode }
 
     fun changeZipSourceMode(mode: ZipSourceMode) {
         zipSourceMode = mode
         zipFolder = null
-        singleZipFile = null
+        selectedZipFiles = emptyList()
     }
 
     // ── Pipeline control ─────────────────────────────────────────────────────
@@ -153,93 +156,46 @@ class DashboardViewModel(
     ) {
         logs.add("[INFO] Scanning for ZIP file(s)…")
         val zipFiles: List<String> = when (zipSourceMode) {
-            ZipSourceMode.SingleFile -> {
-                listOf(singleZipFile ?: throw PipelineAbortException("No ZIP file selected."))
-            }
             ZipSourceMode.Folder -> {
                 zipPipelineRunner.listZipFiles(
                     zipFolder ?: throw PipelineAbortException("No ZIP folder selected.")
                 )
+            }
+            ZipSourceMode.MultipleFiles -> {
+                selectedZipFiles.ifEmpty { throw PipelineAbortException("No ZIP files selected.") }
             }
         }
 
         if (zipFiles.isEmpty()) throw PipelineAbortException("No .zip files found in selected folder.")
         logs.add("[INFO] Found ${zipFiles.size} zip file(s).")
 
-        val numberedSuffixRegex = Regex("""-\d+\.zip$""")
-        val mainZip = zipFiles.firstOrNull { path ->
-            val name = path.substringAfterLast('/').substringAfterLast('\\')
-            !numberedSuffixRegex.containsMatchIn(name)
-        }
-
-        var jsonEntries: List<JsonMemoryEntry> = emptyList()
-        var histEntries: List<HistMemoryEntry> = emptyList()
-        if (mainZip == null) {
-            logs.add("[WARN] No unnumbered main zip found — metadata sources unavailable. GPS/datetime enrichment skipped.")
-        } else {
-            val mainZipName = mainZip.substringAfterLast('/').substringAfterLast('\\')
-            logs.add("[INFO] Reading metadata from $mainZipName…")
-
-            val histContent = readZipEntry(mainZip, "html/memories_history.html")
-            if (histContent != null) {
-                histEntries = runCatching { ZipHistParser.parse(histContent) }.getOrElse { e ->
-                    logs.add("[WARN] Could not parse memories_history.html: ${e.message}")
-                    emptyList()
-                }
-                val histWithGps = histEntries.count { it.latitude != null }
-                logs.add("[INFO] memories_history.html: ${histEntries.size} entries, $histWithGps with GPS (${if (histEntries.isEmpty()) 0 else histWithGps * 100 / histEntries.size}%).")
-            } else {
-                logs.add("[WARN] memories_history.html not found in main zip.")
-            }
-
-            val jsonContent = readZipEntry(mainZip, "json/memories_history.json")
-            if (jsonContent != null) {
-                jsonEntries = runCatching { ZipJsonParser.parse(jsonContent) }.getOrElse { e ->
-                    logs.add("[WARN] Could not parse memories_history.json: ${e.message}")
-                    emptyList()
-                }
-                logs.add("[INFO] memories_history.json: ${jsonEntries.size} entries (JSON fallback source).")
-            } else {
-                logs.add("[WARN] memories_history.json not found in main zip.")
-            }
-
-            if (histEntries.isEmpty() && jsonEntries.isEmpty()) {
-                logs.add("[WARN] No metadata sources found — GPS/datetime enrichment unavailable.")
-            }
-        }
-
         val itemsByZip = mutableMapOf<String, List<HtmlMemoryEntry>>()
-        val allHtmlEntries = mutableListOf<HtmlMemoryEntry>()
-        val seenUuids = mutableMapOf<String, String>() // uuid -> first zip name
-        var dupUuidCount = 0
+        var totalMemoryCount = 0
         for (zipPath in zipFiles) {
-            val htmlContent = readZipEntry(zipPath, "memories/memories.html") ?: continue
-            val entries = ZipImportParser.parseMemoriesHtml(htmlContent)
             val zipName = zipPath.substringAfterLast('/').substringAfterLast('\\')
-            for (entry in entries) {
-                val prev = seenUuids.put(entry.uuid, zipName)
-                if (prev != null) {
-                    dupUuidCount++
-                    if (dupUuidCount <= 5) {
-                        logs.add("[WARN] Duplicate UUID ${entry.uuid.take(8)} in $zipName (first seen in $prev, date=${entry.date})")
-                    }
-                }
+            var unmatchedCount = 0
+            val unmatchedSamples = mutableListOf<String>()
+            val entries = ZipImportParser.parseMemoriesFromZip(zipPath) { filePath ->
+                unmatchedCount++
+                if (unmatchedSamples.size < 5) unmatchedSamples.add(filePath.substringAfterLast('/'))
             }
             itemsByZip[zipPath] = entries
-            allHtmlEntries.addAll(entries)
+            totalMemoryCount += entries.size
+            val parsedFileCount = entries.size + entries.count { it.overlayFileName != null }
             val dateRange = if (entries.isNotEmpty()) {
                 val sorted = entries.map { it.date }.sorted()
                 "${sorted.first()} – ${sorted.last()}"
             } else "no entries"
-            logs.add("[INFO] $zipName: ${entries.size} memories ($dateRange)")
+            logs.add("[INFO] $zipName: ${entries.size} memories, $parsedFileCount files parsed ($dateRange)")
+            if (unmatchedCount > 0) {
+                logs.add("[WARN] $zipName: $unmatchedCount file(s) in memories/ skipped — unexpected filename format. Examples: ${unmatchedSamples.joinToString(", ")}")
+            }
         }
-        if (dupUuidCount > 5) logs.add("[WARN] … and ${dupUuidCount - 5} more duplicate UUIDs")
-        if (dupUuidCount > 0) logs.add("[WARN] $dupUuidCount duplicate UUIDs across zips — de-duplicated for correlation")
-        logs.add("[INFO] Indexed ${allHtmlEntries.size} media items across ${itemsByZip.size} zip(s).")
+        logs.add("[INFO] Indexed $totalMemoryCount memories across ${itemsByZip.size} zip(s).")
 
         if (AppBuildConfig.IS_DEBUG) {
-            logs.add("[DEBUG] Limiting to 50 items (debug mode)")
-            var remaining = 50
+            logs.add("[DEBUG] Limiting to 2500 items (debug mode)")
+            var remaining = 2500
             val trimmed = mutableMapOf<String, List<HtmlMemoryEntry>>()
             for ((k, v) in itemsByZip) {
                 if (remaining <= 0) break
@@ -248,24 +204,6 @@ class DashboardViewModel(
             }
             itemsByZip.clear()
             itemsByZip.putAll(trimmed)
-        }
-
-        // De-duplicate by UUID so positional alignment uses only the first-seen occurrence of each
-        // memory. Duplicates across zips would otherwise corrupt the group ordering and assign the
-        // wrong timestamp to every subsequent entry in that (date, type) group.
-        val dedupedHtmlEntries = allHtmlEntries.distinctBy { it.uuid }
-
-        val correlationMap = if (histEntries.isNotEmpty() || jsonEntries.isNotEmpty()) {
-            MetadataCorrelator.correlate(histEntries, jsonEntries, dedupedHtmlEntries)
-        } else emptyMap()
-        val histMatched = correlationMap.values.count { it.source == CorrSource.Hist }
-        val jsonMatched = correlationMap.values.count { it.source == CorrSource.Json }
-        val unmatched = dedupedHtmlEntries.size - correlationMap.size
-        logs.add("[INFO] Correlation: $histMatched exact (hist), $jsonMatched approx (JSON), $unmatched unmatched.")
-        val corrWithGps = correlationMap.values.count { it.latitude != null }
-        if (correlationMap.isNotEmpty()) {
-            val gpsPct = corrWithGps * 100 / correlationMap.size
-            logs.add("[INFO] GPS coverage: $corrWithGps / ${correlationMap.size} correlated entries ($gpsPct%).")
         }
 
         val vaultIndexPath = "$outDir/vault_index.json".toPath()
@@ -316,69 +254,79 @@ class DashboardViewModel(
         logs.add(extractSummary)
         currentStep = 2
 
-        var pipelineGpsCount = 0
         var pipelineCombinedCount = 0
         var pipelineCombineSkipped = 0
         var pipelineCombineErrors = 0
 
         if (runMetadata) {
-            logs.add("[INFO] Writing metadata to extracted files…")
+            // Skip overlay-paired entries when combine is also enabled — their -main file gets
+            // deleted during combining and the combined output gets dated in the combine phase.
+            // If combine is off, we tag the -main file normally (it stays on disk).
             val metaEntries = itemsByZip.values.flatten()
+                .let { all -> if (runCombine) all.filter { !it.hasOverlay || it.overlayFileName == null } else all }
             val metaTotal = metaEntries.size
+            //META date source: groups by HtmlMemoryEntry.date (YYYY-MM-DD from filename), NOT from hist/json correlation
+            //META GPS is NOT written here — MetadataCorrelator exists but is not called; fullDateTime (time-of-day) also not used
+            //META TODO: swap writeDateMetadataBatch for a GPS-aware call once a reliable UUID↔history matching algorithm is in place
+            val byDate = metaEntries.groupBy { it.date }
+            logs.add("[INFO] Writing date metadata — ${metaTotal} files across ${byDate.size} date group(s)…")
+
             var metaCount = 0
             var metaDone = 0
-            var exactTimestampCount = 0
-            var gpsWrittenCount = 0
-            var dateMismatchCount = 0
-            var fileNotFoundCount = 0
+            var metaFailCount = 0
             val metaEta = EtaEstimator()
-            // Track UUIDs already processed so duplicate entries (same snap saved multiple
-            // times with different save-dates) reuse the corr from the first occurrence rather
-            // than hitting the date-mismatch guard.
-            val seenMetaUuids = mutableSetOf<String>()
-            for (entry in metaEntries) {
-                currentCoroutineContext().ensureActive()
-                val outputPath = "$outDir/${entry.fileName}"
-                val corr = correlationMap[entry.uuid]
-                val isDuplicateEntry = !seenMetaUuids.add(entry.uuid)
-                // For duplicate entries the UUID is the same snap saved on a different date;
-                // the correlation from the first occurrence is still correct, so bypass the
-                // date-match guard. For first-occurrence entries the guard catches genuine
-                // positional-alignment errors and prevents writing the wrong timestamp.
-                val validCorr = if (isDuplicateEntry) corr else corr?.takeIf { it.fullDateTime.take(10) == entry.date }
-                if (!isDuplicateEntry && corr != null && validCorr == null) {
-                    dateMismatchCount++
-                    logs.add("[WARN] Date mismatch ${entry.uuid.take(8)}: filename=${entry.date} corr=${corr.fullDateTime.take(10)} — using filename date")
-                }
-                val dateTime = validCorr?.fullDateTime ?: "${entry.date} 00:00:00 UTC"
-                val dateOk = mediaProcessor.writeDateMetadata(outputPath, dateTime)
-                if (!dateOk) fileNotFoundCount++
-                if (dateOk && validCorr != null && validCorr.source == CorrSource.Hist) exactTimestampCount++
-                var gpsOk = false
-                if (validCorr?.latitude != null && validCorr.longitude != null) {
-                    gpsOk = mediaProcessor.writeGpsMetadata(outputPath, validCorr.latitude, validCorr.longitude, dateTime)
-                    if (gpsOk) gpsWrittenCount++
-                }
-                downloadedMeta[entry.fileName] = FileMeta(hasGps = gpsOk, hasOverlay = entry.hasOverlay)
-                if (dateOk) metaCount++
-                metaDone++
-                metaEta.record(metaDone)
-                progress = metaDone.toFloat() / metaTotal.coerceAtLeast(1)
-                progressText = "Metadata: $metaDone / $metaTotal"
-                val rate = metaEta.ratePerSec()
-                if (rate != null) {
-                    speedText = "${rate.toInt().coerceAtLeast(1)} files/s"
-                    etaText = when (val etaSec = metaEta.etaSeconds(metaTotal, metaDone)) {
-                        null -> "ETA: --"
-                        0L -> "ETA: done"
-                        else -> "ETA: ${formatEta(etaSec)}"
+
+            data class BatchResult(val tagged: Int, val entries: List<HtmlMemoryEntry>)
+
+            val metaChannel = Channel<BatchResult>(Channel.UNLIMITED)
+            val metaSemaphore = Semaphore(workerCount)
+
+            coroutineScope {
+                // Single consumer — serializes all counter/UI updates
+                launch {
+                    for (r in metaChannel) {
+                        metaCount += r.tagged
+                        metaFailCount += (r.entries.size - r.tagged)
+                        r.entries.forEach { entry ->
+                            downloadedMeta[entry.fileName] = FileMeta(hasGps = false, hasOverlay = entry.hasOverlay)
+                        }
+                        metaDone += r.entries.size
+                        metaEta.record(metaDone)
+                        progress = metaDone.toFloat() / metaTotal.coerceAtLeast(1)
+                        progressText = "Metadata: $metaDone / $metaTotal"
+                        val rate = metaEta.ratePerSec()
+                        if (rate != null) {
+                            speedText = "${rate.toInt().coerceAtLeast(1)} files/s"
+                            etaText = when (val etaSec = metaEta.etaSeconds(metaTotal, metaDone)) {
+                                null -> "ETA: --"
+                                0L -> "ETA: done"
+                                else -> "ETA: ${formatEta(etaSec)}"
+                            }
+                        }
                     }
                 }
+
+                // One coroutine per date group — semaphore caps concurrent exiftool processes
+                byDate.entries.map { (date, entries) ->
+                    async(Dispatchers.IO) {
+                        currentCoroutineContext().ensureActive()
+                        metaSemaphore.withPermit {
+                            val paths = entries.map { "$outDir/${it.fileName}" }
+                            //META actual write call: date-only batch write; returns count of files successfully tagged (0 for unsupported extensions)
+                            val tagged = mediaProcessor.writeDateMetadataBatch(paths, date) { msg ->
+                                logs.add("[WARN] $msg")
+                            }
+                            metaChannel.send(BatchResult(tagged, entries))
+                        }
+                    }
+                }.awaitAll()
+
+                metaChannel.close()
             }
+
             speedText = "SPEED: --"
             etaText = "ETA: --"
-            logs.add("[INFO] Metadata: $metaCount files tagged — exact timestamp: $exactTimestampCount, GPS: $gpsWrittenCount, date mismatches: $dateMismatchCount${if (fileNotFoundCount > 0) ", files not found: $fileNotFoundCount" else ""}.")
-            pipelineGpsCount = gpsWrittenCount
+            logs.add("[INFO] Metadata: $metaCount files tagged${if (metaFailCount > 0) ", $metaFailCount could not be tagged (see [WARN] lines above)" else ""}.")
         }
 
         if (runCombine) {
@@ -395,10 +343,16 @@ class DashboardViewModel(
                 outDir,
                 deleteOriginals = true,
                 workerCount = workerCount,
+                onMetaError = { msg -> logs.add("[WARN] $msg") },
                 onStart = { actual ->
                     combineTotal = actual.coerceAtLeast(1)
                     logs.add("[INFO] Found $actual overlay pairs. Combining…")
                     progressText = "Combining: 0 / $actual"
+                },
+                onMetaStart = { total ->
+                    logs.add("[INFO] Tagging $total combined file(s) with date metadata…")
+                    progressText = "Tagging combined files…"
+                    progress = 0f
                 }
             ) { result ->
                 when {
@@ -447,9 +401,8 @@ class DashboardViewModel(
         }.onFailure { e -> logs.add("[WARN] Could not write vault index: ${e.message}") }
 
         val summary = buildString {
-            append("[SUCCESS] Done — ${dedupedHtmlEntries.size} memories")
+            append("[SUCCESS] Done — $totalMemoryCount memories")
             append(", ${extractedCount + skippedCount} files on disk")
-            if (runMetadata && pipelineGpsCount > 0) append(", $pipelineGpsCount with GPS")
             if (runCombine && pipelineCombinedCount > 0) {
                 append(", $pipelineCombinedCount overlays combined")
                 if (pipelineCombineSkipped > 0) append(" ($pipelineCombineSkipped skipped)")
@@ -482,9 +435,9 @@ class DashboardViewModel(
         if (parsed.isEmpty() && isJson)
             logs.add("[DEBUG] JSON parsed but 0 items — verify the file contains a 'Saved Media' array")
         if (parsed.isEmpty() && !isJson) logs.add("[DEBUG] ${HistoryParser.diagnose(fileContent)}")
-        if (AppBuildConfig.IS_DEBUG) logs.add("[DEBUG] Limiting to 5 items (debug mode)")
+        if (AppBuildConfig.IS_DEBUG) logs.add("[DEBUG] Limiting to 2500 items (debug mode)")
 
-        val items = if (AppBuildConfig.IS_DEBUG) parsed.take(5) else parsed
+        val items = if (AppBuildConfig.IS_DEBUG) parsed.take(2500) else parsed
         if (items.isEmpty()) throw PipelineAbortException("No items found. Use memories_history.json from your Snapchat export (mydata.snapchat.com).")
 
         val vaultIndexPath = "$outDir/vault_index.json".toPath()
@@ -524,6 +477,8 @@ class DashboardViewModel(
                     "downloaded" -> {
                         logs.add("[DOWNLOADED] $name")
                         var hasGps = false
+                        //META legacy pipeline GPS write: only fires if MemoryItem has non-null lat/lon from memories_history.html/json
+                        //META dateStr here comes from HistoryParser ("YYYY-MM-DD HH:MM:SS UTC" or similar) and includes time-of-day
                         if (runMetadata && item.latitude != null && item.longitude != null && item.downloadedPath != null) {
                             val exifOk = mediaProcessor.writeGpsMetadata(item.downloadedPath, item.latitude, item.longitude, item.dateStr)
                             if (exifOk) { logs.add("   -> [METADATA] EXIF GPS tag written."); hasGps = true }
@@ -553,10 +508,13 @@ class DashboardViewModel(
 
     private suspend fun runDeduplication(outDir: String, dryRun: Boolean) {
         logs.add("[INFO] Scanning for duplicate files…")
+        progressText = "Deduplicating…"
         val deduplicator = Deduplicator(fileSystem)
-        val results = deduplicator.deduplicateFolder(outDir.toPath(), dryRun)
+        val results = withContext(Dispatchers.IO) {
+            deduplicator.deduplicateFolder(outDir.toPath(), dryRun)
+        }
         if (results.isEmpty()) {
-            logs.add("[SUCCESS] No duplicate files found.")
+            logs.add("[INFO] No duplicate files found.")
         } else {
             results.forEach { res ->
                 logs.add("[DELETED DUPES] Kept ${res.keptFile}, deleted: ${res.deletedFiles.joinToString()}")

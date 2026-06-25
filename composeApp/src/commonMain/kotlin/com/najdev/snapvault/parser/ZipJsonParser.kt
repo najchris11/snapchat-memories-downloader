@@ -19,6 +19,8 @@ object ZipJsonParser {
         """Latitude,\s*Longitude:\s*([+-]?\d+\.?\d*),\s*([+-]?\d+\.?\d*)"""
     )
 
+    //META parses memories_history.json from ZIP: extracts "Date" (full datetime), "Media Type", and "Location" (GPS string)
+    //META "Date" field format: "YYYY-MM-DD HH:MM:SS UTC" — used as fullDateTime in CorrelatedMeta when hist alignment fails
     fun parse(jsonContent: String): List<JsonMemoryEntry> {
         return runCatching {
             val root = Json.parseToJsonElement(jsonContent).jsonObject
@@ -37,7 +39,7 @@ object ZipJsonParser {
                     if (locMatch != null) {
                         val parsedLat = locMatch.groupValues[1].toDoubleOrNull()
                         val parsedLon = locMatch.groupValues[2].toDoubleOrNull()
-                        // Treat 0.0,0.0 as no location (location was off)
+                        //META GPS guard: treats 0.0,0.0 as no-location (location services were off)
                         if (parsedLat != null && parsedLon != null &&
                             !(parsedLat == 0.0 && parsedLon == 0.0)
                         ) {

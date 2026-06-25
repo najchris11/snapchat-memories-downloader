@@ -24,7 +24,7 @@ class MainActivity : ComponentActivity() {
             
             var onHtmlResult by remember { mutableStateOf<((String?) -> Unit)?>(null) }
             var onFolderResult by remember { mutableStateOf<((String?) -> Unit)?>(null) }
-            var onZipResult by remember { mutableStateOf<((String?) -> Unit)?>(null) }
+            var onZipsResult by remember { mutableStateOf<((List<String>) -> Unit)?>(null) }
 
             val htmlPickerLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.GetContent()
@@ -40,11 +40,14 @@ class MainActivity : ComponentActivity() {
                 onFolderResult?.invoke(path)
             }
 
-            val zipPickerLauncher = rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.GetContent()
-            ) { uri: Uri? ->
-                val path = uri?.let { copyUriToInternalStorage(context, it, "snapchat_export.zip") }
-                onZipResult?.invoke(path)
+            val zipsPickerLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.GetMultipleContents()
+            ) { uris: List<Uri> ->
+                val paths = uris.mapNotNull { uri ->
+                    val filename = "snapchat_export_${System.currentTimeMillis()}_${uris.indexOf(uri)}.zip"
+                    copyUriToInternalStorage(context, uri, filename)
+                }
+                onZipsResult?.invoke(paths)
             }
 
             val pickers = remember {
@@ -59,9 +62,9 @@ class MainActivity : ComponentActivity() {
                         folderPickerLauncher.launch(null)
                     }
 
-                    override fun pickZipFile(onResult: (String?) -> Unit) {
-                        onZipResult = onResult
-                        zipPickerLauncher.launch("application/zip")
+                    override fun pickMultipleZips(onResult: (List<String>) -> Unit) {
+                        onZipsResult = onResult
+                        zipsPickerLauncher.launch("application/zip")
                     }
                 }
             }

@@ -8,6 +8,9 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import java.awt.AlphaComposite
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
@@ -66,32 +69,59 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
         deleteOriginals: Boolean,
         workerCount: Int,
         onStart: (total: Int) -> Unit = {},
+        onMetaStart: (total: Int) -> Unit = {},
+        onMetaError: ((String) -> Unit)? = null,
         onProgress: (CombineResult) -> Unit
     ) {
         val pairs = findPairs(outputDir)
         onStart(pairs.size)
         val channel = Channel<CombineResult>(Channel.UNLIMITED)
+        val semaphore = Semaphore(workerCount)
+        val successfulPairs = mutableListOf<OverlayPair>()
+        val lock = Any()
 
         coroutineScope {
             launch {
                 for (result in channel) onProgress(result)
             }
 
-            pairs.chunked(workerCount).forEach { chunk ->
-                chunk.map { pair ->
-                    async(Dispatchers.IO) {
+            pairs.map { pair ->
+                async(Dispatchers.IO) {
+                    semaphore.withPermit {
                         val uuid = extractUuid(pair.mainFile.name) ?: pair.mainFile.nameWithoutExtension
-                        val status = processPair(pair, deleteOriginals)
+                        val onWarn: (String) -> Unit = { msg -> onMetaError?.invoke("[combine] $msg") }
+                        val status = processPair(pair, deleteOriginals, onWarn)
+                        if (status == "combined") synchronized(lock) { successfulPairs.add(pair) }
                         channel.send(CombineResult(uuid, pair.outputFile.absolutePath, status))
                     }
-                }.awaitAll()
-            }
+                }
+            }.awaitAll()
 
             channel.close()
         }
+
+        //META batch date write after combining: groups combined output files by YYYY-MM-DD prefix from filename
+        //META date source: filename prefix of mainFile (same as ZIP pipeline — date-only, no time, no GPS)
+        //META combined output file gets the date tag; original -main/-overlay files are deleted before this runs
+        if (successfulPairs.isNotEmpty()) {
+            val dateGroups = successfulPairs
+                .groupBy { it.mainFile.name.substringBefore('_').takeIf { d -> d.length == 10 } }
+                .filterKeys { it != null }
+            onMetaStart(successfulPairs.size)
+            withContext(Dispatchers.IO) {
+                dateGroups.forEach { (date, datePairs) ->
+                    val d = date ?: return@forEach
+                    mediaProcessor.writeDateMetadataBatch(
+                        datePairs.map { it.outputFile.absolutePath },
+                        d,
+                        onMetaError
+                    )
+                }
+            }
+        }
     }
 
-    private fun processPair(pair: OverlayPair, deleteOriginals: Boolean): String {
+    private fun processPair(pair: OverlayPair, deleteOriginals: Boolean, onWarning: (String) -> Unit = {}): String {
         return try {
             val err = if (pair.isVideo) {
                 if (mediaProcessor.combineVideoWithOverlay(
@@ -108,13 +138,14 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
 
             if (err != null) return if (err.startsWith("skipped:")) err else "error: $err"
 
-            if (!pair.isVideo) {
-                copyExif(pair.mainFile.absolutePath, pair.outputFile.absolutePath)
+            // Verify output was actually written before destroying originals
+            if (!pair.outputFile.exists() || pair.outputFile.length() == 0L) {
+                return "error: output missing after combine — ${pair.outputFile.name}"
             }
 
             if (deleteOriginals) {
-                pair.mainFile.delete()
-                pair.overlayFile.delete()
+                if (!pair.mainFile.delete()) onWarning("could not delete main: ${pair.mainFile.name}")
+                if (!pair.overlayFile.delete()) onWarning("could not delete overlay: ${pair.overlayFile.name}")
             }
 
             "combined"
@@ -144,7 +175,8 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
             g.dispose()
 
             val format = if (outputFile.extension.lowercase() == "png") "PNG" else "JPEG"
-            ImageIO.write(combined, format, outputFile)
+            val wrote = ImageIO.write(combined, format, outputFile)
+            if (!wrote) return "no ImageIO writer for format=$format (ext=${outputFile.extension})"
             null
         } catch (e: Exception) {
             e.message ?: "unknown exception"

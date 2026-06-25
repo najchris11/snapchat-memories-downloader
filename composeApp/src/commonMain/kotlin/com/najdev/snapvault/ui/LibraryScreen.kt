@@ -41,6 +41,7 @@ import com.najdev.snapvault.loadThumbnail
 import com.najdev.snapvault.scanMediaFiles
 import com.najdev.snapvault.ui.theme.ElectricPurple
 import com.najdev.snapvault.ui.theme.InfoBlue
+import com.najdev.snapvault.ui.theme.SnapVaultColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
@@ -103,22 +104,22 @@ fun LibraryScreen(
                     StatChip(
                         icon = Icons.Outlined.PhotoLibrary,
                         label = "${items.size} Memories",
-                        tint = ElectricPurple
+                        tint = SnapVaultColors.electricPurple
                     )
                     StatChip(
                         icon = Icons.Outlined.Image,
                         label = "${items.count { it.type == "photo" }} Photos",
-                        tint = ElectricPurple.copy(alpha = 0.7f)
+                        tint = SnapVaultColors.electricPurple
                     )
                     StatChip(
                         icon = Icons.Outlined.Videocam,
                         label = "${items.count { it.type == "video" }} Videos",
-                        tint = InfoBlue
+                        tint = SnapVaultColors.info
                     )
                     StatChip(
                         icon = Icons.Outlined.GpsFixed,
                         label = "${items.count { it.hasGps }} with GPS",
-                        tint = Color(0xFF4ADE80)
+                        tint = SnapVaultColors.success
                     )
                 }
                 if (downloadFolder != null) {
@@ -132,14 +133,14 @@ fun LibraryScreen(
                         Icon(
                             Icons.Outlined.Refresh,
                             contentDescription = "Refresh library",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                             modifier = Modifier.size(16.dp)
                         )
                     }
                 }
             }
 
-            // Filter + search bar
+            // Filter + search bar + sorting controls
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -147,7 +148,7 @@ fun LibraryScreen(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     // Type filter tabs
                     Row(
@@ -167,7 +168,7 @@ fun LibraryScreen(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(5.dp))
-                                    .background(if (active) ElectricPurple.copy(alpha = 0.15f) else Color.Transparent)
+                                    .background(if (active) SnapVaultColors.electricPurple.copy(alpha = 0.15f) else Color.Transparent)
                                     .clickable { selectedFilter = filter }
                                     .padding(horizontal = 12.dp, vertical = 6.dp),
                                 contentAlignment = Alignment.Center
@@ -176,7 +177,7 @@ fun LibraryScreen(
                                     text = label,
                                     fontSize = 12.sp,
                                     fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = if (active) ElectricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                    color = if (active) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
                                 )
                             }
                         }
@@ -198,7 +199,7 @@ fun LibraryScreen(
                     Icon(
                         Icons.Outlined.Search,
                         null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         modifier = Modifier.size(13.dp)
                     )
                     BasicTextField(
@@ -210,13 +211,13 @@ fun LibraryScreen(
                             color = MaterialTheme.colorScheme.onSurface,
                             fontSize = 12.sp
                         ),
-                        cursorBrush = SolidColor(ElectricPurple),
+                        cursorBrush = SolidColor(SnapVaultColors.electricPurple),
                         decorationBox = { inner ->
                             if (searchQuery.isEmpty()) {
                                 Text(
                                     stringResource(Res.string.lib_search_placeholder),
                                     fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 )
                             }
                             inner()
@@ -235,13 +236,13 @@ fun LibraryScreen(
                         Icon(
                             Icons.Outlined.PhotoLibrary,
                             null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
                             modifier = Modifier.size(48.dp)
                         )
                         Text(
                             stringResource(Res.string.lib_empty_state),
                             fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                             modifier = Modifier.widthIn(max = 280.dp)
                         )
@@ -250,7 +251,7 @@ fun LibraryScreen(
                                 Text(
                                     "Select Download Folder",
                                     fontSize = 12.sp,
-                                    color = ElectricPurple,
+                                    color = SnapVaultColors.electricPurple,
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }
@@ -289,6 +290,7 @@ fun LibraryScreen(
         Surface(
             modifier = Modifier.width(280.dp).fillMaxHeight(),
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
             shape = RoundedCornerShape(0.dp),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
@@ -383,14 +385,14 @@ private fun InspectorItemDetail(
                     .align(Alignment.TopStart)
                     .padding(8.dp)
                     .clip(RoundedCornerShape(100))
-                    .background(if (isVideo) InfoBlue.copy(alpha = 0.25f) else ElectricPurple.copy(alpha = 0.25f))
+                    .background(if (isVideo) SnapVaultColors.info.copy(alpha = 0.25f) else SnapVaultColors.electricPurple.copy(alpha = 0.25f))
                     .padding(horizontal = 8.dp, vertical = 3.dp)
             ) {
                 Text(
                     item.type.uppercase(),
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (isVideo) InfoBlue else ElectricPurple
+                    color = if (isVideo) SnapVaultColors.info else SnapVaultColors.electricPurple
                 )
             }
         }
@@ -412,7 +414,7 @@ private fun InspectorItemDetail(
                     item.date,
                     fontSize = 10.sp,
                     fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
             }
 
@@ -423,17 +425,17 @@ private fun InspectorItemDetail(
                 InspectorDetailRow(
                     label = "SIZE",
                     value = if (item.fileSizeBytes > 0) formatBytes(item.fileSizeBytes) else "—",
-                    valueColor = ElectricPurple
+                    valueColor = SnapVaultColors.electricPurple
                 )
                 InspectorDetailRow(
                     label = "GPS",
                     value = if (item.hasGps) "Tagged" else "No data",
-                    valueColor = if (item.hasGps) Color(0xFF4ADE80) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                    valueColor = if (item.hasGps) SnapVaultColors.success else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 )
                 InspectorDetailRow(
                     label = "OVERLAY",
                     value = if (item.hasOverlay) "Combined" else "None",
-                    valueColor = if (item.hasOverlay) InfoBlue else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                    valueColor = if (item.hasOverlay) SnapVaultColors.info else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 )
                 item.duration?.let {
                     InspectorDetailRow(label = "DURATION", value = it, valueColor = MaterialTheme.colorScheme.onSurface)
@@ -445,8 +447,8 @@ private fun InspectorItemDetail(
                 Surface(
                     onClick = onPreview,
                     shape = RoundedCornerShape(8.dp),
-                    color = ElectricPurple.copy(alpha = 0.1f),
-                    border = BorderStroke(1.dp, ElectricPurple.copy(alpha = 0.25f)),
+                    color = SnapVaultColors.electricPurple.copy(alpha = 0.1f),
+                    border = BorderStroke(1.dp, SnapVaultColors.electricPurple.copy(alpha = 0.25f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -454,8 +456,8 @@ private fun InspectorItemDetail(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Outlined.ZoomIn, null, tint = ElectricPurple, modifier = Modifier.size(15.dp))
-                        Text("Open Preview", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = ElectricPurple)
+                        Icon(Icons.Outlined.ZoomIn, null, tint = SnapVaultColors.electricPurple, modifier = Modifier.size(15.dp))
+                        Text("Open Preview", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = SnapVaultColors.electricPurple)
                     }
                 }
             }
@@ -466,7 +468,7 @@ private fun InspectorItemDetail(
 @Composable
 private fun InspectorDetailRow(label: String, value: String, valueColor: Color) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f))
+        Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
         Text(value, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = valueColor)
     }
 }
@@ -484,7 +486,7 @@ private fun InspectorGlobalStats(items: List<LibraryItem>) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(Icons.Outlined.Info, null, tint = ElectricPurple, modifier = Modifier.size(16.dp))
+            Icon(Icons.Outlined.Info, null, tint = SnapVaultColors.electricPurple, modifier = Modifier.size(16.dp))
             Text(
                 stringResource(Res.string.lib_inspector_title),
                 style = MaterialTheme.typography.titleSmall,
@@ -501,20 +503,20 @@ private fun InspectorGlobalStats(items: List<LibraryItem>) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                Icon(Icons.Outlined.Storage, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(11.dp))
-                Text(stringResource(Res.string.lib_storage_label), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                Icon(Icons.Outlined.Storage, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), modifier = Modifier.size(11.dp))
+                Text(stringResource(Res.string.lib_storage_label), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f))
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
                     if (items.isEmpty()) "—" else "${items.size} file${if (items.size == 1) "" else "s"}",
                     fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
                 Text(
                     if (items.isEmpty()) "—" else formatBytes(totalBytes),
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
-                    color = ElectricPurple
+                    color = SnapVaultColors.electricPurple
                 )
             }
             if (items.isNotEmpty()) {
@@ -523,7 +525,7 @@ private fun InspectorGlobalStats(items: List<LibraryItem>) {
                 Text(
                     "$photoCount photo${if (photoCount == 1) "" else "s"} · $videoCount video${if (videoCount == 1) "" else "s"}",
                     fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
             }
         }
@@ -535,18 +537,18 @@ private fun InspectorGlobalStats(items: List<LibraryItem>) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                Icon(Icons.Outlined.Tag, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(11.dp))
-                Text(stringResource(Res.string.lib_metadata_label), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                Icon(Icons.Outlined.Tag, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), modifier = Modifier.size(11.dp))
+                Text(stringResource(Res.string.lib_metadata_label), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f))
             }
             MetadataRow(
                 icon = Icons.Outlined.GpsFixed,
-                iconTint = ElectricPurple,
+                iconTint = SnapVaultColors.electricPurple,
                 title = stringResource(Res.string.lib_gps_verified),
                 subtitle = if (items.isEmpty()) "—" else "$gpsCount item${if (gpsCount == 1) "" else "s"} tagged"
             )
             MetadataRow(
                 icon = Icons.Outlined.Layers,
-                iconTint = InfoBlue,
+                iconTint = SnapVaultColors.info,
                 title = stringResource(Res.string.lib_overlay_detected),
                 subtitle = if (items.isEmpty()) "—" else "$overlayCount asset${if (overlayCount == 1) "" else "s"} combined"
             )
@@ -597,7 +599,7 @@ fun MetadataRow(
         }
         Column {
             Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+            Text(subtitle, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
         }
     }
 }
@@ -688,39 +690,39 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(item.title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(item.date, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                            Text(item.date, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
                         }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             if (item.fileSizeBytes > 0) {
-                                Text(formatBytes(item.fileSizeBytes), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ElectricPurple)
+                                Text(formatBytes(item.fileSizeBytes), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SnapVaultColors.electricPurple)
                             }
                             if (item.hasGps) {
                                 Row(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(6.dp))
-                                        .background(ElectricPurple.copy(alpha = 0.1f))
+                                        .background(SnapVaultColors.electricPurple.copy(alpha = 0.1f))
                                         .padding(horizontal = 7.dp, vertical = 3.dp),
                                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Outlined.GpsFixed, null, tint = ElectricPurple, modifier = Modifier.size(11.dp))
-                                    Text("GPS", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ElectricPurple)
+                                    Icon(Icons.Outlined.GpsFixed, null, tint = SnapVaultColors.electricPurple, modifier = Modifier.size(11.dp))
+                                    Text("GPS", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = SnapVaultColors.electricPurple)
                                 }
                             }
                             if (item.hasOverlay) {
                                 Row(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(6.dp))
-                                        .background(InfoBlue.copy(alpha = 0.1f))
+                                        .background(SnapVaultColors.info.copy(alpha = 0.1f))
                                         .padding(horizontal = 7.dp, vertical = 3.dp),
                                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Outlined.Layers, null, tint = InfoBlue, modifier = Modifier.size(11.dp))
-                                    Text("OVERLAY", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = InfoBlue)
+                                    Icon(Icons.Outlined.Layers, null, tint = SnapVaultColors.info, modifier = Modifier.size(11.dp))
+                                    Text("OVERLAY", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = SnapVaultColors.info)
                                 }
                             }
                         }
@@ -744,7 +746,7 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
         shape = RoundedCornerShape(12.dp),
         border = BorderStroke(
             if (selected) 2.dp else 1.dp,
-            if (selected) ElectricPurple else MaterialTheme.colorScheme.outlineVariant
+            if (selected) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.outlineVariant
         )
     ) {
         Column {
@@ -790,10 +792,10 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                         .align(Alignment.TopEnd)
                         .padding(7.dp)
                         .clip(RoundedCornerShape(100))
-                        .background(if (isVideo) InfoBlue.copy(alpha = 0.2f) else ElectricPurple.copy(alpha = 0.2f))
+                        .background(if (isVideo) SnapVaultColors.info.copy(alpha = 0.2f) else SnapVaultColors.electricPurple.copy(alpha = 0.2f))
                         .border(
                             1.dp,
-                            if (isVideo) InfoBlue.copy(alpha = 0.3f) else ElectricPurple.copy(alpha = 0.3f),
+                            if (isVideo) SnapVaultColors.info.copy(alpha = 0.3f) else SnapVaultColors.electricPurple.copy(alpha = 0.3f),
                             RoundedCornerShape(100)
                         )
                         .padding(horizontal = 7.dp, vertical = 2.dp)
@@ -802,7 +804,7 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                         text = item.type.uppercase(),
                         fontSize = 8.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (isVideo) InfoBlue else ElectricPurple
+                        color = if (isVideo) SnapVaultColors.info else SnapVaultColors.electricPurple
                     )
                 }
 
@@ -835,7 +837,7 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                         Icon(
                             Icons.Default.Favorite,
                             null,
-                            tint = ElectricPurple,
+                            tint = SnapVaultColors.electricPurple,
                             modifier = Modifier.size(14.dp)
                         )
                     }
@@ -852,12 +854,12 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                     Text(
                         item.date,
                         fontSize = 9.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         fontFamily = FontFamily.Monospace
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        if (item.hasGps) Icon(Icons.Outlined.GpsFixed, "GPS", tint = ElectricPurple, modifier = Modifier.size(11.dp))
-                        if (item.hasOverlay) Icon(Icons.Outlined.Layers, "Overlay", tint = InfoBlue, modifier = Modifier.size(11.dp))
+                        if (item.hasGps) Icon(Icons.Outlined.GpsFixed, "GPS", tint = SnapVaultColors.electricPurple, modifier = Modifier.size(11.dp))
+                        if (item.hasOverlay) Icon(Icons.Outlined.Layers, "Overlay", tint = SnapVaultColors.info, modifier = Modifier.size(11.dp))
                     }
                 }
                 Text(

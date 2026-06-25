@@ -9,11 +9,11 @@ New-Item -ItemType Directory -Force -Path $ResourcesDir | Out-Null
 $TempDir = New-Item -ItemType Directory -Force -Path ([System.IO.Path]::GetTempPath()) -Name ([System.Guid]::NewGuid().ToString())
 
 try {
-  # 1. Download exiftool
+  # 1. Download exiftool (direct from exiftool.org — no redirects)
   Write-Host "Downloading ExifTool for Windows..."
-  $ExifUrl = 'https://sourceforge.net/projects/exiftool/files/exiftool-13.58_64.zip/download'
+  $ExifUrl = 'https://exiftool.org/exiftool-13.58_64.zip'
   $ExifZip = Join-Path $TempDir 'exiftool_download.zip'
-  Invoke-WebRequest -Uri $ExifUrl -OutFile $ExifZip
+  Invoke-WebRequest -Uri $ExifUrl -OutFile $ExifZip -UseBasicParsing
   
   $ExifExtractPath = Join-Path $TempDir 'exiftool_extracted'
   Expand-Archive -Path $ExifZip -DestinationPath $ExifExtractPath -Force
@@ -42,7 +42,7 @@ try {
   Write-Host "Downloading FFmpeg for Windows..."
   $FfmpegUrl = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip'
   $FfmpegZip = Join-Path $TempDir 'ffmpeg_download.zip'
-  Invoke-WebRequest -Uri $FfmpegUrl -OutFile $FfmpegZip
+  Invoke-WebRequest -Uri $FfmpegUrl -OutFile $FfmpegZip -UseBasicParsing
   
   $FfmpegExtractPath = Join-Path $TempDir 'ffmpeg_extracted'
   Expand-Archive -Path $FfmpegZip -DestinationPath $FfmpegExtractPath -Force

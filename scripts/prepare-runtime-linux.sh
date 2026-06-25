@@ -15,10 +15,10 @@ mkdir -p "$RESOURCES_DIR/linux-x64"
 # 1. Download ExifTool (Platform independent perl code)
 echo "Downloading ExifTool v${EXIFTOOL_VERSION}..."
 EXIFTOOL_TARBALL="Image-ExifTool-${EXIFTOOL_VERSION}.tar.gz"
-EXIFTOOL_URL="https://exiftool.org/history/${EXIFTOOL_TARBALL}"
-curl -fL "$EXIFTOOL_URL" -o "$TMP_DIR/$EXIFTOOL_TARBALL" || \
-curl -fL "https://exiftool.org/${EXIFTOOL_TARBALL}" -o "$TMP_DIR/$EXIFTOOL_TARBALL" || \
-curl -fL "https://sourceforge.net/projects/exiftool/files/${EXIFTOOL_TARBALL}/download" -o "$TMP_DIR/$EXIFTOOL_TARBALL"
+# Try SourceForge first (history URL 404s for older versions; direct exiftool.org
+# URL sometimes 404s too — SourceForge is the most reliable archive mirror).
+curl -fL "https://sourceforge.net/projects/exiftool/files/${EXIFTOOL_TARBALL}/download" -o "$TMP_DIR/$EXIFTOOL_TARBALL" || \
+curl -fL "https://exiftool.org/${EXIFTOOL_TARBALL}" -o "$TMP_DIR/$EXIFTOOL_TARBALL"
 
 tar -xzf "$TMP_DIR/$EXIFTOOL_TARBALL" -C "$TMP_DIR"
 EXIFTOOL_SRC_DIR=$(find "$TMP_DIR" -maxdepth 1 -type d -name "Image-ExifTool-*" | head -n 1)
@@ -41,15 +41,13 @@ chmod +x "$EXIFTOOL_ZIP_DIR/exiftool"
   zip -q -r "$TMP_DIR/exiftool.zip" exiftool exiftool-dist
 )
 
-# 2. Download FFmpeg Linux amd64 static build
-echo "Downloading FFmpeg Linux x64..."
-FFMPEG_URL="https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz"
-curl -L "$FFMPEG_URL" -o "$TMP_DIR/ffmpeg.tar.xz"
-tar -xJf "$TMP_DIR/ffmpeg.tar.xz" -C "$TMP_DIR"
+# 2. Get FFmpeg from apt — more reliable than third-party static build CDNs.
+echo "Installing FFmpeg via apt..."
+sudo apt-get install -y --no-install-recommends ffmpeg
 
-FFMPEG_BIN=$(find "$TMP_DIR" -maxdepth 4 -type f -name "ffmpeg" | head -n 1)
+FFMPEG_BIN=$(which ffmpeg)
 if [[ -z "$FFMPEG_BIN" ]]; then
-  echo "ERROR: ffmpeg binary not found in archive" >&2
+  echo "ERROR: ffmpeg not found after apt install" >&2
   exit 1
 fi
 

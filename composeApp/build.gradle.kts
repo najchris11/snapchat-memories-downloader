@@ -15,6 +15,11 @@ plugins {
 }
 
 kotlin {
+    // Use whatever JDK 21 is installed — no JetBrains vendor preference.
+    // Without this, the Compose plugin implicitly requests JBR which Foojay
+    // cannot provision on macOS arm64 CI runners.
+    jvmToolchain(21)
+
     androidTarget {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)

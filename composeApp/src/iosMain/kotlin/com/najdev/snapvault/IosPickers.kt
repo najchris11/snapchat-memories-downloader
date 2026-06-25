@@ -14,9 +14,9 @@ class IosPickers : PlatformPickers {
         onResult(null)
     }
 
-    override fun pickZipFile(onResult: (String?) -> Unit) {
-        // TODO: Implement UIDocumentPickerViewController for zip files
-        onResult(null)
+    override fun pickMultipleZips(onResult: (List<String>) -> Unit) {
+        // TODO: Implement UIDocumentPickerViewController with multi-select for zip files
+        onResult(emptyList())
     }
 }
 

@@ -4,10 +4,26 @@ import java.util.prefs.Preferences
 
 private val prefs get() = Preferences.userRoot().node("snapvault")
 
-actual fun loadThemePreference(): Boolean = prefs.getBoolean("darkMode", true)
+actual fun loadThemeModePreference(): ThemeMode {
+    val modeStr = prefs.get("themeMode", null)
+    if (modeStr != null) {
+        return try {
+            ThemeMode.valueOf(modeStr)
+        } catch (e: Exception) {
+            ThemeMode.SYSTEM
+        }
+    }
+    // Backward compatibility: check legacy "darkMode" boolean
+    val hasOldDark = prefs.get("darkMode", null) != null
+    return if (hasOldDark) {
+        if (prefs.getBoolean("darkMode", true)) ThemeMode.DARK else ThemeMode.LIGHT
+    } else {
+        ThemeMode.SYSTEM
+    }
+}
 
-actual fun saveThemePreference(dark: Boolean) {
-    prefs.putBoolean("darkMode", dark)
+actual fun saveThemeModePreference(mode: ThemeMode) {
+    prefs.put("themeMode", mode.name)
 }
 
 actual fun loadWorkersPreference(): Int {

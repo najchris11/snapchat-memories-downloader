@@ -34,12 +34,19 @@ class Deduplicator(
     fun deduplicateFolder(folderPath: Path, dryRun: Boolean): List<DedupeResult> {
         if (!fileSystem.metadata(folderPath).isDirectory) return emptyList()
 
-        val files = fileSystem.list(folderPath).filter { fileSystem.metadata(it).isRegularFile }
+        data class FileEntry(val path: Path, val size: Long?)
+        val files = fileSystem.list(folderPath).mapNotNull { p ->
+            val m = fileSystem.metadata(p)
+            if (m.isRegularFile) FileEntry(p, m.size) else null
+        }
         if (files.size < 2) return emptyList()
 
-        // Calculate hashes and group files
+        // Pre-filter by size: files with unique sizes can't be duplicates, so skip hashing them
+        val bySize = files.groupBy { it.size }
+        val candidates = bySize.values.filter { it.size >= 2 }.flatten().map { it.path }
+
         val fileHashes = mutableMapOf<String, MutableList<Path>>()
-        for (file in files) {
+        for (file in candidates) {
             val hash = calculateSha256(file)
             if (hash != null) {
                 fileHashes.getOrPut(hash) { mutableListOf() }.add(file)

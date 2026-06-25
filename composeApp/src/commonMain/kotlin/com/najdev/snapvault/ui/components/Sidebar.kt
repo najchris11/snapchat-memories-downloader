@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.Screen
 import com.najdev.snapvault.ui.theme.ElectricPurple
+import com.najdev.snapvault.ui.theme.SnapVaultColors
 import org.jetbrains.compose.resources.stringResource
 import snapchat_memories_downloader.composeapp.generated.resources.*
 
@@ -39,6 +40,7 @@ fun AppSidebar(
     Surface(
         modifier = Modifier.width(220.dp).fillMaxHeight(),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(
@@ -57,6 +59,7 @@ fun AppSidebar(
                 iconActive = Icons.Filled.PhotoLibrary,
                 iconInactive = Icons.Outlined.PhotoLibrary,
                 active = currentScreen == Screen.Library,
+                enabled = !isRunning,
                 onClick = { onNavigate(Screen.Library) }
             )
             Spacer(Modifier.height(2.dp))
@@ -83,9 +86,9 @@ private fun StatusChip(isRunning: Boolean, currentStep: Int) {
     }
     val statusColor by animateColorAsState(
         when {
-            isRunning -> ElectricPurple
-            currentStep == 3 -> Color(0xFF4ADE80)
-            else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+            isRunning -> SnapVaultColors.electricPurple
+            currentStep == 3 -> SnapVaultColors.success
+            else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
         }
     )
 
@@ -105,7 +108,7 @@ private fun StatusChip(isRunning: Boolean, currentStep: Int) {
             CircularProgressIndicator(
                 modifier = Modifier.size(12.dp),
                 strokeWidth = 1.5.dp,
-                color = ElectricPurple
+                color = SnapVaultColors.electricPurple
             )
         }
     }
@@ -117,12 +120,16 @@ fun SidebarNavItem(
     iconActive: ImageVector,
     iconInactive: ImageVector,
     active: Boolean,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
-    val bgColor by animateColorAsState(if (active) ElectricPurple.copy(alpha = 0.12f) else Color.Transparent)
+    val bgColor by animateColorAsState(if (active && enabled) SnapVaultColors.electricPurple.copy(alpha = 0.12f) else Color.Transparent)
     val contentColor by animateColorAsState(
-        if (active) MaterialTheme.colorScheme.onSurface
-        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+        when {
+            !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+            active -> MaterialTheme.colorScheme.onSurface
+            else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+        }
     )
 
     Row(
@@ -130,7 +137,7 @@ fun SidebarNavItem(
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(bgColor)
-            .clickable { onClick() },
+            .clickable(enabled = enabled) { onClick() },
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -138,7 +145,7 @@ fun SidebarNavItem(
                 .width(3.dp)
                 .height(36.dp)
                 .clip(RoundedCornerShape(topEnd = 4.dp, bottomEnd = 4.dp))
-                .background(if (active) ElectricPurple else Color.Transparent)
+                .background(if (active) SnapVaultColors.electricPurple else Color.Transparent)
         )
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -146,9 +153,9 @@ fun SidebarNavItem(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Icon(
-                imageVector = if (active) iconActive else iconInactive,
+                imageVector = if (active && enabled) iconActive else iconInactive,
                 contentDescription = null,
-                tint = if (active) ElectricPurple else contentColor,
+                tint = if (active && enabled) SnapVaultColors.electricPurple else contentColor,
                 modifier = Modifier.size(18.dp)
             )
             Text(

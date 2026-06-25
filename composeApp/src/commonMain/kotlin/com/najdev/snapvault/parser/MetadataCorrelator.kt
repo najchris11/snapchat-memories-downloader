@@ -1,10 +1,11 @@
 package com.najdev.snapvault.parser
 
-enum class CorrSource { Hist, Json }
+enum class CorrSource { Hist, Json  }
 
+//META result type: holds uuid→(fullDateTime with time, GPS) after correlating hist/json entries to HTML file entries
 data class CorrelatedMeta(
     val uuid: String,
-    val fullDateTime: String,
+    val fullDateTime: String, //META full "YYYY-MM-DD HH:MM:SS UTC" timestamp — richer than the date-only from filename
     val latitude: Double?,
     val longitude: Double?,
     val source: CorrSource = CorrSource.Hist
@@ -21,18 +22,21 @@ object MetadataCorrelator {
      * Fallback: for any UUID not covered by hist alignment, fall back to JSON bucket-pop
      * keyed by (dateOnly, mediaType).
      */
+    //META correlate(): matches each HTML entry (uuid, date-only) to a hist/json entry (fullDateTime + GPS)
+    //META primary path: positional alignment within (date, mediaType) groups; fallback: JSON bucket-pop
+    //META IMPORTANT: result is computed but NOT currently used in DashboardViewModel — GPS and fullDateTime are unused in ZIP pipeline
     fun correlate(
         histEntries: List<HistMemoryEntry>,
         jsonEntries: List<JsonMemoryEntry>,
         htmlEntries: List<HtmlMemoryEntry>
     ): Map<String, CorrelatedMeta> {
-        // Group hist entries by (date, mediaType) preserving newest-first file order
+        //META group hist by (date, mediaType) newest-first (as it appears in history file)
         val histByKey = LinkedHashMap<Pair<String, String>, MutableList<HistMemoryEntry>>()
         for (entry in histEntries) {
             histByKey.getOrPut(entry.date to entry.mediaType) { mutableListOf() }.add(entry)
         }
 
-        // Group html entries by (date, mediaType) preserving oldest-first file order
+        //META group html by (date, mediaType) oldest-first (as extracted from memories.html)
         val htmlByKey = LinkedHashMap<Pair<String, String>, MutableList<HtmlMemoryEntry>>()
         for (entry in htmlEntries) {
             val mediaType = if (entry.isVideo) "Video" else "Image"
@@ -41,7 +45,7 @@ object MetadataCorrelator {
 
         val result = mutableMapOf<String, CorrelatedMeta>()
 
-        // Primary: positional alignment — reverse hist group (newest→oldest) and align with html (already oldest-first)
+        //META primary alignment: reverse hist group to oldest-first, zip positionally with html group
         for ((key, htmlGroup) in htmlByKey) {
             val histGroup = histByKey[key]?.reversed() ?: continue
             for ((i, htmlEntry) in htmlGroup.withIndex()) {
@@ -53,14 +57,15 @@ object MetadataCorrelator {
                 if (histEntry.date != key.first) continue
                 result[htmlEntry.uuid] = CorrelatedMeta(
                     uuid = htmlEntry.uuid,
-                    fullDateTime = histEntry.fullDateTime,
-                    latitude = histEntry.latitude,
+                    fullDateTime = histEntry.fullDateTime, //META full timestamp including time-of-day from history_memories.html
+                    latitude = histEntry.latitude,         //META GPS from history_memories.html
                     longitude = histEntry.longitude
                 )
             }
         }
 
-        // JSON bucket-pop: covers (a) entries with no hist match and (b) any cleared by the guard above
+        //META JSON fallback: for any uuid not matched by hist, pop an entry from memories_history.json by (dateOnly, mediaType)
+        //META JSON entries have date with time but no guaranteed time precision; GPS from JSON Location field
         val buckets = HashMap<Pair<String, String>, ArrayDeque<JsonMemoryEntry>>()
         for (entry in jsonEntries.reversed()) {
             val key = entry.dateOnly to entry.mediaType
@@ -72,7 +77,7 @@ object MetadataCorrelator {
             val jsonEntry = buckets[htmlEntry.date to mediaType]?.removeFirstOrNull() ?: continue
             result[htmlEntry.uuid] = CorrelatedMeta(
                 uuid = htmlEntry.uuid,
-                fullDateTime = jsonEntry.date,
+                fullDateTime = jsonEntry.date, //META full date from memories_history.json
                 latitude = jsonEntry.latitude,
                 longitude = jsonEntry.longitude,
                 source = CorrSource.Json

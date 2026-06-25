@@ -43,6 +43,18 @@ keystore.properties
 test-run/
 test-data/
 
+# ── Development artifacts (planning docs, investigation scripts) ───────────────
+plan*.md
+investigate_*.py
+
+# ── Linux bundled binaries (large; downloaded by scripts/prepare-runtime-linux.sh) ──
+composeApp/src/desktopMain/resources/bin/linux-x64/*.zip
+composeApp/src/desktopMain/resources/bin/linux-x64/*.tar.xz
+composeApp/src/desktopMain/resources/bin/linux-x64/*.tar.gz
+
+# ── iOS scaffold (desktop-only for v1.0) ──────────────────────────────────────
+iosApp/
+
 # ── Release artifacts (also covered by build/) ────────────────────────────────
 *.dmg
 *.msi

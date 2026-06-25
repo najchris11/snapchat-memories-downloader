@@ -14,3 +14,5 @@ actual fun nowIsoString(): String {
     }
     return formatter.stringFromDate(NSDate())
 }
+
+actual fun binaryInstallHint(): String = ""

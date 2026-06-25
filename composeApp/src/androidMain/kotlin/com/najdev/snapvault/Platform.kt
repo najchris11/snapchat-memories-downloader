@@ -7,3 +7,5 @@ actual fun nowIsoString(): String {
     sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
     return sdf.format(java.util.Date())
 }
+
+actual fun binaryInstallHint(): String = ""

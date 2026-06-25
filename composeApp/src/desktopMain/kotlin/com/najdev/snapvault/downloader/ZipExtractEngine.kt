@@ -23,20 +23,16 @@ class ZipExtractEngine {
         val outDir = File(outputDir).also { it.mkdirs() }
         val semaphore = Semaphore(workerCount)
 
-        // Build flat list of (zipPath, entryName, destFileName) tasks
-        data class ExtractTask(
-            val zipPath: String,
-            val entryName: String,
-            val destFileName: String,
-            val uuid: String
-        )
+        data class ExtractTask(val entryName: String, val destFileName: String, val uuid: String)
 
-        val tasks = mutableListOf<ExtractTask>()
+        // Group tasks by zip so each archive is opened exactly once
+        val tasksByZip = linkedMapOf<String, MutableList<ExtractTask>>()
         for ((zipPath, entries) in itemsByZip) {
+            val list = tasksByZip.getOrPut(zipPath) { mutableListOf() }
             for (entry in entries) {
-                tasks.add(ExtractTask(zipPath, "memories/${entry.fileName}", entry.fileName, entry.uuid))
+                list += ExtractTask("memories/${entry.fileName}", entry.fileName, entry.uuid)
                 if (entry.hasOverlay && entry.overlayFileName != null) {
-                    tasks.add(ExtractTask(zipPath, "memories/${entry.overlayFileName}", entry.overlayFileName, entry.uuid))
+                    list += ExtractTask("memories/${entry.overlayFileName}", entry.overlayFileName, entry.uuid)
                 }
             }
         }
@@ -49,19 +45,26 @@ class ZipExtractEngine {
                 for (result in channel) onProgress(result)
             }
 
-            tasks.map { task ->
+            tasksByZip.map { (zipPath, tasks) ->
                 async(Dispatchers.IO) {
-                    semaphore.withPermit {
-                        val result = extractEntry(task.zipPath, task.entryName, task.destFileName, outDir)
-                        channel.send(
-                            ExtractResult(
-                                uuid = task.uuid,
-                                fileName = task.destFileName,
-                                outputPath = File(outDir, task.destFileName).absolutePath,
-                                skipped = result == "skipped",
-                                error = if (result != "ok" && result != "skipped") result else null
-                            )
-                        )
+                    // ZipFile.getInputStream() returns independent streams; concurrent reads are safe
+                    ZipFile(zipPath).use { zf ->
+                        tasks.map { task ->
+                            async(Dispatchers.IO) {
+                                semaphore.withPermit {
+                                    val result = extractEntry(zf, task.entryName, task.destFileName, outDir)
+                                    channel.send(
+                                        ExtractResult(
+                                            uuid = task.uuid,
+                                            fileName = task.destFileName,
+                                            outputPath = File(outDir, task.destFileName).absolutePath,
+                                            skipped = result == "skipped",
+                                            error = if (result != "ok" && result != "skipped") result else null
+                                        )
+                                    )
+                                }
+                            }
+                        }.awaitAll()
                     }
                 }
             }.awaitAll()
@@ -70,22 +73,15 @@ class ZipExtractEngine {
         }
     }
 
-    private fun extractEntry(
-        zipPath: String,
-        entryName: String,
-        destFileName: String,
-        outDir: File
-    ): String {
+    private fun extractEntry(zf: ZipFile, entryName: String, destFileName: String, outDir: File): String {
         val destFile = File(outDir, destFileName)
         if (destFile.exists()) return "skipped"
 
         return try {
-            ZipFile(zipPath).use { zf ->
-                val entry = zf.getEntry(entryName) ?: return "error: entry not found: $entryName"
-                zf.getInputStream(entry).use { input ->
-                    destFile.outputStream().use { output ->
-                        input.copyTo(output)
-                    }
+            val entry = zf.getEntry(entryName) ?: return "error: entry not found: $entryName"
+            zf.getInputStream(entry).use { input ->
+                destFile.outputStream().use { output ->
+                    input.copyTo(output)
                 }
             }
             "ok"

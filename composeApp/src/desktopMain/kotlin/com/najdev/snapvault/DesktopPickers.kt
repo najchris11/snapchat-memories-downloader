@@ -12,7 +12,7 @@ class DesktopPickers : PlatformPickers {
             name.endsWith(".json", ignoreCase = true) || name.endsWith(".html", ignoreCase = true)
         }
         dialog.isVisible = true
-        val result = if (dialog.file != null) dialog.directory + dialog.file else null
+        val result = if (dialog.file != null) java.io.File(dialog.directory, dialog.file).absolutePath else null
         onResult(result)
     }
 
@@ -21,16 +21,17 @@ class DesktopPickers : PlatformPickers {
         val dialog = FileDialog(null as Frame?, "Select Output Folder", FileDialog.LOAD)
         dialog.isVisible = true
         System.setProperty("apple.awt.fileDialogForDirectories", "false")
-        val result = if (dialog.file != null) dialog.directory + dialog.file else null
+        val result = if (dialog.file != null) java.io.File(dialog.directory, dialog.file).absolutePath else null
         onResult(result)
     }
 
-    override fun pickZipFile(onResult: (String?) -> Unit) {
-        val dialog = FileDialog(null as Frame?, "Select Snapchat ZIP File", FileDialog.LOAD)
+    override fun pickMultipleZips(onResult: (List<String>) -> Unit) {
+        val dialog = FileDialog(null as Frame?, "Select Snapchat ZIP Files", FileDialog.LOAD)
         dialog.setFilenameFilter { _, name -> name.endsWith(".zip", ignoreCase = true) }
+        dialog.isMultipleMode = true
         dialog.isVisible = true
-        val result = if (dialog.file != null) dialog.directory + dialog.file else null
-        onResult(result)
+        val files = dialog.files?.map { it.absolutePath } ?: emptyList()
+        onResult(files)
     }
 }
 

@@ -106,35 +106,29 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      # Strip local-machine JDK paths that don't exist on CI runners.
-      # org.gradle.java.home controls the Gradle daemon JVM; without this the
-      # daemon fails to start because it tries to use the Android Studio JBR path.
+      # Strip local-machine JDK paths, then pin Gradle to the CI JDK.
+      # Without pinning, Gradle 9+ auto-provisions a JetBrains JDK for Compose
+      # packaging — Foojay has no download URL for JBR on macOS arm64, causing
+      # the build to fail immediately before any source is compiled.
       - name: Patch gradle.properties for CI
         shell: bash
         run: |
           sed -i.bak '/^org\.gradle\.java\.home/d' gradle.properties
           sed -i.bak '/^org\.gradle\.java\.installations/d' gradle.properties
+          echo "org.gradle.java.home=$JAVA_HOME" >> gradle.properties
+          echo "org.gradle.java.installations.auto-download=false" >> gradle.properties
 
       - name: Make Gradle wrapper executable
         if: runner.os != 'Windows'
         run: chmod +x gradlew
 
-      - name: Install Linux native deps
+      # macOS and Windows binaries are committed to the repo; no download needed.
+      # Linux binaries are gitignored (too large) so we build them fresh from apt.
+      - name: Prepare bundled runtime (Linux only)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libarchive-tools xz-utils zip unzip
-
-      - name: Prepare bundled runtime (macOS)
-        if: runner.os == 'macOS'
-        run: bash scripts/prepare-runtime-macos.sh
-
-      - name: Prepare bundled runtime (Linux)
-        if: runner.os == 'Linux'
-        run: bash scripts/prepare-runtime-linux.sh
-
-      - name: Prepare bundled runtime (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: .\scripts\prepare-runtime-windows.ps1
+        run: |
+          sudo apt-get update && sudo apt-get install -y zip unzip
+          bash scripts/prepare-runtime-linux.sh
 
       - name: Build & package desktop distribution
         shell: bash

@@ -100,10 +100,14 @@ jobs:
       # JBR satisfies Compose Desktop's implicit {vendor=JetBrains} toolchain
       # requirement for packaging tasks. Zulu/Temurin do not, causing Gradle
       # to fail on all three platforms when auto-provisioning is disabled.
+      # Pin exact version to avoid "resolve latest" API call; explicit token ensures
+      # any remaining GitHub API lookups are authenticated (avoids runner IP rate limits).
       - name: Set up JDK 21 (JetBrains Runtime)
         uses: actions/setup-java@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          java-version: '21'
+          java-version: '21.0.7'
           distribution: 'jetbrains'
 
       - name: Setup Gradle

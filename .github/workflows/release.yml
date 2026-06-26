@@ -97,25 +97,26 @@ jobs:
         with:
           ref: ${{ needs.bump-version.outputs.new_tag }}
 
-      - name: Set up JDK 21
+      # JBR satisfies Compose Desktop's implicit {vendor=JetBrains} toolchain
+      # requirement for packaging tasks. Zulu/Temurin do not, causing Gradle
+      # to fail on all three platforms when auto-provisioning is disabled.
+      - name: Set up JDK 21 (JetBrains Runtime)
         uses: actions/setup-java@v4
         with:
           java-version: '21'
-          distribution: 'zulu'
+          distribution: 'jetbrains'
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      # Strip local-machine JDK paths, then pin Gradle to the CI JDK.
-      # Without pinning, Gradle 9+ auto-provisions a JetBrains JDK for Compose
-      # packaging — Foojay has no download URL for JBR on macOS arm64, causing
-      # the build to fail immediately before any source is compiled.
+      # Strip local-machine JDK paths from gradle.properties.
+      # Do NOT re-add org.gradle.java.home — Windows backslash paths corrupt
+      # .properties files. JBR installed above is auto-detected by Gradle.
       - name: Patch gradle.properties for CI
         shell: bash
         run: |
           sed -i.bak '/^org\.gradle\.java\.home/d' gradle.properties
           sed -i.bak '/^org\.gradle\.java\.installations/d' gradle.properties
-          echo "org.gradle.java.home=$JAVA_HOME" >> gradle.properties
           echo "org.gradle.java.installations.auto-download=false" >> gradle.properties
 
       - name: Make Gradle wrapper executable

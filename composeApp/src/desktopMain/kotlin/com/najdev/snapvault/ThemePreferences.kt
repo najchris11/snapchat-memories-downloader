@@ -26,11 +26,5 @@ actual fun saveThemeModePreference(mode: ThemeMode) {
     prefs.put("themeMode", mode.name)
 }
 
-actual fun loadWorkersPreference(): Int {
-    val default = (Runtime.getRuntime().availableProcessors() * 0.6).toInt().coerceAtLeast(1)
-    return prefs.getInt("workers", default)
-}
-
-actual fun saveWorkersPreference(workers: Int) {
-    prefs.putInt("workers", workers)
-}
+actual fun computeWorkerCount(): Int =
+    (Runtime.getRuntime().availableProcessors() * 0.75).toInt().coerceAtLeast(1)

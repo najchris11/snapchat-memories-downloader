@@ -37,8 +37,6 @@ fun SettingsScreen(
     downloadFolder: String?,
     onResetIndex: () -> Unit,
     onEditOutputPath: () -> Unit,
-    workers: Int,
-    onWorkersChange: (Int) -> Unit,
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit
 ) {
@@ -124,54 +122,6 @@ fun SettingsScreen(
                     }
                 }
 
-                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-
-                // Workers slider
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                Icons.Outlined.Speed,
-                                null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Column {
-                                Text(stringResource(Res.string.set_concurrency_label), fontSize = 13.sp)
-                                Text(
-                                    stringResource(Res.string.set_concurrency_desc),
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                )
-                            }
-                        }
-                        Text(
-                            "$workers workers",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SnapVaultColors.electricPurple
-                        )
-                    }
-                    Slider(
-                        value = workers.toFloat(),
-                        onValueChange = { onWorkersChange(it.toInt()) },
-                        valueRange = 1f..16f,
-                        steps = 14,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = SliderDefaults.colors(
-                            thumbColor = SnapVaultColors.electricPurple,
-                            activeTrackColor = SnapVaultColors.electricPurple,
-                            inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
-                    )
-                }
             }
         }
 

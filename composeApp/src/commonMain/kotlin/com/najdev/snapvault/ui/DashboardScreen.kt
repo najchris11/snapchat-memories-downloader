@@ -49,7 +49,6 @@ import snapchat_memories_downloader.composeapp.generated.resources.*
 @Composable
 fun DashboardScreen(
     viewModel: DashboardViewModel,
-    workers: Int,
     onNavigateToSettings: () -> Unit,
 ) {
     // These are local UI preferences, not pipeline state
@@ -315,7 +314,7 @@ fun DashboardScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Button(
-                    onClick = { viewModel.startSync(runDownload, runMetadata, runCombine, runDedupe, dryRun, workers) },
+                    onClick = { viewModel.startSync(runDownload, runMetadata, runCombine, runDedupe, dryRun) },
                     enabled = !viewModel.isRunning && canStart,
                     modifier = Modifier.weight(1f).height(52.dp),
                     shape = RoundedCornerShape(10.dp),

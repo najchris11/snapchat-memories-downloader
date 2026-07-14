@@ -15,8 +15,8 @@ class DesktopMediaProcessor : MediaProcessor {
 
     private fun detectHwEncoder(): String? {
         val ffmpegPath = BinaryExtractor.checkCommand("ffmpeg") ?: return null
-        // Priority: NVENC (NVIDIA) → VideoToolbox (macOS) → QSV (Intel) → AMF (AMD)
-        val candidates = listOf("h264_nvenc", "h264_videotoolbox", "h264_qsv", "h264_amf")
+        // Priority: NVENC (NVIDIA) → VideoToolbox (macOS) → QSV (Intel) → VAAPI (Linux AMD/Intel) → AMF (Windows AMD)
+        val candidates = listOf("h264_nvenc", "h264_videotoolbox", "h264_qsv", "h264_vaapi", "h264_amf")
         return try {
             val proc = ProcessBuilder(ffmpegPath, "-encoders")
                 .redirectErrorStream(true)
@@ -27,12 +27,17 @@ class DesktopMediaProcessor : MediaProcessor {
         } catch (_: Exception) { null }
     }
 
+    // VAAPI requires CPU frames to be uploaded to GPU memory after the filter graph runs.
+    // All other hardware encoders accept yuv420p frames directly from the CPU filter graph.
+    private fun isVaapi(encoder: String) = encoder == "h264_vaapi"
+
     private fun hwEncodeArgs(encoder: String): List<String> = when (encoder) {
-        "h264_nvenc"       -> listOf("-c:v", "h264_nvenc",       "-preset", "p4",       "-cq",             "18", "-pix_fmt", "yuv420p")
-        "h264_videotoolbox"-> listOf("-c:v", "h264_videotoolbox","-q:v",    "65",                               "-pix_fmt", "yuv420p")
-        "h264_qsv"         -> listOf("-c:v", "h264_qsv",         "-global_quality", "18",                      "-pix_fmt", "nv12")
-        "h264_amf"         -> listOf("-c:v", "h264_amf",         "-quality","balanced", "-qp_i", "18", "-qp_p","18", "-pix_fmt", "yuv420p")
-        else               -> listOf("-c:v", "libx264",           "-preset", "medium",   "-crf",            "18", "-pix_fmt", "yuv420p")
+        "h264_nvenc"       -> listOf("-c:v", "h264_nvenc",        "-preset", "p4",          "-cq",            "18", "-pix_fmt", "yuv420p")
+        "h264_videotoolbox"-> listOf("-c:v", "h264_videotoolbox", "-q:v",    "65",                                  "-pix_fmt", "yuv420p")
+        "h264_qsv"         -> listOf("-c:v", "h264_qsv",          "-global_quality", "18",                         "-pix_fmt", "nv12")
+        "h264_vaapi"       -> listOf("-c:v", "h264_vaapi")
+        "h264_amf"         -> listOf("-c:v", "h264_amf",          "-quality","balanced", "-qp_i", "18", "-qp_p", "18", "-pix_fmt", "yuv420p")
+        else               -> listOf("-c:v", "libx264",            "-preset", "medium",   "-crf",            "18", "-pix_fmt", "yuv420p")
     }
 
     private fun softwareEncodeArgs() = hwEncodeArgs("libx264")
@@ -327,33 +332,49 @@ class DesktopMediaProcessor : MediaProcessor {
 
         // scale2ref scales the overlay (input 1) to the video's (input 0) dimensions.
         // shortest=1 stops the encode when the video ends (the PNG loops via -loop 1).
-        val filterComplex = "[1:v][0:v]scale2ref[ovr][base];[base][ovr]overlay=0:0:shortest=1:format=auto"
-        val baseArgs = listOf(
-            ffmpegPath, "-y",
-            "-i", videoPath,
-            "-loop", "1", "-i", overlayPath,
-            "-filter_complex", filterComplex,
-            "-c:a", "copy",
-        )
+        val filterBase = "[1:v][0:v]scale2ref[ovr][base];[base][ovr]overlay=0:0:shortest=1:format=auto"
 
-        fun runEncode(codecArgs: List<String>): Int {
-            // Discard stdout+stderr — FFmpeg writes verbose progress to stderr and the pipe buffer
-            // (~64 KB on macOS) fills up for long videos, causing waitFor() to block forever.
-            val proc = ProcessBuilder(baseArgs + codecArgs + outputPath)
-                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
-                .redirectError(ProcessBuilder.Redirect.DISCARD)
-                .start()
-            return proc.waitFor()
+        fun buildArgs(encoder: String?): List<String> {
+            // VAAPI needs frames uploaded from CPU memory to GPU after the filter graph runs.
+            // Append format=nv12,hwupload to the filter chain and map the named output explicitly.
+            return if (encoder != null && isVaapi(encoder)) {
+                listOf(
+                    ffmpegPath, "-y",
+                    "-init_hw_device", "vaapi=va",
+                    "-filter_hw_device", "va",
+                    "-i", videoPath,
+                    "-loop", "1", "-i", overlayPath,
+                    "-filter_complex", "$filterBase,format=nv12,hwupload[vout]",
+                    "-map", "[vout]", "-map", "0:a?",
+                ) + hwEncodeArgs(encoder) + outputPath
+            } else {
+                val codecArgs = if (encoder != null) hwEncodeArgs(encoder) else softwareEncodeArgs()
+                listOf(
+                    ffmpegPath, "-y",
+                    "-i", videoPath,
+                    "-loop", "1", "-i", overlayPath,
+                    "-filter_complex", filterBase,
+                    "-c:a", "copy",
+                ) + codecArgs + outputPath
+            }
         }
 
+        // Discard stdout+stderr — FFmpeg writes verbose progress to stderr and the pipe buffer
+        // (~64 KB on macOS) fills up for long videos, causing waitFor() to block forever.
+        fun runEncode(args: List<String>): Int =
+            ProcessBuilder(args)
+                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                .redirectError(ProcessBuilder.Redirect.DISCARD)
+                .start().waitFor()
+
         val encoder = hwEncoder
-        var exitCode = runEncode(if (encoder != null) hwEncodeArgs(encoder) else softwareEncodeArgs())
+        var exitCode = runEncode(buildArgs(encoder))
 
         if (exitCode != 0 && encoder != null) {
             // Hardware encoder failed (driver issue, unsupported format, etc.) — retry with libx264.
             System.err.println("[hwaccel] $encoder failed for ${File(videoPath).name}, retrying with libx264")
             File(outputPath).delete()
-            exitCode = runEncode(softwareEncodeArgs())
+            exitCode = runEncode(buildArgs(null))
         }
 
         if (exitCode == 0 && exiftoolPath != null) {

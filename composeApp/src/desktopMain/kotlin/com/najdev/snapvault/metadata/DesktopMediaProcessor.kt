@@ -42,6 +42,8 @@ class DesktopMediaProcessor : MediaProcessor {
 
     private fun softwareEncodeArgs() = hwEncodeArgs("libx264")
 
+    override fun activeVideoEncoder(): String? = hwEncoder
+
     override fun checkExifTool(): Boolean {
         val path = BinaryExtractor.checkCommand("exiftool") ?: return false
         return try {

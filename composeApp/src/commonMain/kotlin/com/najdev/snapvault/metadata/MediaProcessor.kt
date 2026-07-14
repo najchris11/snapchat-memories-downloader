@@ -7,6 +7,10 @@ interface MediaProcessor {
     fun writeDateMetadata(filePath: String, dateTimeUtc: String): Boolean //META writes date to a single file; used by default batch fallback
     fun combineVideoWithOverlay(videoPath: String, overlayPath: String, outputPath: String): Boolean
 
+    // Returns the name of the hardware encoder that will be used for video encoding,
+    // or null if software (libx264) will be used. Triggers detection on first call.
+    fun activeVideoEncoder(): String? = null
+
     // Batch variant: write the same YYYY-MM-DD date to every path in one shot.
     // Default implementation falls back to per-file calls (works on Android/iOS without exiftool).
     // Desktop overrides this with a single exiftool invocation per media type group.

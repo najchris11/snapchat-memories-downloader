@@ -342,7 +342,9 @@ class DashboardViewModel(
                 onMetaError = { msg -> logs.add("[WARN] $msg") },
                 onStart = { actual ->
                     combineTotal = actual.coerceAtLeast(1)
-                    logs.add("[INFO] Found $actual overlay pairs. Combining…")
+                    val encoder = mediaProcessor.activeVideoEncoder()
+                    val encoderLabel = if (encoder != null) "hardware ($encoder)" else "software (libx264)"
+                    logs.add("[INFO] Found $actual overlay pairs. Combining… [video encoder: $encoderLabel]")
                     progressText = "Combining: 0 / $actual"
                 },
                 onMetaStart = { total ->

@@ -19,6 +19,10 @@ import javax.imageio.ImageIO
 
 class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
 
+    // ffmpeg spawns multi-threaded processes that saturate the CPU on their own;
+    // serialize them so only one runs at a time regardless of workerCount.
+    private val ffmpegSemaphore = Semaphore(1)
+
     data class OverlayPair(
         val mainFile: File,
         val overlayFile: File,
@@ -121,19 +125,25 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
         }
     }
 
-    private fun processPair(pair: OverlayPair, deleteOriginals: Boolean, onWarning: (String) -> Unit = {}): String {
+    private suspend fun processPair(pair: OverlayPair, deleteOriginals: Boolean, onWarning: (String) -> Unit = {}): String {
         return try {
             val err = if (pair.isVideo) {
-                if (mediaProcessor.combineVideoWithOverlay(
-                        pair.mainFile.absolutePath,
-                        pair.overlayFile.absolutePath,
-                        pair.outputFile.absolutePath
-                    )
-                ) null else "video combine failed"
+                ffmpegSemaphore.withPermit {
+                    if (mediaProcessor.combineVideoWithOverlay(
+                            pair.mainFile.absolutePath,
+                            pair.overlayFile.absolutePath,
+                            pair.outputFile.absolutePath
+                        )
+                    ) null else "video combine failed"
+                }
             } else {
                 // Two-tier: ImageIO (fast, handles JPG/PNG) → FFmpeg (universal fallback)
                 val imageIoErr = combineImages(pair.mainFile, pair.overlayFile, pair.outputFile)
-                imageIoErr?.let { combineImagesFfmpeg(pair.mainFile, pair.overlayFile, pair.outputFile) }
+                imageIoErr?.let {
+                    ffmpegSemaphore.withPermit {
+                        combineImagesFfmpeg(pair.mainFile, pair.overlayFile, pair.outputFile)
+                    }
+                }
             }
 
             if (err != null) return if (err.startsWith("skipped:")) err else "error: $err"

@@ -17,12 +17,23 @@ class DesktopPickers : PlatformPickers {
     }
 
     override fun pickFolder(onResult: (String?) -> Unit) {
-        System.setProperty("apple.awt.fileDialogForDirectories", "true")
-        val dialog = FileDialog(null as Frame?, "Select Output Folder", FileDialog.LOAD)
-        dialog.isVisible = true
-        System.setProperty("apple.awt.fileDialogForDirectories", "false")
-        val result = if (dialog.file != null) java.io.File(dialog.directory, dialog.file).absolutePath else null
-        onResult(result)
+        val isMac = System.getProperty("os.name").lowercase().contains("mac")
+        if (isMac) {
+            System.setProperty("apple.awt.fileDialogForDirectories", "true")
+            val dialog = FileDialog(null as Frame?, "Select Output Folder", FileDialog.LOAD)
+            dialog.isVisible = true
+            System.setProperty("apple.awt.fileDialogForDirectories", "false")
+            val result = if (dialog.file != null) java.io.File(dialog.directory, dialog.file).absolutePath else null
+            onResult(result)
+        } else {
+            val chooser = javax.swing.JFileChooser()
+            chooser.fileSelectionMode = javax.swing.JFileChooser.DIRECTORIES_ONLY
+            chooser.dialogTitle = "Select Output Folder"
+            val result = if (chooser.showOpenDialog(null) == javax.swing.JFileChooser.APPROVE_OPTION) {
+                chooser.selectedFile.absolutePath
+            } else null
+            onResult(result)
+        }
     }
 
     override fun pickMultipleZips(onResult: (List<String>) -> Unit) {

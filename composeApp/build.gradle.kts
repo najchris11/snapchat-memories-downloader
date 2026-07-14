@@ -129,7 +129,7 @@ compose.desktop {
         // AS JBR lacks jpackage; JDK 21 (Homebrew) is used for native distribution tasks
         javaHome = (project.findProperty("compose.javaHome") as? String)
             ?: System.getenv("JAVA_HOME")
-            ?: "/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
+            ?: System.getProperty("java.home")
         mainClass = "com.najdev.snapvault.MainKt"
         jvmArgs += listOf(
             "-Dsun.java2d.dpiaware=true",

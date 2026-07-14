@@ -39,8 +39,6 @@ fun App(
         ThemeMode.DARK -> true
         ThemeMode.LIGHT -> false
     }
-    var workers by remember { mutableStateOf(loadWorkersPreference()) }
-
     var hasExifTool by remember { mutableStateOf(false) }
     var hasFFmpeg by remember { mutableStateOf(false) }
 
@@ -79,7 +77,6 @@ fun App(
                         when (currentScreen) {
                             Screen.Dashboard -> DashboardScreen(
                                 viewModel = dashboardViewModel,
-                                workers = workers,
                                 onNavigateToSettings = { currentScreen = Screen.Settings },
                             )
                             Screen.Library -> LibraryScreen(
@@ -96,8 +93,6 @@ fun App(
                                 downloadFolder = dashboardViewModel.downloadFolder,
                                 onResetIndex = { dashboardViewModel.resetVaultIndex() },
                                 onEditOutputPath = { dashboardViewModel.pickOutputFolder() },
-                                workers = workers,
-                                onWorkersChange = { workers = it; saveWorkersPreference(it) },
                                 themeMode = themeMode,
                                 onThemeModeChange = { themeMode = it; saveThemeModePreference(it) },
                             )

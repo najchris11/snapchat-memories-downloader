@@ -61,6 +61,7 @@ class DashboardViewModel(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var syncJob: Job? = null
+    private val workerCount = computeWorkerCount()
 
     // ── Picker actions ───────────────────────────────────────────────────────
     fun pickHtmlFile() = pickers.pickHtmlFile { it?.let { path -> htmlFile = path } }
@@ -83,7 +84,6 @@ class DashboardViewModel(
         runCombine: Boolean,
         runDedupe: Boolean,
         dryRun: Boolean,
-        workerCount: Int,
     ) {
         isRunning = true
         logs.clear()
@@ -259,11 +259,7 @@ class DashboardViewModel(
         var pipelineCombineErrors = 0
 
         if (runMetadata) {
-            // Skip overlay-paired entries when combine is also enabled — their -main file gets
-            // deleted during combining and the combined output gets dated in the combine phase.
-            // If combine is off, we tag the -main file normally (it stays on disk).
             val metaEntries = itemsByZip.values.flatten()
-                .let { all -> if (runCombine) all.filter { !it.hasOverlay || it.overlayFileName == null } else all }
             val metaTotal = metaEntries.size
             //META date source: groups by HtmlMemoryEntry.date (YYYY-MM-DD from filename), NOT from hist/json correlation
             //META GPS is NOT written here — MetadataCorrelator exists but is not called; fullDateTime (time-of-day) also not used

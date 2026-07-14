@@ -17,6 +17,13 @@ object ZipImportParser {
         """^(\d{4}-\d{2}-\d{2})_([A-Za-z0-9\-]+)-(main|overlay)\.(\w+)$"""
     )
 
+    // Matches files that have the date-UUID prefix but no -main/-overlay suffix.
+    // Older or non-standard Snapchat exports occasionally produce these; treat them
+    // as standalone main files with no overlay pairing.
+    private val fallbackRegex = Regex(
+        """^(\d{4}-\d{2}-\d{2})_([A-Za-z0-9\-]+)\.(\w+)$"""
+    )
+
     // Regexes for deprecated HTML parsing
     private val srcRegex = Regex("""src=["']\.//([^"']+)["']""")
     private val textLineRegex = Regex("""class="text-line">(\d{4}-\d{2}-\d{2})<""")
@@ -44,12 +51,23 @@ object ZipImportParser {
 
         for (filePath in memoriesFiles) {
             val fileName = filePath.substringAfterLast('/')
-            val m = nameRegex.find(fileName) ?: run { onUnmatched?.invoke(filePath); continue }
+            val m = nameRegex.find(fileName)
+            if (m != null) {
+                val uuid = m.groupValues[2]
+                val type = m.groupValues[3] // "main" or "overlay"
+                filesByUuid.getOrPut(uuid) { mutableListOf() }.add(fileName to type)
+                continue
+            }
 
-            val uuid = m.groupValues[2]
-            val type = m.groupValues[3] // "main" or "overlay"
+            // No -main/-overlay suffix: treat as a standalone main file if it has a date-UUID prefix.
+            val fb = fallbackRegex.find(fileName)
+            if (fb != null) {
+                val uuid = fb.groupValues[2]
+                filesByUuid.getOrPut(uuid) { mutableListOf() }.add(fileName to "main")
+                continue
+            }
 
-            filesByUuid.getOrPut(uuid) { mutableListOf() }.add(fileName to type)
+            onUnmatched?.invoke(filePath)
         }
 
         // Create entries from the grouped files

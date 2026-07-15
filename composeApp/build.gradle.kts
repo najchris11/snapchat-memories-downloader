@@ -154,20 +154,32 @@ compose.desktop {
     }
 }
 
+// Debug mode (2,500-item import cap, [DEBUG] log lines) is OFF unless explicitly requested:
+// packaged builds must never ship the cap because of how a task happened to be named.
+// Opt in with -PisDebug=true; the desktop dev `run` task implies it.
+val isDebugBuild: Boolean =
+    (project.findProperty("isDebug") as? String)?.toBoolean()
+        ?: gradle.startParameter.taskNames.any { it == "run" || it.endsWith(":run") }
+
+// Ship the third-party license notices inside the app (classpath root), so every
+// installer carries the ExifTool/FFmpeg license information it is required to include.
+tasks.named<ProcessResources>("desktopProcessResources") {
+    from(rootProject.file("THIRD_PARTY_LICENSES.md"))
+}
+
 val generateBuildConfig by tasks.registering {
     val outDir = layout.buildDirectory.dir("generated/buildConfig/commonMain/kotlin")
     outputs.dir(outDir)
     inputs.property("version", appVersion)
-    inputs.property("isDebug", gradle.startParameter.taskNames.none { "release" in it.lowercase() || "Dist" in it })
+    inputs.property("isDebug", isDebugBuild)
     doLast {
-        val isDebug = gradle.startParameter.taskNames.none { "release" in it.lowercase() || "Dist" in it }
         val dir = outDir.get().asFile
         dir.mkdirs()
         dir.resolve("AppBuildConfig.kt").writeText("""
             package com.najdev.snapvault
             object AppBuildConfig {
                 const val VERSION = "$appVersion"
-                const val IS_DEBUG = $isDebug
+                const val IS_DEBUG = $isDebugBuild
             }
         """.trimIndent())
     }

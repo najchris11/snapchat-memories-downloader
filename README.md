@@ -15,7 +15,7 @@ Built with Kotlin Multiplatform + Compose Desktop. Ships as a native installer f
 
 1. **Download** the latest release for your OS from the [Releases](../../releases) page
 2. **Install** the `.dmg` (macOS), `.msi` (Windows), or `.deb` (Linux)
-3. Open **Settings → Auto-Setup Binaries** to install FFmpeg and ExifTool
+3. On Linux, install FFmpeg with your package manager (e.g. `sudo apt install ffmpeg`); on macOS/Windows both tools are bundled
 4. On the **Dashboard**, choose your Snapchat ZIP(s) and an output folder
 5. Configure pipeline options and click **Start Download**
 
@@ -31,7 +31,7 @@ Built with Kotlin Multiplatform + Compose Desktop. Ships as a native installer f
 ## System Requirements
 
 - macOS 12+, Windows 10+, or Ubuntu 20.04+
-- FFmpeg and ExifTool — installed automatically via **Settings → Auto-Setup Binaries**
+- FFmpeg and ExifTool — bundled with the app on macOS and Windows. On Linux, ExifTool is bundled (requires system Perl); install FFmpeg via your package manager (`sudo apt install ffmpeg`)
 
 ## Building from Source
 
@@ -45,7 +45,7 @@ Requires JDK 21.
 ./gradlew packageDistributionForCurrentOS
 ```
 
-The app version is set in `gradle.properties` (`app.version`). CI automatically bumps and tags on every push to `main`.
+The app version is set in `gradle.properties` (`app.version`). Releases are cut manually via the **Release** workflow (Actions → Release → Run workflow), which bumps the version, tags, runs the desktop test suite, and publishes installers.
 
 ## Legacy Python Scripts
 

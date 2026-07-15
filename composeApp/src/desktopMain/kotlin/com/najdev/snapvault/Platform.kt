@@ -14,10 +14,10 @@ actual fun binaryInstallHint(): String = when (BinaryExtractor.getPlatform()) {
     """.trimIndent()
 
     "linux-x64" -> """
-        Bundled binaries: run scripts/prepare-runtime-linux.sh to download and package both tools automatically.
-        Note: ExifTool runs via Perl (a Perl wrapper is bundled). If ExifTool still shows missing, ensure Perl is installed: sudo apt install perl  or  sudo dnf install perl
-        Manual install: sudo apt install libimage-exiftool-perl ffmpeg  (Debian/Ubuntu)
-                        sudo dnf install perl-Image-ExifTool ffmpeg      (Fedora/RHEL)
+        FFmpeg is not bundled on Linux — install it with your package manager:
+            sudo apt install ffmpeg   (Debian/Ubuntu)
+            sudo dnf install ffmpeg   (Fedora/RHEL)
+        ExifTool is bundled and runs via Perl. If ExifTool shows missing, ensure Perl is installed (sudo apt install perl), or install the system package: sudo apt install libimage-exiftool-perl / sudo dnf install perl-Image-ExifTool
     """.trimIndent()
 
     "windows-x64" -> """

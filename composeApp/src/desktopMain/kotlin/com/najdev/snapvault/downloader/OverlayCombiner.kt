@@ -249,7 +249,7 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
                 h.isEmpty() -> "empty"
                 h.size >= 2 && h[0] == 0xFF.toByte() && h[1] == 0xD8.toByte() -> "jpeg"
                 h.size >= 8 && String(h.copyOfRange(4, 8)) == "ftyp" -> "heic/mp4"
-                h.size >= 4 && h[0] == 'R'.code.toByte() && h[1] == 'I'.code.toByte() -> "webp"
+                h.size >= 4 && h[0] == 'R'.code.toByte() && h[1] == 'I'.code.toByte() -> "riff (webp/avi/wav)"
                 h.size >= 8 && h[0] == 0x89.toByte() && h[1] == 0x50.toByte() -> "png"
                 else -> "unknown(0x%02X%02X)".format(h[0], h[1])
             }

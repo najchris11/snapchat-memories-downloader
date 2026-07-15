@@ -19,14 +19,21 @@ Built with Kotlin Multiplatform + Compose Desktop. Ships as a native installer f
 4. On the **Dashboard**, choose your Snapchat ZIP(s) and an output folder
 5. Configure pipeline options and click **Start Download**
 
+## Import Modes
+
+- **ZIP Import** (recommended) — point SnapVault at the `mydata~*.zip` archives from your export; media is extracted, tagged, and combined directly from the archives.
+- **Legacy (HTML/JSON)** — for the older link-based export (`memories_history.html`/`.json` with download links): downloads every memory, extracts overlay archives, and writes the full capture date *and time*, plus GPS coordinates where your export includes them. Note that download links expire about 7 days after the export is generated.
+
 ## Pipeline Options
 
 | Option | What it does |
 |---|---|
-| **Download Memories** | Extracts and downloads photos/videos from your Snapchat export ZIP |
-| **Write Date Metadata** | Tags each file with its original Snapchat creation date via ExifTool |
-| **Merge Video Overlays** | Combines `-main` + `-overlay` file pairs into a single composited output |
-| **Clean Duplicate Files** | Removes exact duplicate files from the output folder |
+| **Download Memories** | (Legacy mode) Downloads every memory from the links in your history file |
+| **Write Date Metadata** | Tags each file with its Snapchat capture date via ExifTool (legacy mode also writes time-of-day and GPS where available) |
+| **Merge Video Overlays** | Combines `-main` + `-overlay` pairs (photos and videos) into a single composited output, using GPU-accelerated encoding when the hardware supports it (NVENC/VideoToolbox/QSV/VAAPI/AMF, verified by a runtime probe with automatic software fallback) |
+| **Clean Duplicate Files** | Removes byte-identical duplicates, keeping the earliest-dated copy; enable the dry-run toggle to preview deletions first |
+
+> **Why is date metadata in ZIP mode date-only (no time or GPS)?** Snapchat's Memories export provides capture times and locations in `memories_history.json`, but those records contain no identifier that matches the exported filenames, so they cannot be reliably matched to files. See the note in the repo about contacting Snap regarding the export format.
 
 ## System Requirements
 
@@ -38,12 +45,14 @@ Built with Kotlin Multiplatform + Compose Desktop. Ships as a native installer f
 Requires JDK 21.
 
 ```bash
-# Run in development
+# Run in development (implies debug mode: import capped at 2,500 items)
 ./gradlew :composeApp:run
 
-# Build a native installer for the current OS
-./gradlew packageDistributionForCurrentOS
+# Build a native installer for the current OS (release/ProGuard variant)
+./gradlew packageReleaseDistributionForCurrentOS
 ```
+
+Debug mode is opt-in everywhere else via `-PisDebug=true`. Third-party license notices for the bundled tools ship inside the app (`THIRD_PARTY_LICENSES.md`).
 
 The app version is set in `gradle.properties` (`app.version`). Releases are cut manually via the **Release** workflow (Actions → Release → Run workflow), which bumps the version, tags, runs the desktop test suite, and publishes installers.
 

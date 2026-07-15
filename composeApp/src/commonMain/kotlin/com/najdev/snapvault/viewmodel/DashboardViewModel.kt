@@ -12,8 +12,6 @@ import com.najdev.snapvault.parser.*
 import io.ktor.client.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.decodeFromString
@@ -246,7 +244,8 @@ class DashboardViewModel(
             } else {
                 extractedCount++
             }
-            val done = extractedCount + skippedCount
+            // Errors count toward completion — otherwise the bar stalls short of 100%.
+            val done = extractedCount + skippedCount + extractErrorCount
             extractEta.record(done)
             progress = done.toFloat() / totalItems.coerceAtLeast(1)
             progressText = "Extracting: $done / $totalItems"

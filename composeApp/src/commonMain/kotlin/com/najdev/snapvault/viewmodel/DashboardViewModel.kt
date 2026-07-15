@@ -355,6 +355,7 @@ class DashboardViewModel(
             var combineDone = 0
             var combineTotal = scannedPairCount.coerceAtLeast(1)
             val combineEta = EtaEstimator()
+            var combineEncoder: String? = null
             progress = 0f
             progressText = "Combining overlays…"
             zipPipelineRunner.combineAll(
@@ -364,7 +365,11 @@ class DashboardViewModel(
                 onMetaError = { msg -> log("[WARN] $msg") },
                 onStart = { actual ->
                     combineTotal = actual.coerceAtLeast(1)
-                    log("[INFO] Found $actual overlay pairs. Combining…")
+                    mediaProcessor.resetVideoEncodeStats()
+                    // Probe-backed: names an encoder only if a real test encode succeeded.
+                    combineEncoder = mediaProcessor.activeVideoEncoder()
+                    val encoderLabel = combineEncoder?.let { "hardware ($it)" } ?: "software (libx264)"
+                    log("[INFO] Found $actual overlay pairs. Combining… [video encoder: $encoderLabel]")
                     progressText = "Combining: 0 / $actual"
                 },
                 onMetaStart = { total ->
@@ -405,6 +410,15 @@ class DashboardViewModel(
                 append(".")
             }
             log(combineSummary)
+            mediaProcessor.videoEncodeStats()?.let { stats ->
+                if (stats.hardware + stats.software > 0) {
+                    log("[INFO] Video encodes: ${stats.hardware} hardware, ${stats.software} software.")
+                    // A hardware encoder was active at start but some files still went software.
+                    if (combineEncoder != null && stats.software > 0) {
+                        log("[WARN] ${stats.software} video(s) fell back to software encoding (see stderr for per-file reasons).")
+                    }
+                }
+            }
             pipelineCombinedCount = combinedCount
             pipelineCombineSkipped = combineSkippedCount
             pipelineCombineErrors = combineErrorCount

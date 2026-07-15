@@ -31,9 +31,12 @@ object BinaryExtractor {
         }
     }
 
+    // Only successful resolutions are cached: caching a negative result would make the
+    // Settings "Refresh" button permanently blind to a tool the user installs while the
+    // app is running.
     fun checkCommand(commandName: String): String? = synchronized(commandCache) {
-        if (commandName in commandCache) commandCache[commandName]
-        else resolveCommand(commandName).also { commandCache[commandName] = it }
+        commandCache[commandName]
+            ?: resolveCommand(commandName)?.also { commandCache[commandName] = it }
     }
 
     private fun resolveCommand(commandName: String): String? {

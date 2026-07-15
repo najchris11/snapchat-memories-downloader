@@ -165,6 +165,12 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
                 return "error: output missing after combine — ${pair.outputFile.name}"
             }
 
+            // Preserve the original's metadata on the combined image (the video path does
+            // this inside combineVideoWithOverlay); must happen before originals are deleted.
+            if (!pair.isVideo) {
+                runInterruptible { copyExif(pair.mainFile.absolutePath, pair.outputFile.absolutePath) }
+            }
+
             if (deleteOriginals) {
                 if (!pair.mainFile.delete()) onWarning("could not delete main: ${pair.mainFile.name}")
                 if (!pair.overlayFile.delete()) onWarning("could not delete overlay: ${pair.overlayFile.name}")
@@ -256,7 +262,9 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
             ProcessBuilder(
                 exiftoolPath, "-overwrite_original", "-q",
                 "-TagsFromFile", sourcePath, "-all:all", destPath
-            ).start().waitFor()
+            ).start().waitForOrKill()
+        } catch (e: InterruptedException) {
+            throw e
         } catch (_: Exception) {}
     }
 

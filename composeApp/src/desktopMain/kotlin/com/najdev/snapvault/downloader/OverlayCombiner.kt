@@ -2,12 +2,14 @@ package com.najdev.snapvault.downloader
 
 import com.najdev.snapvault.BinaryExtractor
 import com.najdev.snapvault.metadata.MediaProcessor
+import com.najdev.snapvault.waitForOrKill
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -93,10 +95,12 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
                 async(Dispatchers.IO) {
                     semaphore.withPermit {
                         val uuid = extractUuid(pair.mainFile.name) ?: pair.mainFile.nameWithoutExtension
-                        val onWarn: (String) -> Unit = { msg -> onMetaError?.invoke("[combine] $msg") }
-                        val status = processPair(pair, deleteOriginals, onWarn)
+                        // Warnings are collected per-pair and shipped inside the result so the
+                        // single channel consumer is the only thread touching caller state.
+                        val warnings = mutableListOf<String>()
+                        val status = processPair(pair, deleteOriginals) { msg -> warnings.add("[combine] $msg") }
                         if (status == "combined") synchronized(lock) { successfulPairs.add(pair) }
-                        channel.send(CombineResult(uuid, pair.outputFile.absolutePath, status))
+                        channel.send(CombineResult(uuid, pair.outputFile.absolutePath, status, warnings))
                     }
                 }
             }.awaitAll()
@@ -115,11 +119,13 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
             withContext(Dispatchers.IO) {
                 dateGroups.forEach { (date, datePairs) ->
                     val d = date ?: return@forEach
-                    mediaProcessor.writeDateMetadataBatch(
-                        datePairs.map { it.outputFile.absolutePath },
-                        d,
-                        onMetaError
-                    )
+                    runInterruptible {
+                        mediaProcessor.writeDateMetadataBatch(
+                            datePairs.map { it.outputFile.absolutePath },
+                            d,
+                            onMetaError
+                        )
+                    }
                 }
             }
         }
@@ -127,21 +133,27 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
 
     private suspend fun processPair(pair: OverlayPair, deleteOriginals: Boolean, onWarning: (String) -> Unit = {}): String {
         return try {
+            // runInterruptible lets pipeline cancellation interrupt the blocking ffmpeg/ImageIO
+            // work; the process helpers kill the child on interrupt (see waitForOrKill).
             val err = if (pair.isVideo) {
                 ffmpegSemaphore.withPermit {
-                    if (mediaProcessor.combineVideoWithOverlay(
-                            pair.mainFile.absolutePath,
-                            pair.overlayFile.absolutePath,
-                            pair.outputFile.absolutePath
-                        )
-                    ) null else "video combine failed"
+                    runInterruptible {
+                        if (mediaProcessor.combineVideoWithOverlay(
+                                pair.mainFile.absolutePath,
+                                pair.overlayFile.absolutePath,
+                                pair.outputFile.absolutePath
+                            )
+                        ) null else "video combine failed"
+                    }
                 }
             } else {
                 // Two-tier: ImageIO (fast, handles JPG/PNG) → FFmpeg (universal fallback)
-                val imageIoErr = combineImages(pair.mainFile, pair.overlayFile, pair.outputFile)
+                val imageIoErr = runInterruptible { combineImages(pair.mainFile, pair.overlayFile, pair.outputFile) }
                 imageIoErr?.let {
                     ffmpegSemaphore.withPermit {
-                        combineImagesFfmpeg(pair.mainFile, pair.overlayFile, pair.outputFile)
+                        runInterruptible {
+                            combineImagesFfmpeg(pair.mainFile, pair.overlayFile, pair.outputFile)
+                        }
                     }
                 }
             }
@@ -159,6 +171,8 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
             }
 
             "combined"
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             "error: ${e.message}"
         }
@@ -212,9 +226,11 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
         return try {
             val proc = ProcessBuilder(args).redirectErrorStream(true).start()
             val output = proc.inputStream.bufferedReader().readText()
-            val exitCode = proc.waitFor()
+            val exitCode = proc.waitForOrKill()
             if (exitCode == 0) null
             else "ffmpeg exit $exitCode${if (output.isNotBlank()) ": ${output.takeLast(120)}" else ""}"
+        } catch (e: InterruptedException) {
+            throw e
         } catch (e: Exception) {
             e.message ?: "ffmpeg exception"
         }

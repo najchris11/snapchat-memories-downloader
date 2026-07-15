@@ -65,3 +65,6 @@ iosApp/
 .vscode/
 *.swp
 *.swo
+
+# Stray IDE build output (duplicate of desktopMain/resources)
+composeApp/bin/

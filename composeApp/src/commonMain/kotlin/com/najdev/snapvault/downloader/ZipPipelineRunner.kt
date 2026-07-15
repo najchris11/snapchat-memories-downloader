@@ -13,7 +13,10 @@ data class ExtractResult(
 data class CombineResult(
     val uuid: String,
     val outputPath: String,
-    val status: String
+    val status: String,
+    // Non-fatal issues hit while processing this pair (e.g. could not delete an original).
+    // Delivered with the result so the consumer handles them on a single thread.
+    val warnings: List<String> = emptyList(),
 )
 
 interface ZipPipelineRunner {

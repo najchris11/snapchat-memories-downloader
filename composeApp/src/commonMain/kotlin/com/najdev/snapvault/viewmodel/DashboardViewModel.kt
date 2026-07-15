@@ -63,6 +63,15 @@ class DashboardViewModel(
     private var syncJob: Job? = null
     private val workerCount = computeWorkerCount()
 
+    private val logLock = Any()
+
+    // All log appends go through here: SnapshotStateList is not safe for unsynchronized
+    // concurrent mutation, and lines originate from the UI thread (stopSync) as well as
+    // pipeline coroutines.
+    private fun log(message: String) {
+        synchronized(logLock) { logs.add(message) }
+    }
+
     // ── Picker actions ───────────────────────────────────────────────────────
     fun pickHtmlFile() = pickers.pickHtmlFile { it?.let { path -> htmlFile = path } }
     fun pickOutputFolder() = pickers.pickFolder { it?.let { path -> downloadFolder = path } }
@@ -103,29 +112,35 @@ class DashboardViewModel(
                 progress = 1.0f
                 progressText = "Pipeline Complete"
                 currentStep = 3
-                logs.add("[SUCCESS] Sync complete!")
+                log("[SUCCESS] Sync complete!")
             } catch (e: CancellationException) {
+                log("[WARN] Sync cancelled by user.")
+                progressText = "Cancelled"
+                currentStep = 0
                 throw e
             } catch (e: PipelineAbortException) {
-                logs.add("[ERROR] ${e.message}")
+                log("[ERROR] ${e.message}")
                 progressText = "Failed"
                 currentStep = 0
             } catch (e: Exception) {
-                logs.add("[ERROR] Pipeline failed: ${e.message}")
+                log("[ERROR] Pipeline failed: ${e.message}")
                 progressText = "Failed"
                 currentStep = 0
             } finally {
+                // Runs only after all pipeline children have finished cancelling — the
+                // Start button must not re-enable while ffmpeg/exiftool work is in flight.
                 isRunning = false
             }
         }
     }
 
     fun stopSync() {
-        syncJob?.cancel()
-        logs.add("[WARN] Sync cancelled by user.")
-        isRunning = false
-        currentStep = 0
-        progressText = "Cancelled"
+        val job = syncJob ?: return
+        if (!job.isActive) return
+        log("[WARN] Stopping — cancelling in-flight work…")
+        progressText = "Stopping…"
+        job.cancel()
+        // isRunning flips in the pipeline's finally block once cancellation completes.
     }
 
     fun dispose() = scope.cancel()
@@ -154,7 +169,7 @@ class DashboardViewModel(
         dryRun: Boolean,
         workerCount: Int,
     ) {
-        logs.add("[INFO] Scanning for ZIP file(s)…")
+        log("[INFO] Scanning for ZIP file(s)…")
         val zipFiles: List<String> = when (zipSourceMode) {
             ZipSourceMode.Folder -> {
                 zipPipelineRunner.listZipFiles(
@@ -167,7 +182,7 @@ class DashboardViewModel(
         }
 
         if (zipFiles.isEmpty()) throw PipelineAbortException("No .zip files found in selected folder.")
-        logs.add("[INFO] Found ${zipFiles.size} zip file(s).")
+        log("[INFO] Found ${zipFiles.size} zip file(s).")
 
         val itemsByZip = mutableMapOf<String, List<HtmlMemoryEntry>>()
         var totalMemoryCount = 0
@@ -186,15 +201,15 @@ class DashboardViewModel(
                 val sorted = entries.map { it.date }.sorted()
                 "${sorted.first()} – ${sorted.last()}"
             } else "no entries"
-            logs.add("[INFO] $zipName: ${entries.size} memories, $parsedFileCount files parsed ($dateRange)")
+            log("[INFO] $zipName: ${entries.size} memories, $parsedFileCount files parsed ($dateRange)")
             if (unmatchedCount > 0) {
-                logs.add("[WARN] $zipName: $unmatchedCount file(s) in memories/ skipped — unexpected filename format. Examples: ${unmatchedSamples.joinToString(", ")}")
+                log("[WARN] $zipName: $unmatchedCount file(s) in memories/ skipped — unexpected filename format. Examples: ${unmatchedSamples.joinToString(", ")}")
             }
         }
-        logs.add("[INFO] Indexed $totalMemoryCount memories across ${itemsByZip.size} zip(s).")
+        log("[INFO] Indexed $totalMemoryCount memories across ${itemsByZip.size} zip(s).")
 
         if (AppBuildConfig.IS_DEBUG) {
-            logs.add("[DEBUG] Limiting to 2500 items (debug mode)")
+            log("[DEBUG] Limiting to 2500 items (debug mode)")
             var remaining = 2500
             val trimmed = mutableMapOf<String, List<HtmlMemoryEntry>>()
             for ((k, v) in itemsByZip) {
@@ -211,7 +226,7 @@ class DashboardViewModel(
             Json.decodeFromString<Map<String, FileMeta>>(fileSystem.read(vaultIndexPath) { readUtf8() })
         }.getOrDefault(emptyMap()).toMutableMap()
 
-        logs.add("[INFO] Extracting media files…")
+        log("[INFO] Extracting media files…")
         var extractedCount = 0
         var skippedCount = 0
         var extractErrorCount = 0
@@ -224,7 +239,7 @@ class DashboardViewModel(
         zipPipelineRunner.extractAll(itemsByZip, outDir, workerCount) { result ->
             if (result.error != null) {
                 extractErrorCount++
-                logs.add("[ERROR] ${result.fileName}: ${result.error}")
+                log("[ERROR] ${result.fileName}: ${result.error}")
             } else if (result.skipped) {
                 skippedCount++
             } else {
@@ -251,7 +266,7 @@ class DashboardViewModel(
             if (extractErrorCount > 0) append(", $extractErrorCount errors")
             append(".")
         }
-        logs.add(extractSummary)
+        log(extractSummary)
         currentStep = 2
 
         var pipelineCombinedCount = 0
@@ -265,22 +280,24 @@ class DashboardViewModel(
             //META GPS is NOT written here — MetadataCorrelator exists but is not called; fullDateTime (time-of-day) also not used
             //META TODO: swap writeDateMetadataBatch for a GPS-aware call once a reliable UUID↔history matching algorithm is in place
             val byDate = metaEntries.groupBy { it.date }
-            logs.add("[INFO] Writing date metadata — ${metaTotal} files across ${byDate.size} date group(s)…")
+            log("[INFO] Writing date metadata — ${metaTotal} files across ${byDate.size} date group(s)…")
 
             var metaCount = 0
             var metaDone = 0
             var metaFailCount = 0
             val metaEta = EtaEstimator()
 
-            data class BatchResult(val tagged: Int, val entries: List<HtmlMemoryEntry>)
+            data class BatchResult(val tagged: Int, val entries: List<HtmlMemoryEntry>, val warnings: List<String>)
 
             val metaChannel = Channel<BatchResult>(Channel.UNLIMITED)
             val metaSemaphore = Semaphore(workerCount)
 
             coroutineScope {
-                // Single consumer — serializes all counter/UI updates
+                // Single consumer — serializes all counter/UI updates (including warnings,
+                // which must not be logged directly from the concurrent worker coroutines)
                 launch {
                     for (r in metaChannel) {
+                        r.warnings.forEach { log("[WARN] $it") }
                         metaCount += r.tagged
                         metaFailCount += (r.entries.size - r.tagged)
                         r.entries.forEach { entry ->
@@ -308,11 +325,16 @@ class DashboardViewModel(
                         currentCoroutineContext().ensureActive()
                         metaSemaphore.withPermit {
                             val paths = entries.map { "$outDir/${it.fileName}" }
+                            val warnings = mutableListOf<String>()
                             //META actual write call: date-only batch write; returns count of files successfully tagged (0 for unsupported extensions)
-                            val tagged = mediaProcessor.writeDateMetadataBatch(paths, date) { msg ->
-                                logs.add("[WARN] $msg")
+                            // runInterruptibleCompat: cancelling the pipeline interrupts the
+                            // blocking exiftool wait instead of letting the batch run out.
+                            val tagged = runInterruptibleCompat {
+                                mediaProcessor.writeDateMetadataBatch(paths, date) { msg ->
+                                    warnings.add(msg)
+                                }
                             }
-                            metaChannel.send(BatchResult(tagged, entries))
+                            metaChannel.send(BatchResult(tagged, entries, warnings))
                         }
                     }
                 }.awaitAll()
@@ -322,7 +344,7 @@ class DashboardViewModel(
 
             speedText = "SPEED: --"
             etaText = "ETA: --"
-            logs.add("[INFO] Metadata: $metaCount files tagged${if (metaFailCount > 0) ", $metaFailCount could not be tagged (see [WARN] lines above)" else ""}.")
+            log("[INFO] Metadata: $metaCount files tagged${if (metaFailCount > 0) ", $metaFailCount could not be tagged (see [WARN] lines above)" else ""}.")
         }
 
         if (runCombine) {
@@ -339,24 +361,25 @@ class DashboardViewModel(
                 outDir,
                 deleteOriginals = true,
                 workerCount = workerCount,
-                onMetaError = { msg -> logs.add("[WARN] $msg") },
+                onMetaError = { msg -> log("[WARN] $msg") },
                 onStart = { actual ->
                     combineTotal = actual.coerceAtLeast(1)
-                    logs.add("[INFO] Found $actual overlay pairs. Combining…")
+                    log("[INFO] Found $actual overlay pairs. Combining…")
                     progressText = "Combining: 0 / $actual"
                 },
                 onMetaStart = { total ->
-                    logs.add("[INFO] Tagging $total combined file(s) with date metadata…")
+                    log("[INFO] Tagging $total combined file(s) with date metadata…")
                     progressText = "Tagging combined files…"
                     progress = 0f
                 }
             ) { result ->
+                result.warnings.forEach { log("[WARN] $it") }
                 when {
                     result.status == "combined" -> combinedCount++
                     result.status.startsWith("skipped:") -> combineSkippedCount++
                     result.status.startsWith("error") -> {
                         combineErrorCount++
-                        logs.add("[ERROR] Overlay combine ${result.uuid.take(8)}: ${result.status}")
+                        log("[ERROR] Overlay combine ${result.uuid.take(8)}: ${result.status}")
                     }
                 }
                 combineDone++
@@ -381,7 +404,7 @@ class DashboardViewModel(
                 if (combineErrorCount > 0) append(", $combineErrorCount errors")
                 append(".")
             }
-            logs.add(combineSummary)
+            log(combineSummary)
             pipelineCombinedCount = combinedCount
             pipelineCombineSkipped = combineSkippedCount
             pipelineCombineErrors = combineErrorCount
@@ -393,8 +416,8 @@ class DashboardViewModel(
             fileSystem.write(vaultIndexPath) {
                 writeUtf8(Json.encodeToString<Map<String, FileMeta>>(downloadedMeta))
             }
-            logs.add("[INFO] Vault index saved (${downloadedMeta.size} entries).")
-        }.onFailure { e -> logs.add("[WARN] Could not write vault index: ${e.message}") }
+            log("[INFO] Vault index saved (${downloadedMeta.size} entries).")
+        }.onFailure { e -> log("[WARN] Could not write vault index: ${e.message}") }
 
         val summary = buildString {
             append("[SUCCESS] Done — $totalMemoryCount memories")
@@ -406,7 +429,7 @@ class DashboardViewModel(
             if (pipelineCombineErrors > 0) append(", $pipelineCombineErrors combine errors")
             append(".")
         }
-        logs.add(summary)
+        log(summary)
     }
 
     // ── Legacy pipeline ──────────────────────────────────────────────────────
@@ -419,19 +442,19 @@ class DashboardViewModel(
         workerCount: Int,
     ) {
         progressText = "Reading memories…"
-        logs.add("[INFO] Starting pipeline sequence…")
+        log("[INFO] Starting pipeline sequence…")
 
         val htmlPath = htmlFile ?: throw PipelineAbortException("No HTML/JSON file selected.")
         val fileContent = fileSystem.read(htmlPath.toPath()) { readUtf8() }
         val isJson = htmlPath.endsWith(".json", ignoreCase = true)
-        logs.add("[INFO] Parsing memories history (${if (isJson) "JSON" else "HTML"})…")
+        log("[INFO] Parsing memories history (${if (isJson) "JSON" else "HTML"})…")
 
         val parsed = if (isJson) HistoryParser.parseJson(fileContent) else HistoryParser.parse(fileContent)
-        logs.add("[INFO] File size: ${fileContent.length / 1024}KB — parsed ${parsed.size} items")
+        log("[INFO] File size: ${fileContent.length / 1024}KB — parsed ${parsed.size} items")
         if (parsed.isEmpty() && isJson)
-            logs.add("[DEBUG] JSON parsed but 0 items — verify the file contains a 'Saved Media' array")
-        if (parsed.isEmpty() && !isJson) logs.add("[DEBUG] ${HistoryParser.diagnose(fileContent)}")
-        if (AppBuildConfig.IS_DEBUG) logs.add("[DEBUG] Limiting to 2500 items (debug mode)")
+            log("[DEBUG] JSON parsed but 0 items — verify the file contains a 'Saved Media' array")
+        if (parsed.isEmpty() && !isJson) log("[DEBUG] ${HistoryParser.diagnose(fileContent)}")
+        if (AppBuildConfig.IS_DEBUG) log("[DEBUG] Limiting to 2500 items (debug mode)")
 
         val items = if (AppBuildConfig.IS_DEBUG) parsed.take(2500) else parsed
         if (items.isEmpty()) throw PipelineAbortException("No items found. Use memories_history.json from your Snapchat export (mydata.snapchat.com).")
@@ -442,7 +465,7 @@ class DashboardViewModel(
         }.getOrDefault(emptyMap()).toMutableMap()
 
         if (runDownload) {
-            logs.add("[INFO] Downloading files in parallel…")
+            log("[INFO] Downloading files in parallel…")
             val httpClient = HttpClient()
             val downloader = DownloadEngine(httpClient, fileSystem)
             var downloadedCount = 0
@@ -471,18 +494,18 @@ class DashboardViewModel(
 
                 when (status) {
                     "downloaded" -> {
-                        logs.add("[DOWNLOADED] $name")
+                        log("[DOWNLOADED] $name")
                         var hasGps = false
                         //META legacy pipeline GPS write: only fires if MemoryItem has non-null lat/lon from memories_history.html/json
                         //META dateStr here comes from HistoryParser ("YYYY-MM-DD HH:MM:SS UTC" or similar) and includes time-of-day
                         if (runMetadata && item.latitude != null && item.longitude != null && item.downloadedPath != null) {
                             val exifOk = mediaProcessor.writeGpsMetadata(item.downloadedPath, item.latitude, item.longitude, item.dateStr)
-                            if (exifOk) { logs.add("   -> [METADATA] EXIF GPS tag written."); hasGps = true }
+                            if (exifOk) { log("   -> [METADATA] EXIF GPS tag written."); hasGps = true }
                         }
                         downloadedMeta[name] = FileMeta(hasGps = hasGps, hasOverlay = false)
                     }
-                    "skipped" -> logs.add("[SKIPPED] $name (already exists)")
-                    else -> logs.add("[ERROR] Failed $name: $status")
+                    "skipped" -> log("[SKIPPED] $name (already exists)")
+                    else -> log("[ERROR] Failed $name: $status")
                 }
             }.launchIn(CoroutineScope(Dispatchers.Default))
 
@@ -498,22 +521,22 @@ class DashboardViewModel(
             fileSystem.write(vaultIndexPath) {
                 writeUtf8(Json.encodeToString<Map<String, FileMeta>>(downloadedMeta))
             }
-            logs.add("[INFO] Vault index saved (${downloadedMeta.size} entries).")
-        }.onFailure { e -> logs.add("[WARN] Could not write vault index: ${e.message}") }
+            log("[INFO] Vault index saved (${downloadedMeta.size} entries).")
+        }.onFailure { e -> log("[WARN] Could not write vault index: ${e.message}") }
     }
 
     private suspend fun runDeduplication(outDir: String, dryRun: Boolean) {
-        logs.add("[INFO] Scanning for duplicate files…")
+        log("[INFO] Scanning for duplicate files…")
         progressText = "Deduplicating…"
         val deduplicator = Deduplicator(fileSystem)
         val results = withContext(Dispatchers.IO) {
             deduplicator.deduplicateFolder(outDir.toPath(), dryRun)
         }
         if (results.isEmpty()) {
-            logs.add("[INFO] No duplicate files found.")
+            log("[INFO] No duplicate files found.")
         } else {
             results.forEach { res ->
-                logs.add("[DELETED DUPES] Kept ${res.keptFile}, deleted: ${res.deletedFiles.joinToString()}")
+                log("[DELETED DUPES] Kept ${res.keptFile}, deleted: ${res.deletedFiles.joinToString()}")
             }
         }
     }

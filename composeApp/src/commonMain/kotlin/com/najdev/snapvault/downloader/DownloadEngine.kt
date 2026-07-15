@@ -139,16 +139,26 @@ class DownloadEngine(
             val contentType = response.headers[HttpHeaders.ContentType]
             val filename = buildFilename(item, contentType)
             val filepath = outputFolderPath / filename
+            // Stream into a temp file and rename into place only when the body is fully
+            // written — an interrupted download must never leave a truncated file under
+            // the final name, because the resume check would skip it forever.
+            val tmpPath = outputFolderPath / "$filename.part"
 
-            val bodyChannel = response.bodyAsChannel()
-            fileSystem.sink(filepath).buffer().use { sink ->
-                val buffer = ByteArray(8192)
-                while (!bodyChannel.isClosedForRead) {
-                    val read = bodyChannel.readAvailable(buffer, 0, buffer.size)
-                    if (read > 0) {
-                        sink.write(buffer, 0, read)
+            try {
+                val bodyChannel = response.bodyAsChannel()
+                fileSystem.sink(tmpPath).buffer().use { sink ->
+                    val buffer = ByteArray(8192)
+                    while (!bodyChannel.isClosedForRead) {
+                        val read = bodyChannel.readAvailable(buffer, 0, buffer.size)
+                        if (read > 0) {
+                            sink.write(buffer, 0, read)
+                        }
                     }
                 }
+                fileSystem.atomicMove(tmpPath, filepath)
+            } catch (e: Exception) {
+                runCatching { fileSystem.delete(tmpPath) }
+                throw e
             }
 
             val updated = item.copy(
@@ -157,6 +167,8 @@ class DownloadEngine(
             )
             _progressFlow.emit(updated to "downloaded")
             return updated
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             val updated = item.copy(isDownloaded = false)
             _progressFlow.emit(updated to "error: ${e.message}")

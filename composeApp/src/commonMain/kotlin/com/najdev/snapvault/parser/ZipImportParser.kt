@@ -28,81 +28,88 @@ object ZipImportParser {
     private val srcRegex = Regex("""src=["']\.//([^"']+)["']""")
     private val textLineRegex = Regex("""class="text-line">(\d{4}-\d{2}-\d{2})<""")
 
+    private val videoExtensions = setOf("mp4", "mov", "avi", "mkv", "m4v")
+
+    // One filename parsed by either nameRegex or fallbackRegex, with everything the
+    // entry-building pass needs — no regex re-matching happens after this point.
+    private data class ParsedName(
+        val fileName: String,
+        val date: String,
+        val uuid: String,
+        val type: String, // "main" or "overlay"
+        val ext: String,
+    )
+
+    private fun parseName(fileName: String): ParsedName? {
+        nameRegex.find(fileName)?.let { m ->
+            return ParsedName(fileName, m.groupValues[1], m.groupValues[2], m.groupValues[3], m.groupValues[4].lowercase())
+        }
+        // No -main/-overlay suffix: treat as a standalone main file if it has a date-UUID prefix.
+        fallbackRegex.find(fileName)?.let { m ->
+            return ParsedName(fileName, m.groupValues[1], m.groupValues[2], "main", m.groupValues[3].lowercase())
+        }
+        return null
+    }
+
     //META scans ZIP filesystem directly: extracts UUID, date, isVideo, overlay pairing
     //META date comes from filename prefix (YYYY-MM-DD) — no time-of-day here; time must come from hist/json correlation
     //META eliminates HTML parsing complexity and ensures filenames are source of truth
-    //META onUnmatched fires for each file in memories/ that doesn't match nameRegex — used for diagnostics
+    //META onUnmatched fires for each file in memories/ that doesn't match either regex — used for diagnostics
     fun parseMemoriesFromZip(
         zipFilePath: String,
+        onUnmatched: ((filePath: String) -> Unit)? = null
+    ): List<HtmlMemoryEntry> =
+        parseMemoryEntryNames(listZipEntries(zipFilePath), onUnmatched)
+
+    // Pure filename-list variant of parseMemoriesFromZip — separated from zip I/O for testability.
+    fun parseMemoryEntryNames(
+        allEntries: List<String>,
         onUnmatched: ((filePath: String) -> Unit)? = null
     ): List<HtmlMemoryEntry> {
         val entries = mutableListOf<HtmlMemoryEntry>()
 
-        // List all entries in the memories/ directory of the ZIP
-        val allEntries = listZipEntries(zipFilePath)
         val memoriesFiles = allEntries
             .filter { it.startsWith("memories/") && it != "memories/" }
             .filter { !it.endsWith("/") }
 
         if (memoriesFiles.isEmpty()) return entries
 
-        // Group files by UUID and filter for valid filenames
-        val filesByUuid = mutableMapOf<String, MutableList<Pair<String, String>>>() // uuid -> [(fileName, type)]
+        // Group by full stem (date_uuid), not UUID alone: Snapchat exports contain the same
+        // UUID under different dates, and those are distinct memories (see OverlayCombiner,
+        // which matches pairs by stem for the same reason).
+        val filesByStem = mutableMapOf<String, MutableList<ParsedName>>()
 
         for (filePath in memoriesFiles) {
-            val fileName = filePath.substringAfterLast('/')
-            val m = nameRegex.find(fileName)
-            if (m != null) {
-                val uuid = m.groupValues[2]
-                val type = m.groupValues[3] // "main" or "overlay"
-                filesByUuid.getOrPut(uuid) { mutableListOf() }.add(fileName to type)
+            val parsed = parseName(filePath.substringAfterLast('/'))
+            if (parsed == null) {
+                onUnmatched?.invoke(filePath)
                 continue
             }
-
-            // No -main/-overlay suffix: treat as a standalone main file if it has a date-UUID prefix.
-            val fb = fallbackRegex.find(fileName)
-            if (fb != null) {
-                val uuid = fb.groupValues[2]
-                filesByUuid.getOrPut(uuid) { mutableListOf() }.add(fileName to "main")
-                continue
-            }
-
-            onUnmatched?.invoke(filePath)
+            filesByStem.getOrPut("${parsed.date}_${parsed.uuid}") { mutableListOf() }.add(parsed)
         }
 
-        // Create entries from the grouped files
-        for ((uuid, files) in filesByUuid) {
-            val mainFile = files.find { it.second == "main" }
-            val overlayFile = files.find { it.second == "overlay" }
+        for ((_, files) in filesByStem) {
+            val mainFile = files.find { it.type == "main" }
+            val overlayFile = files.find { it.type == "overlay" }
 
             if (mainFile != null) {
-                val fileName = mainFile.first
-                val m = nameRegex.find(fileName) ?: continue
-                val date = m.groupValues[1]
-                val ext = m.groupValues[4].lowercase()
-                val isVideo = ext in listOf("mp4", "mov", "avi")
-
                 entries.add(
                     HtmlMemoryEntry(
-                        fileName = fileName,
-                        uuid = uuid,
-                        date = date,
-                        isVideo = isVideo,
+                        fileName = mainFile.fileName,
+                        uuid = mainFile.uuid,
+                        date = mainFile.date,
+                        isVideo = mainFile.ext in videoExtensions,
                         hasOverlay = overlayFile != null,
-                        overlayFileName = overlayFile?.first
+                        overlayFileName = overlayFile?.fileName
                     )
                 )
             } else if (overlayFile != null) {
                 // Standalone overlay-only memory
-                val fileName = overlayFile.first
-                val m = nameRegex.find(fileName) ?: continue
-                val date = m.groupValues[1]
-
                 entries.add(
                     HtmlMemoryEntry(
-                        fileName = fileName,
-                        uuid = uuid,
-                        date = date,
+                        fileName = overlayFile.fileName,
+                        uuid = overlayFile.uuid,
+                        date = overlayFile.date,
                         isVideo = false,
                         hasOverlay = false,
                         overlayFileName = null

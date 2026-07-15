@@ -10,6 +10,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import java.io.File
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.FileAlreadyExistsException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.zip.ZipFile
 
 class ZipExtractEngine {
@@ -21,6 +25,7 @@ class ZipExtractEngine {
         onProgress: (ExtractResult) -> Unit
     ) {
         val outDir = File(outputDir).also { it.mkdirs() }
+        cleanStalePartFiles(outDir)
         val semaphore = Semaphore(workerCount)
 
         data class ExtractTask(val entryName: String, val destFileName: String, val uuid: String)
@@ -73,20 +78,53 @@ class ZipExtractEngine {
         }
     }
 
+    // Extraction writes to a unique .part temp file and renames into place only after the
+    // full entry is copied and size-verified. A crash or cancellation mid-copy therefore
+    // never leaves a truncated file under the final name (which the exists() skip-check
+    // would otherwise treat as complete forever).
     private fun extractEntry(zf: ZipFile, entryName: String, destFileName: String, outDir: File): String {
         val destFile = File(outDir, destFileName)
         if (destFile.exists()) return "skipped"
 
+        val entry = zf.getEntry(entryName) ?: return "error: entry not found: $entryName"
+        // Unique temp name: the same destFileName can be extracted concurrently from
+        // different zips; a shared temp name would let the writers clobber each other.
+        val tmpFile = File.createTempFile("$destFileName.", PART_SUFFIX, outDir)
         return try {
-            val entry = zf.getEntry(entryName) ?: return "error: entry not found: $entryName"
             zf.getInputStream(entry).use { input ->
-                destFile.outputStream().use { output ->
+                tmpFile.outputStream().use { output ->
                     input.copyTo(output)
                 }
             }
-            "ok"
+            if (entry.size >= 0 && tmpFile.length() != entry.size) {
+                tmpFile.delete()
+                return "error: size mismatch extracting $destFileName (${tmpFile.length()} of ${entry.size} bytes)"
+            }
+            moveIntoPlace(tmpFile, destFile)
         } catch (e: Exception) {
+            tmpFile.delete()
             "error: ${e.message}"
         }
+    }
+
+    private fun moveIntoPlace(tmpFile: File, destFile: File): String = try {
+        try {
+            Files.move(tmpFile.toPath(), destFile.toPath(), StandardCopyOption.ATOMIC_MOVE)
+        } catch (_: AtomicMoveNotSupportedException) {
+            Files.move(tmpFile.toPath(), destFile.toPath())
+        }
+        "ok"
+    } catch (_: FileAlreadyExistsException) {
+        // Another worker extracted the same filename first — not an error.
+        tmpFile.delete()
+        "skipped"
+    }
+
+    private fun cleanStalePartFiles(outDir: File) {
+        outDir.listFiles { f -> f.isFile && f.name.endsWith(PART_SUFFIX) }?.forEach { it.delete() }
+    }
+
+    private companion object {
+        const val PART_SUFFIX = ".part"
     }
 }

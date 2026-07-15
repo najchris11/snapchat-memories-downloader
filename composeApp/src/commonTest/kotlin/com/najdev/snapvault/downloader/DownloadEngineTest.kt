@@ -3,12 +3,16 @@ package com.najdev.snapvault.downloader
 import com.najdev.snapvault.model.MemoryItem
 import io.ktor.client.*
 import io.ktor.client.engine.mock.*
+import io.ktor.http.*
+import kotlinx.coroutines.test.runTest
 import okio.fakefilesystem.FakeFileSystem
 import okio.Path.Companion.toPath
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class DownloadEngineTest {
 
@@ -139,5 +143,54 @@ class DownloadEngineTest {
             )
         }
         assertNotNull(existing, "Prefixed .jpeg file should be found for resume detection")
+    }
+
+    // ── Atomic writes (B5) ──────────────────────────────────────────────────
+
+    @Test
+    fun testDownloadWritesFinalFileAndNoPartRemains() = runTest {
+        val fs = FakeFileSystem()
+        val client = HttpClient(MockEngine {
+            respond("file-bytes", headers = headersOf(HttpHeaders.ContentType, "image/jpeg"))
+        })
+        val downloader = DownloadEngine(client, fs)
+        val item = MemoryItem(
+            id = "abc-123",
+            url = "https://media.com/photo.jpg?mid=abc-123",
+            isGet = true,
+            dateStr = "2023-10-12 15:30:00 UTC"
+        )
+
+        val result = downloader.downloadFile(item, "/output")
+
+        assertTrue(result.isDownloaded)
+        val outFiles = fs.list("/output".toPath()).map { it.name }
+        assertTrue("20231012_153000_abc-123.jpg" in outFiles, "final file must exist, got: $outFiles")
+        assertTrue(outFiles.none { it.endsWith(".part") }, "no temp file may remain, got: $outFiles")
+        assertEquals("file-bytes", fs.read("/output/20231012_153000_abc-123.jpg".toPath()) { readUtf8() })
+    }
+
+    @Test
+    fun testFailedDownloadLeavesNoPartialFile() = runTest {
+        val fs = FakeFileSystem()
+        var sentBody = false
+        val client = HttpClient(MockEngine {
+            sentBody = true
+            respondError(HttpStatusCode.InternalServerError)
+        })
+        val downloader = DownloadEngine(client, fs)
+        val item = MemoryItem(
+            id = "bad-999",
+            url = "https://media.com/photo.jpg?mid=bad-999",
+            isGet = true,
+            dateStr = null
+        )
+
+        val result = downloader.downloadFile(item, "/output")
+
+        assertTrue(sentBody)
+        assertFalse(result.isDownloaded)
+        val outFiles = fs.list("/output".toPath()).map { it.name }
+        assertTrue(outFiles.isEmpty(), "a failed download must leave nothing behind, got: $outFiles")
     }
 }

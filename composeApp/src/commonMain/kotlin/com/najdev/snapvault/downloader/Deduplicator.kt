@@ -31,13 +31,17 @@ class Deduplicator(
         val deletedFiles: List<String>
     )
 
+    // Files the pipeline manages that must never be considered for deletion.
+    private fun isProtected(path: Path): Boolean =
+        path.name == "vault_index.json" || path.name.endsWith(".part")
+
     fun deduplicateFolder(folderPath: Path, dryRun: Boolean): List<DedupeResult> {
         if (!fileSystem.metadata(folderPath).isDirectory) return emptyList()
 
         data class FileEntry(val path: Path, val size: Long?)
         val files = fileSystem.list(folderPath).mapNotNull { p ->
             val m = fileSystem.metadata(p)
-            if (m.isRegularFile) FileEntry(p, m.size) else null
+            if (m.isRegularFile && !isProtected(p)) FileEntry(p, m.size) else null
         }
         if (files.size < 2) return emptyList()
 
@@ -56,26 +60,12 @@ class Deduplicator(
         val results = mutableListOf<DedupeResult>()
         for ((_, filepaths) in fileHashes) {
             if (filepaths.size > 1) {
-                val folderName = folderPath.name
-                val folderUuid = if ("_" in folderName) folderName.split("_").last() else folderName
-
-                var primary: Path? = null
-                val toDelete = mutableListOf<Path>()
-
-                for (filepath in filepaths) {
-                    val filename = filepath.name
-                    if (filename.startsWith(folderUuid)) {
-                        primary = filepath
-                    } else {
-                        toDelete.add(filepath)
-                    }
-                }
-
-                if (primary == null) {
-                    primary = filepaths[0]
-                    toDelete.clear()
-                    toDelete.addAll(filepaths.subList(1, filepaths.size))
-                }
+                // Deterministic keep: the lexicographically-first name. Pipeline filenames
+                // start with YYYY-MM-DD, so this keeps the earliest-dated copy of the
+                // duplicated bytes rather than whichever the filesystem listed first.
+                val sorted = filepaths.sortedBy { it.name }
+                val primary = sorted.first()
+                val toDelete = sorted.drop(1)
 
                 if (toDelete.isNotEmpty()) {
                     if (!dryRun) {
@@ -87,7 +77,7 @@ class Deduplicator(
                     }
                     results.add(
                         DedupeResult(
-                            folder = folderName,
+                            folder = folderPath.name,
                             keptFile = primary.name,
                             deletedFiles = toDelete.map { it.name }
                         )

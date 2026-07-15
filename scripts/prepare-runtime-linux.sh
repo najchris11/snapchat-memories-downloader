@@ -41,27 +41,14 @@ chmod +x "$EXIFTOOL_ZIP_DIR/exiftool"
   zip -q -r "$TMP_DIR/exiftool.zip" exiftool exiftool-dist
 )
 
-# 2. Get FFmpeg from apt — more reliable than third-party static build CDNs.
-echo "Installing FFmpeg via apt..."
-sudo apt-get install -y --no-install-recommends ffmpeg
+# 2. FFmpeg is intentionally NOT bundled on Linux.
+# A binary copied from apt is dynamically linked and fails on machines that don't
+# already have ffmpeg's shared libraries — exactly the machines a bundled fallback
+# would exist for. The app resolves ffmpeg from PATH at runtime instead, and the
+# Settings screen tells users to install it via their package manager.
 
-FFMPEG_BIN=$(which ffmpeg)
-if [[ -z "$FFMPEG_BIN" ]]; then
-  echo "ERROR: ffmpeg not found after apt install" >&2
-  exit 1
-fi
-
-mkdir -p "$TMP_DIR/ffmpeg-linux-extracted"
-cp "$FFMPEG_BIN" "$TMP_DIR/ffmpeg-linux-extracted/ffmpeg"
-chmod +x "$TMP_DIR/ffmpeg-linux-extracted/ffmpeg"
-
-(
-  cd "$TMP_DIR/ffmpeg-linux-extracted"
-  zip -q "$TMP_DIR/ffmpeg-packaged.zip" ffmpeg
-)
-
-# 3. Copy packaged zips to resources folders
+# 3. Copy packaged zip to resources folder
 cp "$TMP_DIR/exiftool.zip" "$RESOURCES_DIR/linux-x64/exiftool.zip"
-cp "$TMP_DIR/ffmpeg-packaged.zip" "$RESOURCES_DIR/linux-x64/ffmpeg.zip"
 
-echo "Linux runtimes successfully packaged under $RESOURCES_DIR"
+echo "Linux exiftool runtime successfully packaged under $RESOURCES_DIR"
+echo "(ffmpeg is resolved from the system PATH on Linux — not bundled)"

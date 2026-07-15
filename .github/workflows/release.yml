@@ -1,9 +1,9 @@
 name: Release
 
+# Releases are cut manually (Actions → Release → Run workflow) so that merging a PR
+# never auto-publishes installers. The workflow bumps the version, tags, runs the
+# desktop test suite on all three OSes, and only then packages and uploads.
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
@@ -128,24 +128,32 @@ jobs:
         run: chmod +x gradlew
 
       # macOS and Windows binaries are committed to the repo; no download needed.
-      # Linux binaries are gitignored (too large) so we build them fresh from apt.
+      # Linux bundles only exiftool (gitignored; built fresh here). FFmpeg is not
+      # bundled on Linux — the app resolves it from the system PATH at runtime.
       - name: Prepare bundled runtime (Linux only)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update && sudo apt-get install -y zip unzip
           bash scripts/prepare-runtime-linux.sh
 
-      - name: Build & package desktop distribution
+      # A release must never ship from a commit with failing tests.
+      - name: Run desktop test suite
         shell: bash
-        run: ./gradlew packageDistributionForCurrentOS -Pcompose.javaHome="$JAVA_HOME"
+        run: ./gradlew :composeApp:desktopTest -Pcompose.javaHome="$JAVA_HOME"
+
+      # packageRelease* is the ProGuard-processed variant — the same variant used for
+      # local testing, so released artifacts match what was actually validated.
+      - name: Build & package desktop distribution (release variant)
+        shell: bash
+        run: ./gradlew packageReleaseDistributionForCurrentOS -Pcompose.javaHome="$JAVA_HOME"
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.bump-version.outputs.new_tag }}
           files: |
-            composeApp/build/compose/binaries/main/dmg/*.dmg
-            composeApp/build/compose/binaries/main/msi/*.msi
-            composeApp/build/compose/binaries/main/deb/*.deb
+            composeApp/build/compose/binaries/main-release/dmg/*.dmg
+            composeApp/build/compose/binaries/main-release/msi/*.msi
+            composeApp/build/compose/binaries/main-release/deb/*.deb
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

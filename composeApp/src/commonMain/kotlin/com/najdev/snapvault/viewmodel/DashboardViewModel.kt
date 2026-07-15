@@ -526,7 +526,7 @@ class DashboardViewModel(
     }
 
     private suspend fun runDeduplication(outDir: String, dryRun: Boolean) {
-        log("[INFO] Scanning for duplicate files…")
+        log("[INFO] Scanning for duplicate files…${if (dryRun) " (dry run — nothing will be deleted)" else ""}")
         progressText = "Deduplicating…"
         val deduplicator = Deduplicator(fileSystem)
         val results = withContext(Dispatchers.IO) {
@@ -536,7 +536,15 @@ class DashboardViewModel(
             log("[INFO] No duplicate files found.")
         } else {
             results.forEach { res ->
-                log("[DELETED DUPES] Kept ${res.keptFile}, deleted: ${res.deletedFiles.joinToString()}")
+                if (dryRun) {
+                    log("[WARN] Dry run — would keep ${res.keptFile} and delete: ${res.deletedFiles.joinToString()}")
+                } else {
+                    log("[DELETED DUPES] Kept ${res.keptFile}, deleted: ${res.deletedFiles.joinToString()}")
+                }
+            }
+            if (dryRun) {
+                val total = results.sumOf { it.deletedFiles.size }
+                log("[INFO] Dry run complete — $total duplicate file(s) would be deleted. Disable dry run to apply.")
             }
         }
     }

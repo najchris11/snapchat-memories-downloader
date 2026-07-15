@@ -59,4 +59,44 @@ class DeduplicatorTest {
         fs.delete(tempDir / keptFile)
         fs.delete(tempDir)
     }
+
+    // Keep-selection must be deterministic: filenames start with YYYY-MM-DD, so the
+    // lexicographically-first (earliest-dated) copy survives — not filesystem order.
+    @Test
+    fun testKeepsEarliestDatedCopy() {
+        val fs = okio.fakefilesystem.FakeFileSystem()
+        val dir = "/out".toPath()
+        fs.createDirectories(dir)
+        fs.write(dir / "2023-11-30_ZZZ.jpg") { writeUtf8("dupe-bytes") }
+        fs.write(dir / "2021-05-01_AAA.jpg") { writeUtf8("dupe-bytes") }
+        fs.write(dir / "2022-07-04_MMM.jpg") { writeUtf8("dupe-bytes") }
+
+        val results = Deduplicator(fs).deduplicateFolder(dir, dryRun = false)
+
+        assertEquals(1, results.size)
+        assertEquals("2021-05-01_AAA.jpg", results[0].keptFile)
+        assertEquals(
+            listOf("2022-07-04_MMM.jpg", "2023-11-30_ZZZ.jpg"),
+            results[0].deletedFiles.sorted()
+        )
+        assertTrue(fs.exists(dir / "2021-05-01_AAA.jpg"))
+    }
+
+    // Pipeline-managed files must never be deletion candidates, even with identical bytes.
+    @Test
+    fun testProtectedFilesAreNeverTouched() {
+        val fs = okio.fakefilesystem.FakeFileSystem()
+        val dir = "/out".toPath()
+        fs.createDirectories(dir)
+        fs.write(dir / "vault_index.json") { writeUtf8("same") }
+        fs.write(dir / "photo.jpg") { writeUtf8("same") }
+        fs.write(dir / "video.mp4.abc.part") { writeUtf8("same") }
+
+        val results = Deduplicator(fs).deduplicateFolder(dir, dryRun = false)
+
+        assertTrue(results.isEmpty(), "protected files must not form duplicate groups")
+        assertTrue(fs.exists(dir / "vault_index.json"))
+        assertTrue(fs.exists(dir / "photo.jpg"))
+        assertTrue(fs.exists(dir / "video.mp4.abc.part"))
+    }
 }

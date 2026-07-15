@@ -36,6 +36,7 @@
     <string name="opt_write_date_metadata">Write Date Metadata</string>
     <string name="opt_combine_overlays">Merge Video Overlays</string>
     <string name="opt_clean_duplicates">Clean Duplicate Files</string>
+    <string name="opt_dedupe_dry_run">Preview only (dry run — nothing deleted)</string>
     <string name="dash_workers_label">Parallel Workers</string>
     <string name="dash_terminal_title">bash — snapvault — 80×24</string>
     <string name="dash_step_setup">Setup</string>

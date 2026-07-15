@@ -293,6 +293,16 @@ fun DashboardScreen(
                             )
                             PipelineItem(Icons.Outlined.Layers, stringResource(Res.string.opt_combine_overlays), runCombine) { runCombine = it }
                             PipelineItem(Icons.Outlined.AutoDelete, stringResource(Res.string.opt_clean_duplicates), runDedupe) { runDedupe = it }
+                            // Dedupe deletes files — give it a preview mode.
+                            AnimatedVisibility(visible = runDedupe) {
+                                Box(modifier = Modifier.padding(start = 26.dp)) {
+                                    PipelineItem(
+                                        Icons.Outlined.Visibility,
+                                        stringResource(Res.string.opt_dedupe_dry_run),
+                                        dryRun
+                                    ) { dryRun = it }
+                                }
+                            }
                         }
                     }
                 }

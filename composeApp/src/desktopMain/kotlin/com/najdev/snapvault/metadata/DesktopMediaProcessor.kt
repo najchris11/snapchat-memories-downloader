@@ -1,6 +1,7 @@
 package com.najdev.snapvault.metadata
 
 import com.najdev.snapvault.BinaryExtractor
+import com.najdev.snapvault.waitForOrKill
 import java.io.File
 import java.io.IOException
 import java.time.LocalDate
@@ -165,7 +166,7 @@ class DesktopMediaProcessor : MediaProcessor {
 
         return try {
             val process = ProcessBuilder(args).start()
-            val exitCode = process.waitFor()
+            val exitCode = process.waitForOrKill()
             
             // Apply system modification date fallback
             if (exifDate != null) {
@@ -214,7 +215,7 @@ class DesktopMediaProcessor : MediaProcessor {
 
         return try {
             val process = ProcessBuilder(args).start()
-            val exitCode = process.waitFor()
+            val exitCode = process.waitForOrKill()
             if (exitCode == 0) {
                 val prefix = parseDateToFilenamePrefix(dateTimeUtc)
                 if (prefix != null && prefix.length >= 15) {
@@ -275,7 +276,7 @@ class DesktopMediaProcessor : MediaProcessor {
             return runCatching {
                 val proc = ProcessBuilder(batchArgs).redirectErrorStream(true).start()
                 val output = proc.inputStream.bufferedReader().readText()
-                val rc = proc.waitFor()
+                val rc = proc.waitForOrKill()
                 if (rc == 0) return present
 
                 // Batch failed for another reason — surface output and retry per-file to pinpoint
@@ -285,7 +286,7 @@ class DesktopMediaProcessor : MediaProcessor {
                     val singleArgs = listOf(exifPath, "-overwrite_original", "-q") + tagArgs + listOf(path)
                     val singleProc = ProcessBuilder(singleArgs).redirectErrorStream(true).start()
                     val singleOut = singleProc.inputStream.bufferedReader().readText()
-                    val singleRc = singleProc.waitFor()
+                    val singleRc = singleProc.waitForOrKill()
                     if (singleRc == 0) {
                         succeeded.add(path)
                     } else {
@@ -362,7 +363,7 @@ class DesktopMediaProcessor : MediaProcessor {
             ProcessBuilder(args)
                 .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                 .redirectError(ProcessBuilder.Redirect.DISCARD)
-                .start().waitFor()
+                .start().waitForOrKill()
 
         val encoder = hwEncoder
         var exitCode = runEncode(buildArgs(encoder))
@@ -384,7 +385,7 @@ class DesktopMediaProcessor : MediaProcessor {
                     outputPath
                 ).redirectErrorStream(true).start()
                 val metaOut = metaProc.inputStream.bufferedReader().readText()
-                val metaRc = metaProc.waitFor()
+                val metaRc = metaProc.waitForOrKill()
                 if (metaRc != 0 && metaOut.isNotBlank()) {
                     System.err.println("[exiftool metadata copy rc=$metaRc] ${File(outputPath).name}: ${metaOut.trim()}")
                 }

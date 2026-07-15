@@ -1,6 +1,11 @@
 package com.najdev.snapvault
 
+import kotlinx.coroutines.runInterruptible
+
 actual val isAndroidBuild: Boolean = false
+
+actual suspend fun <T> runInterruptibleCompat(block: () -> T): T =
+    runInterruptible(block = block)
 
 actual fun binaryInstallHint(): String = when (BinaryExtractor.getPlatform()) {
     "darwin-arm64", "darwin-x64" -> """

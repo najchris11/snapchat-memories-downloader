@@ -271,7 +271,7 @@ fun SettingsScreen(
                 modifier = Modifier.size(13.dp)
             )
             Text(
-                "SnapVault ${AppBuildConfig.VERSION} — MIT License",
+                "SnapVault ${AppBuildConfig.VERSION} — GPL-3.0 License",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )

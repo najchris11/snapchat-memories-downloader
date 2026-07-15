@@ -1,6 +1,6 @@
 # Third-Party Software
 
-SnapVault itself is MIT-licensed (see `LICENSE`). The desktop installers additionally
+SnapVault itself is GPL-licensed (see `LICENSE`). The desktop installers additionally
 bundle the following third-party tools, which remain under their own licenses.
 
 ## ExifTool

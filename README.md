@@ -66,4 +66,4 @@ Forked from [ManuelPuchner/snapchat-memories-downloader](https://github.com/Manu
 
 ## License
 
-[MIT](LICENSE)
+[GPL-3.0](LICENSE)

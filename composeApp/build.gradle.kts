@@ -187,11 +187,3 @@ val generateBuildConfig by tasks.registering {
 
 kotlin.sourceSets.getByName("commonMain").kotlin
     .srcDir(generateBuildConfig.map { it.outputs.files })
-
-tasks.register<JavaExec>("runCli") {
-    group = "application"
-    mainClass.set("com.najdev.snapvault.MainCliKt")
-    workingDir = rootProject.projectDir
-    classpath = kotlin.targets.getByName("desktop").compilations.getByName("main").output.allOutputs + 
-                configurations.getByName("desktopRuntimeClasspath")
-}

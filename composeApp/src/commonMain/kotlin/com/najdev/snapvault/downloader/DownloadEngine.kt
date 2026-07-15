@@ -93,25 +93,26 @@ class DownloadEngine(
         }
     }
 
-    suspend fun downloadFile(item: MemoryItem, outputDir: String): DownloadResult {
+    private val resumableExtensions = listOf("mp4", "jpg", "jpeg", "png", "zip")
+
+    // existingNames: pre-listed directory contents. downloadAll lists the directory once
+    // and shares the set — per-item listing made resume checks O(n²) over the library.
+    suspend fun downloadFile(item: MemoryItem, outputDir: String, existingNames: Set<String>? = null): DownloadResult {
         val outputFolderPath = outputDir.toPath()
         if (!fileSystem.exists(outputFolderPath)) {
             fileSystem.createDirectories(outputFolderPath)
         }
 
         // We check for files matching item.id in outputDir to support resuming
+        val names = existingNames ?: fileSystem.list(outputFolderPath).map { it.name }.toSet()
         val prefix = parseDateToFilenamePrefix(item.dateStr)
-        val files = fileSystem.list(outputFolderPath)
-        val alreadyDownloadedFile = files.find { file ->
-            val filename = file.name
-            (filename == "${item.id}.mp4" || filename == "${item.id}.jpg" || filename == "${item.id}.jpeg" || filename == "${item.id}.png" || filename == "${item.id}.zip") ||
-            (prefix != null && (filename == "${prefix}_${item.id}.mp4" || filename == "${prefix}_${item.id}.jpg" || filename == "${prefix}_${item.id}.jpeg" || filename == "${prefix}_${item.id}.png" || filename == "${prefix}_${item.id}.zip"))
-        }
+        val existingName = resumableExtensions.map { "${item.id}.$it" }.firstOrNull { it in names }
+            ?: prefix?.let { p -> resumableExtensions.map { "${p}_${item.id}.$it" }.firstOrNull { it in names } }
 
-        if (alreadyDownloadedFile != null) {
+        if (existingName != null) {
             val updated = item.copy(
                 isDownloaded = true,
-                downloadedPath = alreadyDownloadedFile.toString()
+                downloadedPath = (outputFolderPath / existingName).toString()
             )
             return DownloadResult(updated, "skipped")
         }
@@ -180,6 +181,14 @@ class DownloadEngine(
         workers: Int,
         onProgress: ((DownloadResult) -> Unit)? = null,
     ): List<DownloadResult> {
+        val outputFolderPath = outputDir.toPath()
+        if (!fileSystem.exists(outputFolderPath)) {
+            fileSystem.createDirectories(outputFolderPath)
+        }
+        // Snapshot the directory once for all resume checks (items never collide on id,
+        // so files created during this run don't need to appear in the snapshot).
+        val existingNames = fileSystem.list(outputFolderPath).map { it.name }.toSet()
+
         val semaphore = Semaphore(workers)
         return coroutineScope {
             val channel = Channel<DownloadResult>(Channel.UNLIMITED)
@@ -189,7 +198,7 @@ class DownloadEngine(
             val results = items.map { item ->
                 async {
                     semaphore.withPermit {
-                        downloadFile(item, outputDir).also { channel.send(it) }
+                        downloadFile(item, outputDir, existingNames).also { channel.send(it) }
                     }
                 }
             }.awaitAll()

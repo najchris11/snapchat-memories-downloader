@@ -7,6 +7,7 @@ import com.najdev.snapvault.downloader.DownloadEngine
 import com.najdev.snapvault.downloader.ZipPipelineRunner
 import com.najdev.snapvault.metadata.MediaProcessor
 import com.najdev.snapvault.model.FileMeta
+import com.najdev.snapvault.model.MemoryItem
 import com.najdev.snapvault.parser.*
 import io.ktor.client.*
 import kotlinx.coroutines.*
@@ -107,7 +108,7 @@ class DashboardViewModel(
                 if (importMode == ImportMode.Zip) {
                     runZipPipeline(outDir, runMetadata, runCombine, runDedupe, dryRun, workerCount)
                 } else {
-                    runLegacyPipeline(outDir, runDownload, runMetadata, runDedupe, dryRun, workerCount)
+                    runLegacyPipeline(outDir, runDownload, runMetadata, runCombine, runDedupe, dryRun, workerCount)
                 }
                 progress = 1.0f
                 progressText = "Pipeline Complete"
@@ -348,80 +349,10 @@ class DashboardViewModel(
         }
 
         if (runCombine) {
-            val scannedPairCount = itemsByZip.values.flatten().count { it.hasOverlay && it.overlayFileName != null }
-            var combinedCount = 0
-            var combineErrorCount = 0
-            var combineSkippedCount = 0
-            var combineDone = 0
-            var combineTotal = scannedPairCount.coerceAtLeast(1)
-            val combineEta = EtaEstimator()
-            var combineEncoder: String? = null
-            progress = 0f
-            progressText = "Combining overlays…"
-            zipPipelineRunner.combineAll(
-                outDir,
-                deleteOriginals = true,
-                workerCount = workerCount,
-                onMetaError = { msg -> log("[WARN] $msg") },
-                onStart = { actual ->
-                    combineTotal = actual.coerceAtLeast(1)
-                    mediaProcessor.resetVideoEncodeStats()
-                    // Probe-backed: names an encoder only if a real test encode succeeded.
-                    combineEncoder = mediaProcessor.activeVideoEncoder()
-                    val encoderLabel = combineEncoder?.let { "hardware ($it)" } ?: "software (libx264)"
-                    log("[INFO] Found $actual overlay pairs. Combining… [video encoder: $encoderLabel]")
-                    progressText = "Combining: 0 / $actual"
-                },
-                onMetaStart = { total ->
-                    log("[INFO] Tagging $total combined file(s) with date metadata…")
-                    progressText = "Tagging combined files…"
-                    progress = 0f
-                }
-            ) { result ->
-                result.warnings.forEach { log("[WARN] $it") }
-                when {
-                    result.status == "combined" -> combinedCount++
-                    result.status.startsWith("skipped:") -> combineSkippedCount++
-                    result.status.startsWith("error") -> {
-                        combineErrorCount++
-                        log("[ERROR] Overlay combine ${result.uuid.take(8)}: ${result.status}")
-                    }
-                }
-                combineDone++
-                combineEta.record(combineDone)
-                progress = combineDone.toFloat() / combineTotal
-                progressText = "Combining: $combineDone / $combineTotal"
-                val rate = combineEta.ratePerSec()
-                if (rate != null) {
-                    speedText = "${rate.toInt().coerceAtLeast(1)} pairs/s"
-                    etaText = when (val etaSec = combineEta.etaSeconds(combineTotal, combineDone)) {
-                        null -> "ETA: --"
-                        0L -> "ETA: done"
-                        else -> "ETA: ${formatEta(etaSec)}"
-                    }
-                }
-            }
-            speedText = "SPEED: --"
-            etaText = "ETA: --"
-            val combineSummary = buildString {
-                append("[INFO] Combined $combinedCount overlay pairs")
-                if (combineSkippedCount > 0) append(", $combineSkippedCount skipped (unsupported format)")
-                if (combineErrorCount > 0) append(", $combineErrorCount errors")
-                append(".")
-            }
-            log(combineSummary)
-            mediaProcessor.videoEncodeStats()?.let { stats ->
-                if (stats.hardware + stats.software > 0) {
-                    log("[INFO] Video encodes: ${stats.hardware} hardware, ${stats.software} software.")
-                    // A hardware encoder was active at start but some files still went software.
-                    if (combineEncoder != null && stats.software > 0) {
-                        log("[WARN] ${stats.software} video(s) fell back to software encoding (see stderr for per-file reasons).")
-                    }
-                }
-            }
-            pipelineCombinedCount = combinedCount
-            pipelineCombineSkipped = combineSkippedCount
-            pipelineCombineErrors = combineErrorCount
+            val (combined, skipped, errors) = runCombinePhase(outDir)
+            pipelineCombinedCount = combined
+            pipelineCombineSkipped = skipped
+            pipelineCombineErrors = errors
         }
 
         if (runDedupe) runDeduplication(outDir, dryRun)
@@ -451,6 +382,7 @@ class DashboardViewModel(
         outDir: String,
         runDownload: Boolean,
         runMetadata: Boolean,
+        runCombine: Boolean,
         runDedupe: Boolean,
         dryRun: Boolean,
         workerCount: Int,
@@ -478,57 +410,85 @@ class DashboardViewModel(
             Json.decodeFromString<Map<String, FileMeta>>(fileSystem.read(vaultIndexPath) { readUtf8() })
         }.getOrDefault(emptyMap()).toMutableMap()
 
+        // Items with a file on disk after the download phase; used by the metadata pass.
+        val presentItems = mutableListOf<MemoryItem>()
+
         if (runDownload) {
             log("[INFO] Downloading files in parallel…")
             val httpClient = HttpClient()
-            val downloader = DownloadEngine(httpClient, fileSystem)
             var downloadedCount = 0
+            var skippedCount = 0
+            var errorCount = 0
+            var done = 0
             val totalCount = items.size
             val dlEta = EtaEstimator()
 
-            val downloadCollector = downloader.progressFlow.onEach { (item, status) ->
-                downloadedCount++
-                dlEta.record(downloadedCount)
-                progress = downloadedCount.toFloat() / totalCount
-                progressText = "Downloading: $downloadedCount of $totalCount files…"
-                val rate = dlEta.ratePerSec()
-                if (rate != null) {
-                    speedText = "${rate.toInt().coerceAtLeast(1)} files/s"
-                    etaText = when (val etaSec = dlEta.etaSeconds(totalCount, downloadedCount)) {
-                        null -> "ETA: --"
-                        0L -> "ETA: done"
-                        else -> "ETA: ${formatEta(etaSec)}"
-                    }
-                }
-
-                val name = item.downloadedPath?.let { path ->
-                    val lastSlash = path.lastIndexOfAny(charArrayOf('/', '\\'))
-                    if (lastSlash != -1) path.substring(lastSlash + 1) else path
-                } ?: downloader.buildFilename(item, null)
-
-                when (status) {
-                    "downloaded" -> {
-                        log("[DOWNLOADED] $name")
-                        var hasGps = false
-                        //META legacy pipeline GPS write: only fires if MemoryItem has non-null lat/lon from memories_history.html/json
-                        //META dateStr here comes from HistoryParser ("YYYY-MM-DD HH:MM:SS UTC" or similar) and includes time-of-day
-                        if (runMetadata && item.latitude != null && item.longitude != null && item.downloadedPath != null) {
-                            val exifOk = mediaProcessor.writeGpsMetadata(item.downloadedPath, item.latitude, item.longitude, item.dateStr)
-                            if (exifOk) { log("   -> [METADATA] EXIF GPS tag written."); hasGps = true }
+            try {
+                val downloader = DownloadEngine(httpClient, fileSystem)
+                // onProgress is serialized by DownloadEngine's single consumer coroutine.
+                val results = downloader.downloadAll(items, outDir, workerCount) { result ->
+                    done++
+                    dlEta.record(done)
+                    progress = done.toFloat() / totalCount
+                    progressText = "Downloading: $done of $totalCount files…"
+                    val rate = dlEta.ratePerSec()
+                    if (rate != null) {
+                        speedText = "${rate.toInt().coerceAtLeast(1)} files/s"
+                        etaText = when (val etaSec = dlEta.etaSeconds(totalCount, done)) {
+                            null -> "ETA: --"
+                            0L -> "ETA: done"
+                            else -> "ETA: ${formatEta(etaSec)}"
                         }
-                        downloadedMeta[name] = FileMeta(hasGps = hasGps, hasOverlay = false)
                     }
-                    "skipped" -> log("[SKIPPED] $name (already exists)")
-                    else -> log("[ERROR] Failed $name: $status")
+                    val name = result.item.downloadedPath?.let { path ->
+                        val lastSlash = path.lastIndexOfAny(charArrayOf('/', '\\'))
+                        if (lastSlash != -1) path.substring(lastSlash + 1) else path
+                    } ?: downloader.buildFilename(result.item, null)
+                    when {
+                        result.status == "downloaded" -> {
+                            downloadedCount++
+                            log("[DOWNLOADED] $name")
+                            downloadedMeta[name] = FileMeta(hasGps = false, hasOverlay = false)
+                        }
+                        result.status == "skipped" -> {
+                            skippedCount++
+                            log("[SKIPPED] $name (already exists)")
+                        }
+                        else -> {
+                            errorCount++
+                            log("[ERROR] Failed $name: ${result.status}")
+                        }
+                    }
                 }
-            }.launchIn(CoroutineScope(Dispatchers.Default))
-
-            downloader.downloadAll(items, outDir, workerCount)
-            downloadCollector.cancel()
-            httpClient.close()
+                presentItems.addAll(results.filter { it.item.downloadedPath != null }.map { it.item })
+            } finally {
+                httpClient.close()
+            }
+            speedText = "SPEED: --"
+            etaText = "ETA: --"
+            log("[INFO] Downloads: $downloadedCount new, $skippedCount existing${if (errorCount > 0) ", $errorCount errors" else ""}.")
         }
 
         currentStep = 2
+
+        // Memories with overlays arrive as small .zip archives; extract them flat as
+        // -main/-overlay pairs (legacy Python parity) so the combine phase can find them.
+        progressText = "Extracting downloaded archives…"
+        val extractedFiles = zipPipelineRunner.extractDownloadedArchives(outDir) { msg ->
+            log("[WARN] [archive] $msg")
+        }
+        if (extractedFiles.isNotEmpty()) {
+            log("[INFO] Extracted ${extractedFiles.size} file(s) from downloaded overlay archives.")
+        }
+
+        if (runMetadata) {
+            legacyMetadataPass(presentItems, extractedFiles, downloadedMeta)
+        }
+
+        if (runCombine) {
+            legacyCombinePass(outDir)
+        }
+
         if (runDedupe) runDeduplication(outDir, dryRun)
 
         runCatching {
@@ -537,6 +497,196 @@ class DashboardViewModel(
             }
             log("[INFO] Vault index saved (${downloadedMeta.size} entries).")
         }.onFailure { e -> log("[WARN] Could not write vault index: ${e.message}") }
+    }
+
+    // Shared by both pipelines: combines every -main/-overlay pair in outDir.
+    // Returns (combined, skipped, errors).
+    private suspend fun runCombinePhase(outDir: String): Triple<Int, Int, Int> {
+        var combinedCount = 0
+        var combineErrorCount = 0
+        var combineSkippedCount = 0
+        var combineDone = 0
+        var combineTotal = 1
+        val combineEta = EtaEstimator()
+        var combineEncoder: String? = null
+        progress = 0f
+        progressText = "Combining overlays…"
+        zipPipelineRunner.combineAll(
+            outDir,
+            deleteOriginals = true,
+            workerCount = workerCount,
+            onMetaError = { msg -> log("[WARN] $msg") },
+            onStart = { actual ->
+                combineTotal = actual.coerceAtLeast(1)
+                mediaProcessor.resetVideoEncodeStats()
+                // Probe-backed: names an encoder only if a real test encode succeeded.
+                combineEncoder = mediaProcessor.activeVideoEncoder()
+                val encoderLabel = combineEncoder?.let { "hardware ($it)" } ?: "software (libx264)"
+                log("[INFO] Found $actual overlay pairs. Combining… [video encoder: $encoderLabel]")
+                progressText = "Combining: 0 / $actual"
+            },
+            onMetaStart = { total ->
+                log("[INFO] Tagging $total combined file(s) with date metadata…")
+                progressText = "Tagging combined files…"
+                progress = 0f
+            }
+        ) { result ->
+            result.warnings.forEach { log("[WARN] $it") }
+            when {
+                result.status == "combined" -> combinedCount++
+                result.status.startsWith("skipped:") -> combineSkippedCount++
+                result.status.startsWith("error") -> {
+                    combineErrorCount++
+                    log("[ERROR] Overlay combine ${result.uuid.take(8)}: ${result.status}")
+                }
+            }
+            combineDone++
+            combineEta.record(combineDone)
+            progress = combineDone.toFloat() / combineTotal
+            progressText = "Combining: $combineDone / $combineTotal"
+            val rate = combineEta.ratePerSec()
+            if (rate != null) {
+                speedText = "${rate.toInt().coerceAtLeast(1)} pairs/s"
+                etaText = when (val etaSec = combineEta.etaSeconds(combineTotal, combineDone)) {
+                    null -> "ETA: --"
+                    0L -> "ETA: done"
+                    else -> "ETA: ${formatEta(etaSec)}"
+                }
+            }
+        }
+        speedText = "SPEED: --"
+        etaText = "ETA: --"
+        val combineSummary = buildString {
+            append("[INFO] Combined $combinedCount overlay pairs")
+            if (combineSkippedCount > 0) append(", $combineSkippedCount skipped (unsupported format)")
+            if (combineErrorCount > 0) append(", $combineErrorCount errors")
+            append(".")
+        }
+        log(combineSummary)
+        mediaProcessor.videoEncodeStats()?.let { stats ->
+            if (stats.hardware + stats.software > 0) {
+                log("[INFO] Video encodes: ${stats.hardware} hardware, ${stats.software} software.")
+                // A hardware encoder was active at start but some files still went software.
+                if (combineEncoder != null && stats.software > 0) {
+                    log("[WARN] ${stats.software} video(s) fell back to software encoding (see stderr for per-file reasons).")
+                }
+            }
+        }
+        return Triple(combinedCount, combineSkippedCount, combineErrorCount)
+    }
+
+    private suspend fun legacyCombinePass(outDir: String) {
+        runCombinePhase(outDir)
+    }
+
+    //META legacy metadata pass: full date+TIME from the history file's dateStr, plus GPS
+    //META when the history file provided coordinates — richer than the ZIP path's date-only tags.
+    //META Overlay files are skipped (combine consumes them; the combined output inherits the
+    //META main file's tags via exiftool copy) — matches the legacy Python behavior.
+    private suspend fun legacyMetadataPass(
+        presentItems: List<MemoryItem>,
+        extractedFiles: List<String>,
+        downloadedMeta: MutableMap<String, FileMeta>,
+    ) {
+        data class MetaTarget(val path: String, val dateStr: String?, val lat: Double?, val lon: Double?)
+
+        fun leafName(path: String): String {
+            val lastSlash = path.lastIndexOfAny(charArrayOf('/', '\\'))
+            return if (lastSlash != -1) path.substring(lastSlash + 1) else path
+        }
+
+        // Owner lookup for extracted archive contents: "<base>-main.jpg" came from "<base>.zip".
+        val itemByArchiveBase = presentItems
+            .filter { it.downloadedPath?.endsWith(".zip", ignoreCase = true) == true }
+            .associateBy { leafName(it.downloadedPath!!).removeSuffix(".zip") }
+
+        val targets = mutableListOf<MetaTarget>()
+        presentItems
+            .filter { it.downloadedPath != null && !it.downloadedPath.endsWith(".zip", ignoreCase = true) }
+            .forEach { targets.add(MetaTarget(it.downloadedPath!!, it.dateStr, it.latitude, it.longitude)) }
+        for (path in extractedFiles) {
+            val name = leafName(path)
+            if ("-overlay." in name) continue
+            val base = name.substringBefore("-main.").takeIf { it != name }
+            val owner = base?.let { itemByArchiveBase[it] }
+            targets.add(MetaTarget(path, owner?.dateStr, owner?.latitude, owner?.longitude))
+        }
+
+        if (targets.isEmpty()) return
+        log("[INFO] Writing metadata (date + GPS where available) to ${targets.size} file(s)…")
+        progress = 0f
+        progressText = "Metadata: 0 / ${targets.size}"
+
+        var gpsCount = 0
+        var dateCount = 0
+        var failCount = 0
+        var noDateCount = 0
+        var done = 0
+        val metaEta = EtaEstimator()
+
+        // outcome: "gps", "date", "fail", "nodate"
+        val channel = Channel<Pair<MetaTarget, String>>(Channel.UNLIMITED)
+        val semaphore = Semaphore(workerCount)
+
+        coroutineScope {
+            // Single consumer — serializes counters, UI state, and vault index updates.
+            launch {
+                for ((target, outcome) in channel) {
+                    when (outcome) {
+                        "gps" -> {
+                            gpsCount++
+                            downloadedMeta[leafName(target.path)] = FileMeta(hasGps = true, hasOverlay = false)
+                        }
+                        "date" -> dateCount++
+                        "fail" -> failCount++
+                        "nodate" -> noDateCount++
+                    }
+                    done++
+                    metaEta.record(done)
+                    progress = done.toFloat() / targets.size
+                    progressText = "Metadata: $done / ${targets.size}"
+                    val rate = metaEta.ratePerSec()
+                    if (rate != null) {
+                        speedText = "${rate.toInt().coerceAtLeast(1)} files/s"
+                        etaText = when (val etaSec = metaEta.etaSeconds(targets.size, done)) {
+                            null -> "ETA: --"
+                            0L -> "ETA: done"
+                            else -> "ETA: ${formatEta(etaSec)}"
+                        }
+                    }
+                }
+            }
+
+            targets.map { target ->
+                async(Dispatchers.IO) {
+                    semaphore.withPermit {
+                        val outcome = runInterruptibleCompat {
+                            when {
+                                target.lat != null && target.lon != null ->
+                                    //META GPS + full datetime in one exiftool call
+                                    if (mediaProcessor.writeGpsMetadata(target.path, target.lat, target.lon, target.dateStr)) "gps" else "fail"
+                                target.dateStr != null ->
+                                    if (mediaProcessor.writeDateMetadata(target.path, target.dateStr)) "date" else "fail"
+                                else -> "nodate"
+                            }
+                        }
+                        channel.send(target to outcome)
+                    }
+                }
+            }.awaitAll()
+
+            channel.close()
+        }
+
+        speedText = "SPEED: --"
+        etaText = "ETA: --"
+        val summary = buildString {
+            append("[INFO] Metadata: ${gpsCount + dateCount} tagged ($gpsCount with GPS)")
+            if (noDateCount > 0) append(", $noDateCount had no date in the history file")
+            if (failCount > 0) append(", $failCount failed")
+            append(".")
+        }
+        log(summary)
     }
 
     private suspend fun runDeduplication(outDir: String, dryRun: Boolean) {

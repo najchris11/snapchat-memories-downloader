@@ -73,44 +73,37 @@ fun main() {
     val httpClient = HttpClient(CIO)
     val downloader = DownloadEngine(httpClient, fileSystem)
 
-    // Listen to download progress
-    val job = downloader.progressFlow.onEach { (item, status) ->
-        val name = item.downloadedPath?.let { path ->
-            val lastSlash = path.lastIndexOfAny(charArrayOf('/', '\\'))
-            if (lastSlash != -1) path.substring(lastSlash + 1) else path
-        } ?: downloader.buildFilename(item, null)
-        when {
-            status == "downloaded" -> {
-                println("[DOWNLOADED] $name")
-                
-                // Write GPS metadata if available
-                if (hasExif && item.latitude != null && item.longitude != null && item.downloadedPath != null) {
-                    val ok = mediaProcessor.writeGpsMetadata(item.downloadedPath, item.latitude, item.longitude, item.dateStr)
-                    if (ok) {
-                        println("   -> [METADATA] EXIF GPS written successfully.")
-                    } else {
-                        println("   -> [METADATA] Failed to write EXIF GPS.")
+    println("[INFO] Starting parallel downloads (Workers: 5)...")
+    val results = runBlocking {
+        downloader.downloadAll(items, outputDir, workers = 5) { result ->
+            val item = result.item
+            val name = item.downloadedPath?.let { path ->
+                val lastSlash = path.lastIndexOfAny(charArrayOf('/', '\\'))
+                if (lastSlash != -1) path.substring(lastSlash + 1) else path
+            } ?: downloader.buildFilename(item, null)
+            when {
+                result.status == "downloaded" -> {
+                    println("[DOWNLOADED] $name")
+
+                    // Write GPS metadata if available
+                    if (hasExif && item.latitude != null && item.longitude != null && item.downloadedPath != null) {
+                        val ok = mediaProcessor.writeGpsMetadata(item.downloadedPath, item.latitude, item.longitude, item.dateStr)
+                        if (ok) {
+                            println("   -> [METADATA] EXIF GPS written successfully.")
+                        } else {
+                            println("   -> [METADATA] Failed to write EXIF GPS.")
+                        }
                     }
                 }
-            }
-            status == "skipped" -> println("[SKIPPED] $name (already exists)")
-            else -> {
-                if (status.startsWith("error")) {
-                    println("[ERROR] Failed downloading ${item.id}: $status")
-                }
+                result.status == "skipped" -> println("[SKIPPED] $name (already exists)")
+                else -> println("[ERROR] Failed downloading ${item.id}: ${result.status}")
             }
         }
-    }.launchIn(CoroutineScope(Dispatchers.Default))
-
-    println("[INFO] Starting parallel downloads (Workers: 5)...")
-    val resultItems = runBlocking {
-        downloader.downloadAll(items, outputDir, workers = 5)
     }
 
-    job.cancel()
     httpClient.close()
 
-    val downloadedCount = resultItems.count { it.isDownloaded }
+    val downloadedCount = results.count { it.item.isDownloaded }
     println()
     println("[OK] Download phase complete: $downloadedCount of ${items.size} files processed.")
 

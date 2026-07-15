@@ -117,6 +117,43 @@ class ZipExtractEngineTest {
         assertTrue(leftovers.isEmpty(), "no .part temp files may remain, found: $leftovers")
     }
 
+    // ── extractDownloadedArchives (legacy pipeline) ──────────────────────────
+
+    @Test
+    fun extractsLegacyArchiveAsMainOverlayPairAndDeletesIt() {
+        val archive = File(outDir, "20231012_153000_abc.zip")
+        ZipOutputStream(archive.outputStream()).use { zos ->
+            zos.putNextEntry(ZipEntry("media~xyz.mp4")); zos.write("video-bytes".toByteArray()); zos.closeEntry()
+            zos.putNextEntry(ZipEntry("overlay~xyz.png")); zos.write("overlay-bytes".toByteArray()); zos.closeEntry()
+            zos.putNextEntry(ZipEntry("thumbnail~xyz.jpg")); zos.write("thumb".toByteArray()); zos.closeEntry()
+        }
+
+        val warnings = mutableListOf<String>()
+        val extracted = runBlocking {
+            ZipExtractEngine().extractDownloadedArchives(outDir.absolutePath) { warnings.add(it) }
+        }
+
+        assertEquals(2, extracted.size, "media + overlay extracted, thumbnail skipped; warnings: $warnings")
+        assertEquals("video-bytes", File(outDir, "20231012_153000_abc-main.mp4").readText())
+        assertEquals("overlay-bytes", File(outDir, "20231012_153000_abc-overlay.png").readText())
+        assertTrue(!archive.exists(), "archive must be deleted after full extraction")
+        assertTrue(warnings.isEmpty(), "no warnings expected: $warnings")
+    }
+
+    @Test
+    fun corruptArchiveIsKeptAndWarned() {
+        val bogus = File(outDir, "20231012_153000_bad.zip").apply { writeText("not a zip") }
+
+        val warnings = mutableListOf<String>()
+        val extracted = runBlocking {
+            ZipExtractEngine().extractDownloadedArchives(outDir.absolutePath) { warnings.add(it) }
+        }
+
+        assertTrue(extracted.isEmpty())
+        assertTrue(bogus.exists(), "unreadable archive must be kept for retry")
+        assertTrue(warnings.isNotEmpty())
+    }
+
     @Test
     fun cleansStalePartFilesFromPreviousRun() {
         val stale = File(outDir, "2023-10-12_ABC-main.jpg.x1y2.part").apply { writeText("truncated") }

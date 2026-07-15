@@ -8,8 +8,7 @@ import io.ktor.client.plugins.*
 import io.ktor.http.*
 import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import okio.FileSystem
@@ -18,12 +17,13 @@ import okio.Path.Companion.toPath
 import okio.buffer
 import okio.use
 
+// Per-item outcome: "downloaded", "skipped", or "error: <reason>".
+data class DownloadResult(val item: MemoryItem, val status: String)
+
 class DownloadEngine(
     private val client: HttpClient,
     private val fileSystem: FileSystem
 ) {
-    private val _progressFlow = MutableSharedFlow<Pair<MemoryItem, String>>() // String can be "downloaded", "skipped", "error", or log message
-    val progressFlow = _progressFlow.asSharedFlow()
 
     fun parseDateToFilenamePrefix(dateStr: String?): String? {
         if (dateStr == null) return null
@@ -93,7 +93,7 @@ class DownloadEngine(
         }
     }
 
-    suspend fun downloadFile(item: MemoryItem, outputDir: String): MemoryItem {
+    suspend fun downloadFile(item: MemoryItem, outputDir: String): DownloadResult {
         val outputFolderPath = outputDir.toPath()
         if (!fileSystem.exists(outputFolderPath)) {
             fileSystem.createDirectories(outputFolderPath)
@@ -113,8 +113,7 @@ class DownloadEngine(
                 isDownloaded = true,
                 downloadedPath = alreadyDownloadedFile.toString()
             )
-            _progressFlow.emit(updated to "skipped")
-            return updated
+            return DownloadResult(updated, "skipped")
         }
 
         try {
@@ -165,31 +164,38 @@ class DownloadEngine(
                 isDownloaded = true,
                 downloadedPath = filepath.toString()
             )
-            _progressFlow.emit(updated to "downloaded")
-            return updated
+            return DownloadResult(updated, "downloaded")
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            val updated = item.copy(isDownloaded = false)
-            _progressFlow.emit(updated to "error: ${e.message}")
-            return updated
+            return DownloadResult(item.copy(isDownloaded = false), "error: ${e.message}")
         }
     }
 
+    // onProgress is invoked from a single consumer coroutine (never concurrently), so
+    // callers can update UI state without their own synchronization.
     suspend fun downloadAll(
         items: List<MemoryItem>,
         outputDir: String,
-        workers: Int
-    ): List<MemoryItem> {
+        workers: Int,
+        onProgress: ((DownloadResult) -> Unit)? = null,
+    ): List<DownloadResult> {
         val semaphore = Semaphore(workers)
         return coroutineScope {
-            items.map { item ->
+            val channel = Channel<DownloadResult>(Channel.UNLIMITED)
+            val consumer = launch {
+                for (result in channel) onProgress?.invoke(result)
+            }
+            val results = items.map { item ->
                 async {
                     semaphore.withPermit {
-                        downloadFile(item, outputDir)
+                        downloadFile(item, outputDir).also { channel.send(it) }
                     }
                 }
             }.awaitAll()
+            channel.close()
+            consumer.join()
+            results
         }
     }
 }

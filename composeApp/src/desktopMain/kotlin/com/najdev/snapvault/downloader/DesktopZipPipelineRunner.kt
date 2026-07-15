@@ -33,6 +33,11 @@ class DesktopZipPipelineRunner(mediaProcessor: MediaProcessor) : ZipPipelineRunn
         onProgress: (ExtractResult) -> Unit
     ) = extractor.extractAll(itemsByZip, outputDir, workerCount, onProgress)
 
+    override suspend fun extractDownloadedArchives(
+        outputDir: String,
+        onWarn: (String) -> Unit
+    ): List<String> = extractor.extractDownloadedArchives(outputDir, onWarn)
+
     override suspend fun combineAll(
         outputDir: String,
         deleteOriginals: Boolean,

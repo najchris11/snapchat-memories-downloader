@@ -163,7 +163,8 @@ class DownloadEngineTest {
 
         val result = downloader.downloadFile(item, "/output")
 
-        assertTrue(result.isDownloaded)
+        assertEquals("downloaded", result.status)
+        assertTrue(result.item.isDownloaded)
         val outFiles = fs.list("/output".toPath()).map { it.name }
         assertTrue("20231012_153000_abc-123.jpg" in outFiles, "final file must exist, got: $outFiles")
         assertTrue(outFiles.none { it.endsWith(".part") }, "no temp file may remain, got: $outFiles")
@@ -189,7 +190,8 @@ class DownloadEngineTest {
         val result = downloader.downloadFile(item, "/output")
 
         assertTrue(sentBody)
-        assertFalse(result.isDownloaded)
+        assertTrue(result.status.startsWith("error"))
+        assertFalse(result.item.isDownloaded)
         val outFiles = fs.list("/output".toPath()).map { it.name }
         assertTrue(outFiles.isEmpty(), "a failed download must leave nothing behind, got: $outFiles")
     }

@@ -32,7 +32,7 @@
     <string name="browse_btn">Browse</string>
     <string name="dash_pipeline_title">Pipeline Options</string>
     <string name="opt_download_memories">Download Memories</string>
-    <string name="opt_inject_gps">Inject GPS Coordinates</string>
+    <string name="opt_inject_gps">Write Metadata (GPS + Date)</string>
     <string name="opt_write_date_metadata">Write Date Metadata</string>
     <string name="opt_combine_overlays">Merge Video Overlays</string>
     <string name="opt_clean_duplicates">Clean Duplicate Files</string>

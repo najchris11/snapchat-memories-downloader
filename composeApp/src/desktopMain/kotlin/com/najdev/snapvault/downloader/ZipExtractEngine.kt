@@ -6,6 +6,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -76,6 +78,59 @@ class ZipExtractEngine {
 
             channel.close()
         }
+    }
+
+    // Legacy pipeline: extracts each downloaded memory archive flat into outputDir with
+    // -main/-overlay names derived from the archive basename, so OverlayCombiner's stem
+    // matching picks the pair up unchanged. Mirrors the legacy Python behavior
+    // (extract_and_cleanup_zip): thumbnails are skipped and the archive is deleted after
+    // a fully successful extraction, kept for retry otherwise.
+    suspend fun extractDownloadedArchives(
+        outputDir: String,
+        onWarn: (String) -> Unit,
+    ): List<String> = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        val outDir = File(outputDir)
+        val archives = outDir.listFiles { f -> f.isFile && f.extension.lowercase() == "zip" }
+            ?: return@withContext emptyList()
+        val extracted = mutableListOf<String>()
+
+        for (archive in archives) {
+            currentCoroutineContext().ensureActive()
+            val base = archive.nameWithoutExtension
+            try {
+                var allOk = true
+                ZipFile(archive).use { zf ->
+                    val entries = zf.entries().toList().filter { !it.isDirectory }
+                    if (entries.isEmpty()) {
+                        onWarn("archive ${archive.name} is empty — kept as-is")
+                        allOk = false
+                        return@use
+                    }
+                    for (entry in entries) {
+                        val entryLeaf = entry.name.substringAfterLast('/')
+                        val lower = entryLeaf.lowercase()
+                        if ("thumbnail" in lower) continue
+                        val ext = entryLeaf.substringAfterLast('.', "")
+                        if (ext.isEmpty()) continue
+                        val role = if ("overlay" in lower) "overlay" else "main"
+                        val destName = "$base-$role.$ext"
+                        when (val res = extractEntry(zf, entry.name, destName, outDir)) {
+                            "ok", "skipped" -> extracted.add(File(outDir, destName).absolutePath)
+                            else -> {
+                                allOk = false
+                                onWarn("${archive.name} → $destName: $res")
+                            }
+                        }
+                    }
+                }
+                if (allOk && !archive.delete()) {
+                    onWarn("could not delete extracted archive ${archive.name}")
+                }
+            } catch (e: Exception) {
+                onWarn("could not extract ${archive.name}: ${e.message}")
+            }
+        }
+        extracted
     }
 
     // Extraction writes to a unique .part temp file and renames into place only after the

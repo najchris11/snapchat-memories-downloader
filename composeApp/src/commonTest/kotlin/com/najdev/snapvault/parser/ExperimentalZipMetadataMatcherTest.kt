@@ -178,6 +178,60 @@ class ExperimentalZipMetadataMatcherTest {
     }
 
     @Test
+    fun testCollisionWithOneLocatedAndOneUnlocatedRecordOmitsGps() {
+        // Two photos saved in the same second, but only one JSON record has a location.
+        // There's no way to tell which physical file that location belongs to, so
+        // neither file may be tagged with it — applying it to both would risk
+        // geotagging the wrong one.
+        val entries = listOf(
+            HtmlMemoryEntry(
+                fileName = "2024-03-05_A-main.jpg",
+                uuid = "A",
+                date = "2024-03-05",
+                isVideo = false,
+                hasOverlay = false,
+                overlayFileName = null,
+                captureEpochSecond = 1709626530L,
+            ),
+            HtmlMemoryEntry(
+                fileName = "2024-03-05_B-main.jpg",
+                uuid = "B",
+                date = "2024-03-05",
+                isVideo = false,
+                hasOverlay = false,
+                overlayFileName = null,
+                captureEpochSecond = 1709626530L,
+            ),
+        )
+        val records = listOf(
+            ZipMemoryRecord(
+                dateStr = "2024-03-05 08:15:30 UTC",
+                epochSecond = 1709626530L,
+                mediaType = MediaKind.Image,
+                latitude = 40.0,
+                longitude = -83.0,
+            ),
+            ZipMemoryRecord(
+                dateStr = "2024-03-05 08:15:30 UTC",
+                epochSecond = 1709626530L,
+                mediaType = MediaKind.Image,
+                latitude = null,
+                longitude = null,
+            ),
+        )
+
+        val plan = buildExperimentalZipMetadataPlan(entries, records)
+
+        assertEquals(2, plan.targets.size)
+        plan.targets.forEach { target ->
+            assertNull(target.latitude, "GPS must not be applied to ${target.fileName} — the collision has an unlocated candidate")
+            assertNull(target.longitude)
+            assertEquals("2024-03-05 08:15:30 UTC", target.dateStr)
+        }
+        assertTrue(plan.warnings.any { it.contains("conflicting location") })
+    }
+
+    @Test
     fun testCollisionWithinOneKilometerKeepsLocation() {
         val entries = listOf(
             HtmlMemoryEntry(

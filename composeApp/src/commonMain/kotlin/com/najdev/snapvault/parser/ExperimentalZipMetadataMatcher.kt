@@ -153,12 +153,16 @@ fun buildExperimentalZipMetadataPlan(
 // Multiple JSON records can share the same (media type, second) key — e.g. a burst of
 // photos taken in the same second. There's still no identifier that says which record
 // belongs to which of those files, so instead of guessing we keep the shared date
-// (safe — it's the same instant for all of them) and only keep GPS if the located
-// records in the group agree closely enough (<1km) that picking either is not a risk.
+// (safe — it's the same instant for all of them) and only keep GPS when every record in
+// the collision has a location and they all agree closely enough (<1km). If even one
+// colliding record has no location, we can't tell whether *that* record is the one
+// matching a given file, so no file in the group gets GPS.
 private fun consolidateByLocation(group: List<ZipMemoryRecord>): ZipMemoryRecord {
     val base = group.first()
+    if (group.size == 1) return base
+
     val located = group.filter { it.latitude != null && it.longitude != null }
-    if (located.size <= 1) return located.firstOrNull() ?: base
+    if (located.size != group.size) return base.copy(latitude = null, longitude = null)
 
     val anyFarApart = located.indices.any { i ->
         (i + 1 until located.size).any { j -> kilometersBetween(located[i], located[j]) >= 1.0 }

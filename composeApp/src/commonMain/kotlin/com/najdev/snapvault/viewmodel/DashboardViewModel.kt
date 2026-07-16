@@ -289,17 +289,27 @@ class DashboardViewModel(
 
         if (runMetadata) {
             if (experimentalMetadataMatching) {
-                val memoryJson = withContext(Dispatchers.IO) {
-                    zipFiles.asSequence()
-                        .mapNotNull { zipPath -> readZipEntryText(zipPath, "json/memories_history.json") }
-                        .firstOrNull()
+                // Read every zip's copy rather than stopping at the first: if a
+                // multi-zip import has more than one archive carrying its own
+                // memories_history.json (identical or not), silently using only one
+                // and applying it to every zip's media would risk a cross-archive
+                // timestamp collision misattributing GPS. Merging + deduping is safe —
+                // identical copies collapse to one record, and any genuinely
+                // conflicting record just becomes a same-key collision that
+                // buildExperimentalZipMetadataPlan already resolves by omitting GPS
+                // rather than guessing.
+                val memoryJsonSources = withContext(Dispatchers.IO) {
+                    zipFiles.mapNotNull { zipPath -> readZipEntryText(zipPath, "json/memories_history.json") }
                 }
 
-                if (memoryJson.isNullOrBlank()) {
+                if (memoryJsonSources.isEmpty()) {
                     log("[WARN] Experimental metadata matching requested, but no memories_history.json was found. Falling back to date-only ZIP metadata.")
                     writeZipDateMetadata(itemsByZip, outDir, workerCount, downloadedMeta)
                 } else {
-                    val records = parseZipMemoryRecords(memoryJson)
+                    val records = memoryJsonSources.flatMap { parseZipMemoryRecords(it) }.distinct()
+                    if (memoryJsonSources.size > 1) {
+                        log("[INFO] Experimental metadata matching found memories_history.json in ${memoryJsonSources.size} zip(s); merged into ${records.size} distinct record(s).")
+                    }
 
                     if (records.isEmpty()) {
                         log("[WARN] Experimental metadata matching found no usable memories; falling back to date-only ZIP metadata.")

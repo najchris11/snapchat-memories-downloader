@@ -1,6 +1,7 @@
 package com.najdev.snapvault.parser
 
 import com.najdev.snapvault.listZipEntries
+import com.najdev.snapvault.listZipEntryTimestamps
 
 data class HtmlMemoryEntry(
     val fileName: String,
@@ -8,7 +9,10 @@ data class HtmlMemoryEntry(
     val date: String,
     val isVideo: Boolean,
     val hasOverlay: Boolean,
-    val overlayFileName: String?
+    val overlayFileName: String?,
+    // Capture instant (Unix epoch seconds) from the ZIP entry's extended-timestamp
+    // extra field, when present. Null on platforms/exports where it can't be read.
+    val captureEpochSecond: Long? = null,
 )
 
 object ZipImportParser {
@@ -55,11 +59,12 @@ object ZipImportParser {
         zipFilePath: String,
         onUnmatched: ((filePath: String) -> Unit)? = null
     ): List<HtmlMemoryEntry> =
-        parseMemoryEntryNames(listZipEntries(zipFilePath), onUnmatched)
+        parseMemoryEntryNames(listZipEntries(zipFilePath), listZipEntryTimestamps(zipFilePath), onUnmatched)
 
     // Pure filename-list variant of parseMemoriesFromZip — separated from zip I/O for testability.
     fun parseMemoryEntryNames(
         allEntries: List<String>,
+        entryTimestamps: Map<String, Long> = emptyMap(),
         onUnmatched: ((filePath: String) -> Unit)? = null
     ): List<HtmlMemoryEntry> {
         val entries = mutableListOf<HtmlMemoryEntry>()
@@ -96,7 +101,8 @@ object ZipImportParser {
                         date = mainFile.date,
                         isVideo = mainFile.ext in videoExtensions,
                         hasOverlay = overlayFile != null,
-                        overlayFileName = overlayFile?.fileName
+                        overlayFileName = overlayFile?.fileName,
+                        captureEpochSecond = entryTimestamps["memories/${mainFile.fileName}"],
                     )
                 )
             } else if (overlayFile != null) {
@@ -108,7 +114,8 @@ object ZipImportParser {
                         date = overlayFile.date,
                         isVideo = false,
                         hasOverlay = false,
-                        overlayFileName = null
+                        overlayFileName = null,
+                        captureEpochSecond = entryTimestamps["memories/${overlayFile.fileName}"],
                     )
                 )
             }

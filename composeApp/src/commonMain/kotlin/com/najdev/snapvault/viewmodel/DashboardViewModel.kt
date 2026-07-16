@@ -217,8 +217,8 @@ class DashboardViewModel(
         }
         log("[INFO] Indexed $totalMemoryCount memories across ${itemsByZip.size} zip(s).")
 
-        if (experimentalMetadataMatching) {
-            log("[WARN] Experimental ZIP metadata matching is enabled.")
+        if (runMetadata && experimentalMetadataMatching) {
+            log("[WARN] Experimental ZIP metadata matching is enabled. GPS is only applied where a file's exact capture timestamp uniquely matches a memories_history.json record; ambiguous matches fall back to date-only metadata.")
         }
 
         if (AppBuildConfig.IS_DEBUG) {
@@ -289,25 +289,23 @@ class DashboardViewModel(
 
         if (runMetadata) {
             if (experimentalMetadataMatching) {
-                val memoryJson = zipFiles.asSequence()
-                    .mapNotNull { zipPath -> readZipEntryText(zipPath, "json/memories_history.json") }
-                    .firstOrNull()
+                val memoryJson = withContext(Dispatchers.IO) {
+                    zipFiles.asSequence()
+                        .mapNotNull { zipPath -> readZipEntryText(zipPath, "json/memories_history.json") }
+                        .firstOrNull()
+                }
 
                 if (memoryJson.isNullOrBlank()) {
                     log("[WARN] Experimental metadata matching requested, but no memories_history.json was found. Falling back to date-only ZIP metadata.")
                     writeZipDateMetadata(itemsByZip, outDir, workerCount, downloadedMeta)
                 } else {
-                    val memories = runCatching { HistoryParser.parseJson(memoryJson) }
-                        .getOrElse { error ->
-                            log("[WARN] Experimental metadata matching could not parse memories_history.json: ${error.message}")
-                            emptyList()
-                        }
+                    val records = parseZipMemoryRecords(memoryJson)
 
-                    if (memories.isEmpty()) {
+                    if (records.isEmpty()) {
                         log("[WARN] Experimental metadata matching found no usable memories; falling back to date-only ZIP metadata.")
                         writeZipDateMetadata(itemsByZip, outDir, workerCount, downloadedMeta)
                     } else {
-                        val plan = buildExperimentalZipMetadataPlan(itemsByZip.values.flatten(), memories)
+                        val plan = buildExperimentalZipMetadataPlan(itemsByZip.values.flatten(), records)
                         plan.warnings.forEach { log("[WARN] $it") }
                         if (plan.targets.isEmpty()) {
                             log("[WARN] Experimental metadata matching produced no targets; falling back to date-only ZIP metadata.")

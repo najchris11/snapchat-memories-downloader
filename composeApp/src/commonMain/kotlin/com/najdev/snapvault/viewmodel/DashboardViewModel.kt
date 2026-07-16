@@ -89,6 +89,7 @@ class DashboardViewModel(
     fun startSync(
         runDownload: Boolean,
         runMetadata: Boolean,
+        experimentalMetadataMatching: Boolean,
         runCombine: Boolean,
         runDedupe: Boolean,
         dryRun: Boolean,
@@ -104,7 +105,15 @@ class DashboardViewModel(
             try {
                 val outDir = downloadFolder ?: throw PipelineAbortException("No output folder selected.")
                 if (importMode == ImportMode.Zip) {
-                    runZipPipeline(outDir, runMetadata, runCombine, runDedupe, dryRun, workerCount)
+                    runZipPipeline(
+                        outDir,
+                        runMetadata,
+                        experimentalMetadataMatching,
+                        runCombine,
+                        runDedupe,
+                        dryRun,
+                        workerCount,
+                    )
                 } else {
                     runLegacyPipeline(outDir, runDownload, runMetadata, runCombine, runDedupe, dryRun, workerCount)
                 }
@@ -163,6 +172,7 @@ class DashboardViewModel(
     private suspend fun runZipPipeline(
         outDir: String,
         runMetadata: Boolean,
+        experimentalMetadataMatching: Boolean,
         runCombine: Boolean,
         runDedupe: Boolean,
         dryRun: Boolean,
@@ -206,6 +216,10 @@ class DashboardViewModel(
             }
         }
         log("[INFO] Indexed $totalMemoryCount memories across ${itemsByZip.size} zip(s).")
+
+        if (runMetadata && experimentalMetadataMatching) {
+            log("[WARN] Experimental ZIP metadata matching is enabled. GPS is only applied where a file's exact capture timestamp uniquely matches a memories_history.json record; ambiguous matches fall back to date-only metadata.")
+        }
 
         if (AppBuildConfig.IS_DEBUG) {
             log("[DEBUG] Limiting to 2500 items (debug mode)")
@@ -274,77 +288,46 @@ class DashboardViewModel(
         var pipelineCombineErrors = 0
 
         if (runMetadata) {
-            val metaEntries = itemsByZip.values.flatten()
-            val metaTotal = metaEntries.size
-            //META date source: groups by HtmlMemoryEntry.date (YYYY-MM-DD from filename), NOT from hist/json correlation
-            //META GPS is NOT written here — MetadataCorrelator exists but is not called; fullDateTime (time-of-day) also not used
-            //META TODO: swap writeDateMetadataBatch for a GPS-aware call once a reliable UUID↔history matching algorithm is in place
-            val byDate = metaEntries.groupBy { it.date }
-            log("[INFO] Writing date metadata — ${metaTotal} files across ${byDate.size} date group(s)…")
+            if (experimentalMetadataMatching) {
+                // Read every zip's copy rather than stopping at the first: if a
+                // multi-zip import has more than one archive carrying its own
+                // memories_history.json (identical or not), silently using only one
+                // and applying it to every zip's media would risk a cross-archive
+                // timestamp collision misattributing GPS. Merging + deduping is safe —
+                // identical copies collapse to one record, and any genuinely
+                // conflicting record just becomes a same-key collision that
+                // buildExperimentalZipMetadataPlan already resolves by omitting GPS
+                // rather than guessing.
+                val memoryJsonSources = withContext(Dispatchers.IO) {
+                    zipFiles.mapNotNull { zipPath -> readZipEntryText(zipPath, "json/memories_history.json") }
+                }
 
-            var metaCount = 0
-            var metaDone = 0
-            var metaFailCount = 0
-            val metaEta = EtaEstimator()
+                if (memoryJsonSources.isEmpty()) {
+                    log("[WARN] Experimental metadata matching requested, but no memories_history.json was found. Falling back to date-only ZIP metadata.")
+                    writeZipDateMetadata(itemsByZip, outDir, workerCount, downloadedMeta)
+                } else {
+                    val records = memoryJsonSources.flatMap { parseZipMemoryRecords(it) }.distinct()
+                    if (memoryJsonSources.size > 1) {
+                        log("[INFO] Experimental metadata matching found memories_history.json in ${memoryJsonSources.size} zip(s); merged into ${records.size} distinct record(s).")
+                    }
 
-            data class BatchResult(val tagged: Int, val entries: List<HtmlMemoryEntry>, val warnings: List<String>)
-
-            val metaChannel = Channel<BatchResult>(Channel.UNLIMITED)
-            val metaSemaphore = Semaphore(workerCount)
-
-            coroutineScope {
-                // Single consumer — serializes all counter/UI updates (including warnings,
-                // which must not be logged directly from the concurrent worker coroutines)
-                launch {
-                    for (r in metaChannel) {
-                        r.warnings.forEach { log("[WARN] $it") }
-                        metaCount += r.tagged
-                        metaFailCount += (r.entries.size - r.tagged)
-                        r.entries.forEach { entry ->
-                            downloadedMeta[entry.fileName] = FileMeta(hasGps = false, hasOverlay = entry.hasOverlay)
-                        }
-                        metaDone += r.entries.size
-                        metaEta.record(metaDone)
-                        progress = metaDone.toFloat() / metaTotal.coerceAtLeast(1)
-                        progressText = "Metadata: $metaDone / $metaTotal"
-                        val rate = metaEta.ratePerSec()
-                        if (rate != null) {
-                            speedText = "${rate.toInt().coerceAtLeast(1)} files/s"
-                            etaText = when (val etaSec = metaEta.etaSeconds(metaTotal, metaDone)) {
-                                null -> "ETA: --"
-                                0L -> "ETA: done"
-                                else -> "ETA: ${formatEta(etaSec)}"
-                            }
+                    if (records.isEmpty()) {
+                        log("[WARN] Experimental metadata matching found no usable memories; falling back to date-only ZIP metadata.")
+                        writeZipDateMetadata(itemsByZip, outDir, workerCount, downloadedMeta)
+                    } else {
+                        val plan = buildExperimentalZipMetadataPlan(itemsByZip.values.flatten(), records)
+                        plan.warnings.forEach { log("[WARN] $it") }
+                        if (plan.targets.isEmpty()) {
+                            log("[WARN] Experimental metadata matching produced no targets; falling back to date-only ZIP metadata.")
+                            writeZipDateMetadata(itemsByZip, outDir, workerCount, downloadedMeta)
+                        } else {
+                            writeZipExperimentalMetadata(plan.targets, outDir, workerCount, downloadedMeta)
                         }
                     }
                 }
-
-                // One coroutine per date group — semaphore caps concurrent exiftool processes
-                byDate.entries.map { (date, entries) ->
-                    async(Dispatchers.IO) {
-                        currentCoroutineContext().ensureActive()
-                        metaSemaphore.withPermit {
-                            val paths = entries.map { "$outDir/${it.fileName}" }
-                            val warnings = mutableListOf<String>()
-                            //META actual write call: date-only batch write; returns count of files successfully tagged (0 for unsupported extensions)
-                            // runInterruptibleCompat: cancelling the pipeline interrupts the
-                            // blocking exiftool wait instead of letting the batch run out.
-                            val tagged = runInterruptibleCompat {
-                                mediaProcessor.writeDateMetadataBatch(paths, date) { msg ->
-                                    warnings.add(msg)
-                                }
-                            }
-                            metaChannel.send(BatchResult(tagged, entries, warnings))
-                        }
-                    }
-                }.awaitAll()
-
-                metaChannel.close()
+            } else {
+                writeZipDateMetadata(itemsByZip, outDir, workerCount, downloadedMeta)
             }
-
-            speedText = "SPEED: --"
-            etaText = "ETA: --"
-            log("[INFO] Metadata: $metaCount files tagged${if (metaFailCount > 0) ", $metaFailCount could not be tagged (see [WARN] lines above)" else ""}.")
         }
 
         if (runCombine) {
@@ -496,6 +479,152 @@ class DashboardViewModel(
             }
             log("[INFO] Vault index saved (${downloadedMeta.size} entries).")
         }.onFailure { e -> log("[WARN] Could not write vault index: ${e.message}") }
+    }
+
+    private suspend fun writeZipDateMetadata(
+        itemsByZip: Map<String, List<HtmlMemoryEntry>>,
+        outDir: String,
+        workerCount: Int,
+        downloadedMeta: MutableMap<String, FileMeta>,
+    ) {
+        val metaEntries = itemsByZip.values.flatten()
+        val metaTotal = metaEntries.size
+        val byDate = metaEntries.groupBy { it.date }
+        log("[INFO] Writing date metadata — ${metaTotal} files across ${byDate.size} date group(s)…")
+
+        var metaCount = 0
+        var metaDone = 0
+        var metaFailCount = 0
+        val metaEta = EtaEstimator()
+
+        data class BatchResult(val tagged: Int, val entries: List<HtmlMemoryEntry>, val warnings: List<String>)
+
+        val metaChannel = Channel<BatchResult>(Channel.UNLIMITED)
+        val metaSemaphore = Semaphore(workerCount)
+
+        coroutineScope {
+            launch {
+                for (r in metaChannel) {
+                    r.warnings.forEach { log("[WARN] $it") }
+                    metaCount += r.tagged
+                    metaFailCount += (r.entries.size - r.tagged)
+                    r.entries.forEach { entry ->
+                        downloadedMeta[entry.fileName] = FileMeta(hasGps = false, hasOverlay = entry.hasOverlay)
+                    }
+                    metaDone += r.entries.size
+                    metaEta.record(metaDone)
+                    progress = metaDone.toFloat() / metaTotal.coerceAtLeast(1)
+                    progressText = "Metadata: $metaDone / $metaTotal"
+                    val rate = metaEta.ratePerSec()
+                    if (rate != null) {
+                        speedText = "${rate.toInt().coerceAtLeast(1)} files/s"
+                        etaText = when (val etaSec = metaEta.etaSeconds(metaTotal, metaDone)) {
+                            null -> "ETA: --"
+                            0L -> "ETA: done"
+                            else -> "ETA: ${formatEta(etaSec)}"
+                        }
+                    }
+                }
+            }
+
+            byDate.entries.map { (date, entries) ->
+                async(Dispatchers.IO) {
+                    currentCoroutineContext().ensureActive()
+                    metaSemaphore.withPermit {
+                        val paths = entries.map { "$outDir/${it.fileName}" }
+                        val warnings = mutableListOf<String>()
+                        val tagged = runInterruptibleCompat {
+                            mediaProcessor.writeDateMetadataBatch(paths, date) { msg ->
+                                warnings.add(msg)
+                            }
+                        }
+                        metaChannel.send(BatchResult(tagged, entries, warnings))
+                    }
+                }
+            }.awaitAll()
+
+            metaChannel.close()
+        }
+
+        speedText = "SPEED: --"
+        etaText = "ETA: --"
+        log("[INFO] Metadata: $metaCount files tagged${if (metaFailCount > 0) ", $metaFailCount could not be tagged (see [WARN] lines above)" else ""}.")
+    }
+
+    private suspend fun writeZipExperimentalMetadata(
+        targets: List<ZipMetadataTarget>,
+        outDir: String,
+        workerCount: Int,
+        downloadedMeta: MutableMap<String, FileMeta>,
+    ) {
+        log("[INFO] Writing experimental ZIP metadata — ${targets.size} files (date + GPS where available)…")
+        progress = 0f
+        progressText = "Metadata: 0 / ${targets.size}"
+
+        var gpsCount = 0
+        var dateCount = 0
+        var failCount = 0
+        var done = 0
+        val metaEta = EtaEstimator()
+
+        data class Result(val target: ZipMetadataTarget, val outcome: String)
+
+        val channel = Channel<Result>(Channel.UNLIMITED)
+        val semaphore = Semaphore(workerCount)
+
+        coroutineScope {
+            launch {
+                for (result in channel) {
+                    when (result.outcome) {
+                        "gps" -> {
+                            gpsCount++
+                            downloadedMeta[result.target.fileName] = FileMeta(hasGps = true, hasOverlay = result.target.hasOverlay)
+                        }
+                        "date" -> {
+                            dateCount++
+                            downloadedMeta[result.target.fileName] = FileMeta(hasGps = false, hasOverlay = result.target.hasOverlay)
+                        }
+                        else -> failCount++
+                    }
+                    done++
+                    metaEta.record(done)
+                    progress = done.toFloat() / targets.size.coerceAtLeast(1)
+                    progressText = "Metadata: $done / ${targets.size}"
+                    val rate = metaEta.ratePerSec()
+                    if (rate != null) {
+                        speedText = "${rate.toInt().coerceAtLeast(1)} files/s"
+                        etaText = when (val etaSec = metaEta.etaSeconds(targets.size, done)) {
+                            null -> "ETA: --"
+                            0L -> "ETA: done"
+                            else -> "ETA: ${formatEta(etaSec)}"
+                        }
+                    }
+                }
+            }
+
+            targets.map { target ->
+                async(Dispatchers.IO) {
+                    currentCoroutineContext().ensureActive()
+                    semaphore.withPermit {
+                        val path = "$outDir/${target.fileName}"
+                        val outcome = runInterruptibleCompat {
+                            if (target.latitude != null && target.longitude != null) {
+                                if (mediaProcessor.writeGpsMetadata(path, target.latitude, target.longitude, target.dateStr)) "gps" else "fail"
+                            } else {
+                                if (mediaProcessor.writeDateMetadata(path, target.dateStr)) "date" else "fail"
+                            }
+                        }
+                        channel.send(Result(target, outcome))
+                    }
+                }
+            }.awaitAll()
+
+            channel.close()
+        }
+
+        speedText = "SPEED: --"
+        etaText = "ETA: --"
+        log("[INFO] Metadata: ${gpsCount + dateCount} tagged ($gpsCount with GPS)${if (failCount > 0) ", $failCount failed" else ""}.")
     }
 
     // Shared by both pipelines: combines every -main/-overlay pair in outDir.

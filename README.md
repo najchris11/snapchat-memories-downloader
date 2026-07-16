@@ -29,11 +29,13 @@ Built with Kotlin Multiplatform + Compose Desktop. Ships as a native installer f
 | Option | What it does |
 |---|---|
 | **Download Memories** | (Legacy mode) Downloads every memory from the links in your history file |
-| **Write Date Metadata** | Tags each file with its Snapchat capture date via ExifTool (legacy mode also writes time-of-day and GPS where available) |
+| **Write Date Metadata** | Tags each file with its Snapchat capture date via ExifTool (legacy mode also writes time-of-day and GPS where available; ZIP mode can optionally try experimental metadata matching) |
 | **Merge Video Overlays** | Combines `-main` + `-overlay` pairs (photos and videos) into a single composited output, using GPU-accelerated encoding when the hardware supports it (NVENC/VideoToolbox/QSV/VAAPI/AMF, verified by a runtime probe with automatic software fallback) |
 | **Clean Duplicate Files** | Removes byte-identical duplicates, keeping the earliest-dated copy; enable the dry-run toggle to preview deletions first |
 
-> **Why is date metadata in ZIP mode date-only (no time or GPS)?** Snapchat's Memories export provides capture times and locations in `memories_history.json`, but those records contain no identifier that matches the exported filenames, so they cannot be reliably matched to files. See the note in the repo about contacting Snap regarding the export format.
+> **Why is date metadata in ZIP mode date-only (no time or GPS) by default?** Snapchat's Memories export provides capture times and locations in `memories_history.json`, but those records still cannot be matched with certainty to filenames. SnapVault keeps the default path conservative, but you can try the experimental matcher if you want a best-effort one-to-one pairing.
+
+If you want to try that best-effort path, enable **Experimental ZIP metadata matching** on the Dashboard. It will attempt to pair media with `memories_history.json` entries using date, file type, and location-aware ordering, but it is intentionally opt-in.
 
 ## System Requirements
 

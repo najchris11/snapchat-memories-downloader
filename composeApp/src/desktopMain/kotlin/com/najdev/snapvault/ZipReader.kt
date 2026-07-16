@@ -9,3 +9,14 @@ actual fun listZipEntries(zipFilePath: String): List<String> {
         emptyList()
     }
 }
+
+actual fun readZipEntryText(zipFilePath: String, entryName: String): String? {
+    return try {
+        java.util.zip.ZipFile(zipFilePath).use { zf ->
+            val entry = zf.getEntry(entryName) ?: return null
+            zf.getInputStream(entry).bufferedReader().use { it.readText() }
+        }
+    } catch (e: Exception) {
+        null
+    }
+}

@@ -54,6 +54,7 @@ fun DashboardScreen(
     // These are local UI preferences, not pipeline state
     var runDownload by remember { mutableStateOf(true) }
     var runMetadata by remember { mutableStateOf(true) }
+    var experimentalMetadataMatching by remember { mutableStateOf(false) }
     var runCombine by remember { mutableStateOf(true) }
     var runDedupe by remember { mutableStateOf(true) }
     var dryRun by remember { mutableStateOf(false) }
@@ -291,6 +292,15 @@ fun DashboardScreen(
                                 checked = runMetadata,
                                 onCheckedChange = { runMetadata = it }
                             )
+                            AnimatedVisibility(visible = isZipMode && runMetadata) {
+                                Box(modifier = Modifier.padding(start = 26.dp)) {
+                                    PipelineItem(
+                                        Icons.Outlined.Info,
+                                        "Experimental ZIP metadata matching",
+                                        experimentalMetadataMatching
+                                    ) { experimentalMetadataMatching = it }
+                                }
+                            }
                             PipelineItem(Icons.Outlined.Layers, stringResource(Res.string.opt_combine_overlays), runCombine) { runCombine = it }
                             PipelineItem(Icons.Outlined.AutoDelete, stringResource(Res.string.opt_clean_duplicates), runDedupe) { runDedupe = it }
                             // Dedupe deletes files — give it a preview mode.
@@ -324,7 +334,7 @@ fun DashboardScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Button(
-                    onClick = { viewModel.startSync(runDownload, runMetadata, runCombine, runDedupe, dryRun) },
+                    onClick = { viewModel.startSync(runDownload, runMetadata, experimentalMetadataMatching, runCombine, runDedupe, dryRun) },
                     enabled = !viewModel.isRunning && canStart,
                     modifier = Modifier.weight(1f).height(52.dp),
                     shape = RoundedCornerShape(10.dp),

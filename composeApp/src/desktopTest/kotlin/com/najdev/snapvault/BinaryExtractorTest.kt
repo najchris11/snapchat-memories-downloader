@@ -23,7 +23,8 @@ class BinaryExtractorTest {
     @Test
     fun testBinDir() {
         val binDir = BinaryExtractor.binDir
-        assertEquals(".snapvault/bin", binDir.toString().substringAfter(System.getProperty("user.home") + File.separator))
+        val expected = ".snapvault${File.separator}bin"
+        assertEquals(expected, binDir.toString().substringAfter(System.getProperty("user.home") + File.separator))
     }
 
     @Test

@@ -21,6 +21,11 @@ object HistoryParser {
         """Latitude,\s*Longitude:\s*([+-]?\d+\.?\d*),\s*([+-]?\d+\.?\d*)"""
     )
 
+    // Snapchat writes "0.0, 0.0" as a sentinel for "no location recorded", not a real
+    // Null Island coordinate — treat it the same as a missing location field.
+    private fun nullIfZero(lat: Double?, lon: Double?): Pair<Double?, Double?> =
+        if (lat == 0.0 && lon == 0.0) null to null else lat to lon
+
     //META legacy HTML parse: extracts download URLs, dateStr ("YYYY-MM-DD HH:MM:SS UTC"), and GPS from memories_history.html
     //META GPS extracted from table row cells matching "Latitude, Longitude: X, Y" pattern
     fun parse(htmlContent: String): List<MemoryItem> {
@@ -59,14 +64,15 @@ object HistoryParser {
                         break
                     }
                 }
+                val (safeLat, safeLon) = nullIfZero(lat, lon)
 
                 MemoryItem(
                     id = extractUniqueId(url),
                     url = url,
                     isGet = isGet,
                     dateStr = dateStr,
-                    latitude = lat,
-                    longitude = lon
+                    latitude = safeLat,
+                    longitude = safeLon
                 )
             }
         }
@@ -82,7 +88,10 @@ object HistoryParser {
             row.select("td").firstNotNullOfOrNull { cell ->
                 locationRegex.find(cell.text())?.let {
                     it.groupValues[1].toDoubleOrNull()?.let { lat ->
-                        it.groupValues[2].toDoubleOrNull()?.let { lon -> lat to lon }
+                        it.groupValues[2].toDoubleOrNull()?.let { lon ->
+                            val (safeLat, safeLon) = nullIfZero(lat, lon)
+                            if (safeLat != null && safeLon != null) safeLat to safeLon else null
+                        }
                     }
                 }
             }
@@ -103,7 +112,7 @@ object HistoryParser {
     }
 
     //META legacy JSON parse: extracts download URLs, dateStr, and GPS from memories_history.json ("Saved Media" array)
-    //META no 0.0,0.0 guard here — null lat/lon means no location field; 0.0,0.0 is passed through as-is (unlike ZipJsonParser)
+    //META 0.0,0.0 (Snapchat's "no location" sentinel) is nulled out via nullIfZero, same as the HTML parse path
     fun parseJson(jsonContent: String): List<MemoryItem> {
         return runCatching {
             val root = Json.parseToJsonElement(jsonContent).jsonObject

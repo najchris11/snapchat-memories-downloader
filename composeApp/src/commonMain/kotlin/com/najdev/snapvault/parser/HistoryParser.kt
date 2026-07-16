@@ -132,13 +132,14 @@ object HistoryParser {
                         lon = locMatch.groupValues[2].toDoubleOrNull()
                     }
                 }
+                val (safeLat, safeLon) = nullIfZero(lat, lon)
                 MemoryItem(
                     id = extractUniqueId(url),
                     url = url,
                     isGet = false,
                     dateStr = dateStr,
-                    latitude = lat,
-                    longitude = lon
+                    latitude = safeLat,
+                    longitude = safeLon
                 )
             }
         }.getOrElse { e ->

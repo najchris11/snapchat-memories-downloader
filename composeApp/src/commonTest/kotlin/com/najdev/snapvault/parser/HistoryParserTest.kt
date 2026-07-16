@@ -81,4 +81,53 @@ class HistoryParserTest {
         assertEquals(null, items[0].dateStr)
         assertEquals(null, items[0].latitude)
     }
+
+    @Test
+    fun testParseJsonExtractsDateAndLocation() {
+        val json = """
+            {
+              "Saved Media": [
+                {
+                  "Date": "2023-10-12 15:30:00 UTC",
+                  "Location": "Latitude, Longitude: 48.26275, 13.296288",
+                  "Download Link": "https://aws.s3.amazonaws.com/media1?mid=123-abc"
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val items = HistoryParser.parseJson(json)
+
+        assertEquals(1, items.size)
+        assertEquals("123-abc", items[0].id)
+        assertEquals("2023-10-12 15:30:00 UTC", items[0].dateStr)
+        assertEquals(48.26275, items[0].latitude)
+        assertEquals(13.296288, items[0].longitude)
+    }
+
+    // Regression test: Snapchat writes "0.0, 0.0" as a sentinel for "no location
+    // recorded", not a real Null Island coordinate. parseJson previously passed the
+    // parsed lat/lon straight to MemoryItem without the nullIfZero guard that the HTML
+    // parse path already applied, so JSON-sourced memories silently got tagged with
+    // (0, 0) GPS.
+    @Test
+    fun testParseJsonTreatsZeroZeroLocationAsNoLocation() {
+        val json = """
+            {
+              "Saved Media": [
+                {
+                  "Date": "2023-09-28 12:00:00 UTC",
+                  "Location": "Latitude, Longitude: 0.0, 0.0",
+                  "Download Link": "https://aws.s3.amazonaws.com/media2?mid=456-def"
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val items = HistoryParser.parseJson(json)
+
+        assertEquals(1, items.size)
+        assertEquals(null, items[0].latitude)
+        assertEquals(null, items[0].longitude)
+    }
 }

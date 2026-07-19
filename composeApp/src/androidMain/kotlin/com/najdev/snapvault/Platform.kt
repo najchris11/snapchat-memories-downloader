@@ -1,6 +1,7 @@
 package com.najdev.snapvault
 
 actual val isAndroidBuild: Boolean = true
+actual val isMobileBuild: Boolean = true
 actual fun binaryInstallHint(): String = ""
 
 actual suspend fun <T> runInterruptibleCompat(block: () -> T): T =

@@ -15,7 +15,6 @@ class AndroidMediaProcessor : MediaProcessor {
             val exif = ExifInterface(filePath)
             
             // Set GPS coordinates
-            exif.setGpsInfo(null) // Clear old GPS info
             exif.setLatLong(latitude, longitude)
 
             // Set Date/Time if available

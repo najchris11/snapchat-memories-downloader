@@ -3,6 +3,7 @@ package com.najdev.snapvault
 import kotlinx.coroutines.runInterruptible
 
 actual val isAndroidBuild: Boolean = false
+actual val isMobileBuild: Boolean = false
 
 actual suspend fun <T> runInterruptibleCompat(block: () -> T): T =
     runInterruptible(block = block)

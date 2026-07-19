@@ -3,6 +3,7 @@ package com.najdev.snapvault
 import kotlinx.coroutines.CoroutineDispatcher
 
 expect val isAndroidBuild: Boolean
+expect val isMobileBuild: Boolean
 
 // Dispatchers.IO is JVM/Native-specific and not visible from common code; this is the
 // platform's blocking-I/O dispatcher for file and process work.

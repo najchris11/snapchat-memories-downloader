@@ -21,7 +21,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.LayoutOverride
 import com.najdev.snapvault.Screen
 import com.najdev.snapvault.ThemeMode
@@ -115,7 +114,7 @@ private fun androidx.compose.foundation.layout.RowScope.PhoneNavItem(
     NavigationBarItem(
         selected = selected,
         onClick = onClick,
-        label = { Text(label, fontSize = 10.sp) },
+        label = { Text(label) },
         icon = {
             Icon(
                 imageVector = if (selected) selectedIcon else unselectedIcon,

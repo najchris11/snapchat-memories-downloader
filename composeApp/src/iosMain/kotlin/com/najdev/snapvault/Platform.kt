@@ -6,6 +6,7 @@ import kotlinx.coroutines.IO
 import platform.Foundation.NSRecursiveLock
 
 actual val isAndroidBuild: Boolean = false
+actual val isMobileBuild: Boolean = true
 actual fun binaryInstallHint(): String = ""
 
 // Kotlin/Native has no thread interruption; cancellation is handled at suspension points.

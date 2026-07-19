@@ -29,7 +29,7 @@ class AndroidZipPipelineRunner(
                 CombineResult(
                     uuid = uuid,
                     outputPath = mainFile.absolutePath,
-                    status = "skipped",
+                    status = "skipped: Overlay combine on Android will land in Phase 2.5",
                     warnings = listOf("Overlay combine on Android will be added in Phase 2.5")
                 )
             )

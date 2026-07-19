@@ -21,7 +21,8 @@ actual fun rememberPlatformPickers(): PlatformPickers {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var activeJob by remember { mutableStateOf<Job?>(null) }
+    var htmlJob by remember { mutableStateOf<Job?>(null) }
+    var zipsJob by remember { mutableStateOf<Job?>(null) }
     var onHtmlResult by remember { mutableStateOf<((String?) -> Unit)?>(null) }
     var onFolderResult by remember { mutableStateOf<((String?) -> Unit)?>(null) }
     var onZipsResult by remember { mutableStateOf<((List<String>) -> Unit)?>(null) }
@@ -35,8 +36,8 @@ actual fun rememberPlatformPickers(): PlatformPickers {
             cb(null)
             return@rememberLauncherForActivityResult
         }
-        activeJob?.cancel()
-        activeJob = scope.launch {
+        htmlJob?.cancel()
+        htmlJob = scope.launch {
             val path = withContext(Dispatchers.IO) {
                 copyUriToInternalStorage(context, uri, "memories_history.html")
             }
@@ -71,8 +72,8 @@ actual fun rememberPlatformPickers(): PlatformPickers {
             cb(emptyList())
             return@rememberLauncherForActivityResult
         }
-        activeJob?.cancel()
-        activeJob = scope.launch {
+        zipsJob?.cancel()
+        zipsJob = scope.launch {
             val paths = withContext(Dispatchers.IO) {
                 coroutineScope {
                     uris.mapIndexed { index, uri ->

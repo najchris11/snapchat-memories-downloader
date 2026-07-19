@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.ImportMode
 import com.najdev.snapvault.ZipSourceMode
+import com.najdev.snapvault.isAndroidBuild
 import com.najdev.snapvault.isMobileBuild
 import com.najdev.snapvault.ui.theme.ElectricPurple
 import com.najdev.snapvault.ui.theme.InfoBlue
@@ -101,13 +102,16 @@ fun DashboardScreen(
                     )
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
-                            "Mobile Preview",
+                            if (isAndroidBuild) "Android Preview" else "iOS Preview",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = SnapVaultColors.warning
                         )
                         Text(
-                            "This is a UI preview. The sync pipeline is not yet functional on mobile. Desktop features are fully operational.",
+                            if (isAndroidBuild)
+                                "Android Sync Preview: ZIP extraction, deduplication, and image date metadata work. Video overlay combining will land in Phase 2.5."
+                            else
+                                "iOS Preview: UI preview. The sync pipeline and native ZIP reader will land in Phase 3.",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
@@ -335,7 +339,7 @@ fun DashboardScreen(
             ) {
                 Button(
                     onClick = { viewModel.startSync(runDownload, runMetadata, experimentalMetadataMatching, runCombine, runDedupe, dryRun) },
-                    enabled = !viewModel.isRunning && canStart,
+                    enabled = !viewModel.isRunning && canStart && (!isMobileBuild || isAndroidBuild),
                     modifier = Modifier.weight(1f).height(52.dp),
                     shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = SnapVaultColors.electricPurple)

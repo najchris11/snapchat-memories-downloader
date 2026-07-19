@@ -665,7 +665,7 @@ class DashboardViewModel(
             result.warnings.forEach { log("[WARN] $it") }
             when {
                 result.status == "combined" -> combinedCount++
-                result.status.startsWith("skipped:") -> combineSkippedCount++
+                result.status.startsWith("skipped") -> combineSkippedCount++
                 result.status.startsWith("error") -> {
                     combineErrorCount++
                     log("[ERROR] Overlay combine ${result.uuid.take(8)}: ${result.status}")

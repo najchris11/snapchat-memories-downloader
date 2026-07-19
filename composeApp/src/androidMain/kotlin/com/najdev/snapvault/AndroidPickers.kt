@@ -175,10 +175,17 @@ private fun resolveTreeUriToPath(context: Context, uri: Uri): String {
     } catch (_: Exception) {
         uri.path
     }
-    if (docId != null && docId.startsWith("primary:")) {
-        val relativePath = docId.substringAfter("primary:")
-        val primaryDir = Environment.getExternalStorageDirectory()
-        val resolved = File(primaryDir, relativePath)
+
+    if (docId != null && ":" in docId) {
+        val volumeId = docId.substringBefore(":")
+        val relativePath = docId.substringAfter(":")
+        val resolved = if (volumeId.equals("primary", ignoreCase = true)) {
+            File(Environment.getExternalStorageDirectory(), relativePath)
+        } else {
+            // Secondary storage (e.g. SD card: /storage/1234-5678/relativePath)
+            File("/storage/$volumeId", relativePath)
+        }
+
         if (resolved.exists() || resolved.mkdirs()) {
             if (isWritableDirectory(resolved)) {
                 return resolved.absolutePath
@@ -186,9 +193,13 @@ private fun resolveTreeUriToPath(context: Context, uri: Uri): String {
         }
     }
 
-    // Fallback to app-external directory if primary path is unresolvable or non-writable due to Scoped Storage
+    // Fallback to app-external directory if SAF tree is a cloud provider or non-writable volume
     val fallback = context.getExternalFilesDir("SnapVault") ?: context.filesDir
     fallback.mkdirs()
+    android.util.Log.w(
+        "AndroidPickers",
+        "Selected storage tree ($docId) is not directly writable via java.io.File; degrading to app-private directory: ${fallback.absolutePath}"
+    )
     return fallback.absolutePath
 }
 

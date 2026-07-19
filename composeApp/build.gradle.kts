@@ -11,11 +11,15 @@ plugins {
     kotlin("plugin.serialization")
     id("org.jetbrains.compose")
     id("org.jetbrains.kotlin.plugin.compose")
-    id("com.android.application")
+    id("com.android.kotlin.multiplatform.library")
 }
 
 kotlin {
-    androidTarget {
+    android {
+        namespace = "com.najdev.snapvault.shared"
+        compileSdk = 37
+        minSdk = 24
+        androidResources { enable = true }
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
         }
@@ -113,27 +117,6 @@ kotlin {
     }
 }
 
-android {
-    namespace = "com.najdev.snapvault"
-    compileSdk = 37
-
-    defaultConfig {
-        applicationId = "com.najdev.snapvault"
-        minSdk = 24
-        targetSdk = 37
-        versionCode = 10
-        versionName = appVersion
-    }
-    sourceSets["main"].manifest.srcFile("src/androidMain/AndroidManifest.xml")
-    sourceSets["main"].res.srcDirs("src/androidMain/res")
-    sourceSets["main"].resources.srcDirs("src/commonMain/resources")
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-    }
-}
-
 compose.desktop {
     application {
         // AS JBR lacks jpackage; JDK 21 (Homebrew) is used for native distribution tasks
@@ -196,15 +179,6 @@ val generateBuildConfig by tasks.registering {
 
 kotlin.sourceSets.getByName("commonMain").kotlin
     .srcDir(generateBuildConfig.map { it.outputs.files })
-
-// Install the debug APK on a connected device/emulator, then launch the app.
-// Prerequisites: adb on PATH, device connected or emulator running.
-tasks.register<Exec>("runAndroid") {
-    group = "application"
-    description = "Build, install, and launch SnapVault on a connected Android device or emulator"
-    dependsOn("installDebug")
-    commandLine("adb", "shell", "am", "start", "-n", "com.najdev.snapvault/.MainActivity")
-}
 
 // Build the iOS app via xcodebuild, boot a simulator if needed, install and launch.
 // Prerequisites: Xcode installed, simulator available.

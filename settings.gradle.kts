@@ -20,3 +20,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "snapchat-memories-downloader"
 include(":composeApp")
+include(":androidApp")

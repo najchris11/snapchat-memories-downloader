@@ -24,7 +24,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val context = LocalContext.current
             val mediaProcessor = remember { AndroidMediaProcessor() }
-            
+
             var onHtmlResult by remember { mutableStateOf<((String?) -> Unit)?>(null) }
             var onFolderResult by remember { mutableStateOf<((String?) -> Unit)?>(null) }
             var onZipsResult by remember { mutableStateOf<((List<String>) -> Unit)?>(null) }

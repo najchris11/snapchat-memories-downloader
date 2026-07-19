@@ -63,13 +63,13 @@ jobs:
           with open('gradle.properties', 'w') as f:
               f.write(prop_content)
 
-          with open('composeApp/build.gradle.kts', 'r') as f:
+          with open('androidApp/build.gradle.kts', 'r') as f:
               build_content = f.read()
           code_match = re.search(r'versionCode\s*=\s*(\d+)', build_content)
           if code_match:
               code = int(code_match.group(1)) + 1
               build_content = re.sub(r'versionCode\s*=\s*\d+', f'versionCode = {code}', build_content)
-              with open('composeApp/build.gradle.kts', 'w') as f:
+              with open('androidApp/build.gradle.kts', 'w') as f:
                   f.write(build_content)
 
           print(new_version)
@@ -78,7 +78,7 @@ jobs:
           NEW_TAG="v$NEW_VERSION"
           echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
 
-          git add gradle.properties composeApp/build.gradle.kts
+          git add gradle.properties androidApp/build.gradle.kts
           git commit -m "chore: release $NEW_TAG [skip ci]"
           git tag $NEW_TAG
           git push origin main

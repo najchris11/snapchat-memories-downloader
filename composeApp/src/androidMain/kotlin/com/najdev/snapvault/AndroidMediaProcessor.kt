@@ -87,8 +87,14 @@ class AndroidMediaProcessor : MediaProcessor {
             canvas.drawBitmap(overlayBitmap, srcRect, dstRect, paint)
 
             val outputFile = File(outputPath)
-            outputFile.outputStream().use { out ->
+            val compressed = outputFile.outputStream().use { out ->
                 compositeBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 95, out)
+            }
+
+            // Verify file output exists and is non-zero byte size
+            if (!compressed || !outputFile.exists() || outputFile.length() == 0L) {
+                if (outputFile.exists()) outputFile.delete()
+                return false
             }
 
             // Copy EXIF metadata from main file to merged file
@@ -110,7 +116,9 @@ class AndroidMediaProcessor : MediaProcessor {
                     }
                 }
                 dstExif.saveAttributes()
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                android.util.Log.w("AndroidMediaProcessor", "Failed to copy EXIF attributes to $outputPath: ${e.message}")
+            }
 
             true
         } catch (e: Exception) {

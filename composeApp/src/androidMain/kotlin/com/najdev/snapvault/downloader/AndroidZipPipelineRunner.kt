@@ -1,6 +1,15 @@
 package com.najdev.snapvault.downloader
 
 import com.najdev.snapvault.metadata.MediaProcessor
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import java.io.File
 
 class AndroidZipPipelineRunner(
@@ -22,11 +31,11 @@ class AndroidZipPipelineRunner(
         onMetaStart: (total: Int) -> Unit,
         onMetaError: ((String) -> Unit)?,
         onProgress: (CombineResult) -> Unit
-    ) {
+    ) = coroutineScope {
         val dir = File(outputDir)
         if (!dir.exists() || !dir.isDirectory) {
             onStart(0)
-            return
+            return@coroutineScope
         }
 
         val allFiles = dir.listFiles() ?: emptyArray()
@@ -54,50 +63,68 @@ class AndroidZipPipelineRunner(
 
         onStart(pairs.size)
 
-        for (pair in pairs) {
-            val stem = pair.mainFile.name.substringBefore("-main.")
-            val uuid = stem.substringAfter("_", stem)
-
-            if (pair.isVideo) {
-                onProgress(
-                    CombineResult(
-                        uuid = uuid,
-                        outputPath = pair.mainFile.absolutePath,
-                        status = "skipped: Video overlay combine on Android will land in Media3 update",
-                        warnings = listOf("Video overlay combine on Android will land in Media3 update")
-                    )
-                )
-            } else {
-                val ok = mediaProcessor.combineImageWithOverlay(
-                    pair.mainFile.absolutePath,
-                    pair.overlayFile.absolutePath,
-                    pair.outputFile.absolutePath
-                )
-
-                if (ok) {
-                    if (deleteOriginals) {
-                        pair.mainFile.delete()
-                        pair.overlayFile.delete()
-                    }
-                    onProgress(
-                        CombineResult(
-                            uuid = uuid,
-                            outputPath = pair.outputFile.absolutePath,
-                            status = "combined",
-                            warnings = emptyList()
-                        )
-                    )
-                } else {
-                    onProgress(
-                        CombineResult(
-                            uuid = uuid,
-                            outputPath = pair.mainFile.absolutePath,
-                            status = "error: Image overlay combination failed",
-                            warnings = listOf("Failed to combine overlay for ${pair.mainFile.name}")
-                        )
-                    )
-                }
+        val channel = Channel<CombineResult>(Channel.UNLIMITED)
+        val consumer = launch {
+            for (res in channel) {
+                onProgress(res)
             }
         }
+
+        val semaphore = Semaphore(workerCount.coerceAtLeast(1))
+
+        pairs.map { pair ->
+            async {
+                semaphore.withPermit {
+                    val stem = pair.mainFile.name.substringBefore("-main.")
+                    val uuid = stem.substringAfter("_", stem)
+
+                    if (pair.isVideo) {
+                        channel.send(
+                            CombineResult(
+                                uuid = uuid,
+                                outputPath = pair.mainFile.absolutePath,
+                                status = "skipped: Video overlay combine on Android will land in Media3 update",
+                                warnings = listOf("Video overlay combine on Android will land in Media3 update")
+                            )
+                        )
+                    } else {
+                        val ok = withContext(Dispatchers.IO) {
+                            mediaProcessor.combineImageWithOverlay(
+                                pair.mainFile.absolutePath,
+                                pair.overlayFile.absolutePath,
+                                pair.outputFile.absolutePath
+                            )
+                        }
+
+                        if (ok) {
+                            if (deleteOriginals) {
+                                pair.mainFile.delete()
+                                pair.overlayFile.delete()
+                            }
+                            channel.send(
+                                CombineResult(
+                                    uuid = uuid,
+                                    outputPath = pair.outputFile.absolutePath,
+                                    status = "combined",
+                                    warnings = emptyList()
+                                )
+                            )
+                        } else {
+                            channel.send(
+                                CombineResult(
+                                    uuid = uuid,
+                                    outputPath = pair.mainFile.absolutePath,
+                                    status = "error: Image overlay combination failed",
+                                    warnings = listOf("Failed to combine overlay for ${pair.mainFile.name}")
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }.awaitAll()
+
+        channel.close()
+        consumer.join()
     }
 }

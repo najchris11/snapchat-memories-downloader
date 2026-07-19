@@ -88,11 +88,13 @@ class AndroidZipPipelineRunner(
                             )
                         )
                     } else {
+                        val warnings = mutableListOf<String>()
                         val ok = withContext(Dispatchers.IO) {
                             mediaProcessor.combineImageWithOverlay(
                                 pair.mainFile.absolutePath,
                                 pair.overlayFile.absolutePath,
-                                pair.outputFile.absolutePath
+                                pair.outputFile.absolutePath,
+                                onWarning = { warnings.add(it) }
                             )
                         }
 
@@ -106,7 +108,7 @@ class AndroidZipPipelineRunner(
                                     uuid = uuid,
                                     outputPath = pair.outputFile.absolutePath,
                                     status = "combined",
-                                    warnings = emptyList()
+                                    warnings = warnings
                                 )
                             )
                         } else {

@@ -65,7 +65,12 @@ class AndroidMediaProcessor : MediaProcessor {
         return false
     }
 
-    override fun combineImageWithOverlay(mainPath: String, overlayPath: String, outputPath: String): Boolean {
+    override fun combineImageWithOverlay(
+        mainPath: String,
+        overlayPath: String,
+        outputPath: String,
+        onWarning: ((String) -> Unit)?
+    ): Boolean {
         var mainBitmap: android.graphics.Bitmap? = null
         var overlayBitmap: android.graphics.Bitmap? = null
         var compositeBitmap: android.graphics.Bitmap? = null
@@ -117,7 +122,9 @@ class AndroidMediaProcessor : MediaProcessor {
                 }
                 dstExif.saveAttributes()
             } catch (e: Exception) {
-                android.util.Log.w("AndroidMediaProcessor", "Failed to copy EXIF attributes to $outputPath: ${e.message}")
+                val warnMsg = "Failed to copy EXIF metadata for ${File(outputPath).name}: ${e.message}"
+                android.util.Log.w("AndroidMediaProcessor", warnMsg)
+                onWarning?.invoke(warnMsg)
             }
 
             true

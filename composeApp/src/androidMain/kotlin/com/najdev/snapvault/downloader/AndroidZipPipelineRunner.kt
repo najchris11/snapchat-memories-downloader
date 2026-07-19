@@ -70,7 +70,9 @@ class AndroidZipPipelineRunner(
             }
         }
 
-        val semaphore = Semaphore(workerCount.coerceAtLeast(1))
+        // Image compositing decodes full-res main, overlay, and composite bitmaps into RAM.
+        // Serialize compositing (Semaphore(1)) to prevent concurrent RAM spikes and OOM crashes.
+        val semaphore = Semaphore(1)
 
         pairs.map { pair ->
             async {

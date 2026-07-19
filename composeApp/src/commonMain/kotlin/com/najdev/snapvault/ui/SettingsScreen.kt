@@ -330,6 +330,20 @@ fun SettingsScreen(
                         )
                     }
                 }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    OutlinedButton(
+                        onClick = onVerifyDependencies,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Re-check Dependencies", fontSize = 12.sp)
+                    }
+                }
             }
         }
 
@@ -362,6 +376,32 @@ fun SettingsScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = SnapVaultColors.electricPurple.copy(alpha = 0.15f))
                     ) {
                         Text("Change", fontSize = 12.sp, color = SnapVaultColors.electricPurple)
+                    }
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+
+                // Reset Vault Index
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("Vault Index", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            "Clear vault_index.json to force a full re-scan on next launch.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = onResetIndex,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Reset Index", fontSize = 12.sp)
                     }
                 }
             }

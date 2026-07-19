@@ -8,10 +8,7 @@ import platform.UIKit.UIViewController
 
 fun MainViewController(): UIViewController = ComposeUIViewController {
     val mediaProcessor = IosMediaProcessor()
-    val pickers = object : PlatformPickers {
-        override fun pickHtmlFile(onResult: (String?) -> Unit) = onResult(null)
-        override fun pickFolder(onResult: (String?) -> Unit) = onResult(null)
-    }
+    val pickers = rememberPlatformPickers()
     App(
         pickers = pickers,
         mediaProcessor = mediaProcessor,

@@ -73,7 +73,15 @@ kotlin {
             }
         }
         
+        // Code shared by the two JVM targets (desktop + Android): java.util.zip readers,
+        // JVM actuals for common expect declarations, and anything else JVM-only that
+        // both platforms need. iOS gets its own Kotlin/Native actuals instead.
+        val jvmSharedMain by creating {
+            dependsOn(commonMain)
+        }
+
         val androidMain by getting {
+            dependsOn(jvmSharedMain)
             dependencies {
                 implementation("androidx.activity:activity-compose:1.13.0")
                 implementation("androidx.appcompat:appcompat:1.7.1")
@@ -82,8 +90,9 @@ kotlin {
                 implementation("io.ktor:ktor-client-okhttp:3.5.0")
             }
         }
-        
+
         val desktopMain by getting {
+            dependsOn(jvmSharedMain)
             dependencies {
                 implementation(compose.preview)
                 implementation(compose.desktop.currentOs)
@@ -187,3 +196,60 @@ val generateBuildConfig by tasks.registering {
 
 kotlin.sourceSets.getByName("commonMain").kotlin
     .srcDir(generateBuildConfig.map { it.outputs.files })
+
+// Install the debug APK on a connected device/emulator, then launch the app.
+// Prerequisites: adb on PATH, device connected or emulator running.
+tasks.register<Exec>("runAndroid") {
+    group = "application"
+    description = "Build, install, and launch SnapVault on a connected Android device or emulator"
+    dependsOn("installDebug")
+    commandLine("adb", "shell", "am", "start", "-n", "com.najdev.snapvault/.MainActivity")
+}
+
+// Build the iOS app via xcodebuild, boot a simulator if needed, install and launch.
+// Prerequisites: Xcode installed, simulator available.
+tasks.register<Exec>("runIosSimulator") {
+    group = "application"
+    description = "Build and run SnapVault in the iOS Simulator (requires Xcode)"
+    workingDir(rootProject.projectDir)
+    commandLine("bash", "-c", """
+        set -e
+
+        DERIVED_DATA="iosApp/build"
+        PROJECT="iosApp/iosApp.xcodeproj"
+        SCHEME="iosApp"
+        BUNDLE_ID="com.najdev.snapvault.ios"
+
+        echo "==> Building iOS app (Debug, iphonesimulator)..."
+        xcodebuild \
+            -project "${'$'}PROJECT" \
+            -scheme "${'$'}SCHEME" \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -derivedDataPath "${'$'}DERIVED_DATA" \
+            -destination "generic/platform=iOS Simulator" \
+            | grep -E "^(Build|error:|warning: |CompileSwift|Ld |Linking|note:)" || true
+
+        APP="${'$'}DERIVED_DATA/Build/Products/Debug-iphonesimulator/iosApp.app"
+
+        echo "==> Finding or booting a simulator..."
+        BOOTED=${'$'}(xcrun simctl list devices | grep " (Booted)" | grep -oE "[A-F0-9-]{36}" | head -1 || true)
+        if [ -z "${'$'}BOOTED" ]; then
+            BOOTED=${'$'}(xcrun simctl list devices available | grep "iPhone" | grep -oE "[A-F0-9-]{36}" | head -1 || true)
+            if [ -z "${'$'}BOOTED" ]; then
+                echo "ERROR: No iPhone simulator found. Open Xcode > Preferences > Platforms and download one." >&2
+                exit 1
+            fi
+            echo "  Booting simulator ${'$'}BOOTED..."
+            xcrun simctl boot "${'$'}BOOTED"
+            open -a Simulator
+            sleep 3
+        fi
+
+        echo "==> Installing app..."
+        xcrun simctl install "${'$'}BOOTED" "${'$'}APP"
+        echo "==> Launching app..."
+        xcrun simctl launch "${'$'}BOOTED" "${'$'}BUNDLE_ID"
+        echo "==> Done. Check the Simulator window."
+    """.trimIndent())
+}

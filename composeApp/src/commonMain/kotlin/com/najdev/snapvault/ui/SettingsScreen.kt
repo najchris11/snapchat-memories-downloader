@@ -25,6 +25,7 @@ import com.najdev.snapvault.binaryInstallHint
 import com.najdev.snapvault.ui.theme.ElectricPurple
 import com.najdev.snapvault.ui.theme.InfoBlue
 import com.najdev.snapvault.ui.theme.SnapVaultColors
+import com.najdev.snapvault.LayoutOverride
 import com.najdev.snapvault.ThemeMode
 import org.jetbrains.compose.resources.stringResource
 import snapchat_memories_downloader.composeapp.generated.resources.*
@@ -38,7 +39,9 @@ fun SettingsScreen(
     onResetIndex: () -> Unit,
     onEditOutputPath: () -> Unit,
     themeMode: ThemeMode,
-    onThemeModeChange: (ThemeMode) -> Unit
+    onThemeModeChange: (ThemeMode) -> Unit,
+    layoutOverride: LayoutOverride,
+    onLayoutOverrideChange: (LayoutOverride) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -113,6 +116,54 @@ fun SettingsScreen(
                             ) {
                                 Text(
                                     text = label,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (active) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Layout selector: force the phone (bottom-nav) or desktop (sidebar)
+                // layout, or let window width decide.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.Dashboard,
+                        null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Text("Layout", fontSize = 13.sp)
+                        Text(
+                            "Auto switches by window width; Compact forces the phone layout.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                    Row(
+                        modifier = Modifier
+                            .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                            .padding(3.dp)
+                    ) {
+                        LayoutOverride.values().forEach { option ->
+                            val active = layoutOverride == option
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(5.dp))
+                                    .background(if (active) SnapVaultColors.electricPurple.copy(alpha = 0.15f) else Color.Transparent)
+                                    .clickable { onLayoutOverrideChange(option) }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = option.name,
                                     fontSize = 12.sp,
                                     fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
                                     color = if (active) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)

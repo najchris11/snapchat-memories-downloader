@@ -62,13 +62,13 @@ class DashboardViewModel(
     private var syncJob: Job? = null
     private val workerCount = computeWorkerCount()
 
-    private val logLock = Any()
+    private val logLock = SyncLock()
 
     // All log appends go through here: SnapshotStateList is not safe for unsynchronized
     // concurrent mutation, and lines originate from the UI thread (stopSync) as well as
     // pipeline coroutines.
     private fun log(message: String) {
-        synchronized(logLock) { logs.add(message) }
+        logLock.withLock { logs.add(message) }
     }
 
     // ── Picker actions ───────────────────────────────────────────────────────
@@ -301,7 +301,7 @@ class DashboardViewModel(
                 // conflicting record just becomes a same-key collision that
                 // buildExperimentalZipMetadataPlan already resolves by omitting GPS
                 // rather than guessing.
-                val memoryJsonSources = withContext(Dispatchers.IO) {
+                val memoryJsonSources = withContext(ioDispatcher) {
                     zipFiles.mapNotNull { zipPath -> readZipEntryText(zipPath, "json/memories_history.json") }
                 }
 
@@ -531,7 +531,7 @@ class DashboardViewModel(
             }
 
             byDate.entries.map { (date, entries) ->
-                async(Dispatchers.IO) {
+                async(ioDispatcher) {
                     currentCoroutineContext().ensureActive()
                     metaSemaphore.withPermit {
                         val paths = entries.map { "$outDir/${it.fileName}" }
@@ -606,7 +606,7 @@ class DashboardViewModel(
             }
 
             targets.map { target ->
-                async(Dispatchers.IO) {
+                async(ioDispatcher) {
                     currentCoroutineContext().ensureActive()
                     semaphore.withPermit {
                         val path = "$outDir/${target.fileName}"
@@ -789,7 +789,7 @@ class DashboardViewModel(
             }
 
             targets.map { target ->
-                async(Dispatchers.IO) {
+                async(ioDispatcher) {
                     semaphore.withPermit {
                         val outcome = runInterruptibleCompat {
                             when {
@@ -824,7 +824,7 @@ class DashboardViewModel(
         log("[INFO] Scanning for duplicate files…${if (dryRun) " (dry run — nothing will be deleted)" else ""}")
         progressText = "Deduplicating…"
         val deduplicator = Deduplicator(fileSystem)
-        val results = withContext(Dispatchers.IO) {
+        val results = withContext(ioDispatcher) {
             deduplicator.deduplicateFolder(outDir.toPath(), dryRun)
         }
         if (results.isEmpty()) {

@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.najdev.snapvault.ioDispatcher
 import com.najdev.snapvault.loadThumbnail
 import com.najdev.snapvault.scanMediaFiles
 import com.najdev.snapvault.ui.theme.ElectricPurple
@@ -69,7 +70,7 @@ fun LibraryScreen(
     // composition for large libraries.
     val items by produceState(emptyList<LibraryItem>(), downloadFolder, refreshKey) {
         value = if (downloadFolder != null) {
-            withContext(Dispatchers.IO) { scanMediaFiles(downloadFolder) }
+            withContext(ioDispatcher) { scanMediaFiles(downloadFolder) }
         } else emptyList()
     }
 

@@ -12,10 +12,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import java.io.File
-import java.nio.file.AtomicMoveNotSupportedException
-import java.nio.file.FileAlreadyExistsException
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import java.util.zip.ZipFile
 
 class ZipExtractEngine {
@@ -162,17 +158,26 @@ class ZipExtractEngine {
         }
     }
 
-    private fun moveIntoPlace(tmpFile: File, destFile: File): String = try {
-        try {
-            Files.move(tmpFile.toPath(), destFile.toPath(), StandardCopyOption.ATOMIC_MOVE)
-        } catch (_: AtomicMoveNotSupportedException) {
-            Files.move(tmpFile.toPath(), destFile.toPath())
+    private fun moveIntoPlace(tmpFile: File, destFile: File): String {
+        if (isAndroidBelowApi26()) {
+            return if (tmpFile.renameTo(destFile)) "ok" else "error: renameTo failed"
         }
-        "ok"
-    } catch (_: FileAlreadyExistsException) {
-        // Another worker extracted the same filename first — not an error.
-        tmpFile.delete()
-        "skipped"
+        return try {
+            NioMover.move(tmpFile, destFile)
+        } catch (t: Throwable) {
+            if (tmpFile.renameTo(destFile)) "ok" else "error: renameTo failed"
+        }
+    }
+
+    private fun isAndroidBelowApi26(): Boolean {
+        return try {
+            val versionClass = Class.forName("android.os.Build\$VERSION")
+            val sdkIntField = versionClass.getField("SDK_INT")
+            val sdkInt = sdkIntField.get(null) as Int
+            sdkInt < 26
+        } catch (e: Exception) {
+            false
+        }
     }
 
     private fun cleanStalePartFiles(outDir: File) {
@@ -181,5 +186,25 @@ class ZipExtractEngine {
 
     private companion object {
         const val PART_SUFFIX = ".part"
+    }
+}
+
+private object NioMover {
+    fun move(tmpFile: File, destFile: File): String {
+        return try {
+            try {
+                java.nio.file.Files.move(
+                    tmpFile.toPath(),
+                    destFile.toPath(),
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE
+                )
+            } catch (_: java.nio.file.AtomicMoveNotSupportedException) {
+                java.nio.file.Files.move(tmpFile.toPath(), destFile.toPath())
+            }
+            "ok"
+        } catch (_: java.nio.file.FileAlreadyExistsException) {
+            tmpFile.delete()
+            "skipped"
+        }
     }
 }

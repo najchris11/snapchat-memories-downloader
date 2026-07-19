@@ -12,19 +12,22 @@ actual fun loadThumbnail(path: String): ImageBitmap? {
     if (!file.exists()) return null
 
     val ext = file.extension.lowercase()
-    if (ext in setOf("mp4", "mov", "gif")) {
+    if (ext in setOf("mp4", "mov")) {
+        val retriever = MediaMetadataRetriever()
         return try {
-            val retriever = MediaMetadataRetriever()
             retriever.setDataSource(path)
             val bitmap = retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-            retriever.release()
             bitmap?.asImageBitmap()
         } catch (_: Exception) {
             null
+        } finally {
+            try {
+                retriever.release()
+            } catch (_: Exception) {}
         }
     }
 
-    if (ext !in setOf("jpg", "jpeg", "png", "webp")) return null
+    if (ext !in setOf("jpg", "jpeg", "png", "webp", "gif")) return null
 
     return try {
         val options = BitmapFactory.Options().apply {
@@ -50,7 +53,7 @@ actual fun loadThumbnail(path: String): ImageBitmap? {
 
 actual fun loadFullImage(path: String): ImageBitmap? {
     val file = File(path)
-    if (!file.exists() || file.extension.lowercase() in setOf("mp4", "mov", "gif")) return null
+    if (!file.exists() || file.extension.lowercase() in setOf("mp4", "mov")) return null
     return try {
         BitmapFactory.decodeFile(path)?.asImageBitmap()
     } catch (_: Exception) {

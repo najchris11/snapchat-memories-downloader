@@ -335,7 +335,7 @@ fun DashboardScreen(
             ) {
                 Button(
                     onClick = { viewModel.startSync(runDownload, runMetadata, experimentalMetadataMatching, runCombine, runDedupe, dryRun) },
-                    enabled = !viewModel.isRunning && canStart && !isMobileBuild,
+                    enabled = !viewModel.isRunning && canStart,
                     modifier = Modifier.weight(1f).height(52.dp),
                     shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = SnapVaultColors.electricPurple)

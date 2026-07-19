@@ -8,16 +8,20 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.FileOutputStream
 
 @Composable
 actual fun rememberPlatformPickers(): PlatformPickers {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    var activeJob by remember { mutableStateOf<Job?>(null) }
     var onHtmlResult by remember { mutableStateOf<((String?) -> Unit)?>(null) }
     var onFolderResult by remember { mutableStateOf<((String?) -> Unit)?>(null) }
     var onZipsResult by remember { mutableStateOf<((List<String>) -> Unit)?>(null) }
@@ -26,11 +30,13 @@ actual fun rememberPlatformPickers(): PlatformPickers {
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         val cb = onHtmlResult ?: return@rememberLauncherForActivityResult
+        onHtmlResult = null
         if (uri == null) {
             cb(null)
             return@rememberLauncherForActivityResult
         }
-        scope.launch {
+        activeJob?.cancel()
+        activeJob = scope.launch {
             val path = withContext(Dispatchers.IO) {
                 copyUriToInternalStorage(context, uri, "memories_history.html")
             }
@@ -42,6 +48,7 @@ actual fun rememberPlatformPickers(): PlatformPickers {
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
         val cb = onFolderResult ?: return@rememberLauncherForActivityResult
+        onFolderResult = null
         if (uri == null) {
             cb(null)
             return@rememberLauncherForActivityResult
@@ -59,15 +66,21 @@ actual fun rememberPlatformPickers(): PlatformPickers {
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
         val cb = onZipsResult ?: return@rememberLauncherForActivityResult
+        onZipsResult = null
         if (uris.isEmpty()) {
             cb(emptyList())
             return@rememberLauncherForActivityResult
         }
-        scope.launch {
+        activeJob?.cancel()
+        activeJob = scope.launch {
             val paths = withContext(Dispatchers.IO) {
-                uris.mapIndexedNotNull { index, uri ->
-                    val filename = getFileNameFromUri(context, uri) ?: "snapchat_export_${index}.zip"
-                    copyUriToInternalStorage(context, uri, filename)
+                coroutineScope {
+                    uris.mapIndexed { index, uri ->
+                        async(Dispatchers.IO) {
+                            val filename = getFileNameFromUri(context, uri) ?: "snapchat_export_${index}.zip"
+                            copyUriToInternalStorage(context, uri, filename)
+                        }
+                    }.awaitAll().filterNotNull()
                 }
             }
             cb(paths)
@@ -103,16 +116,34 @@ actual fun rememberPlatformPickers(): PlatformPickers {
 
 private fun copyUriToInternalStorage(context: Context, uri: Uri, targetName: String): String? {
     return try {
-        val inputStream = context.contentResolver.openInputStream(uri) ?: return null
+        val expectedSize = try {
+            context.contentResolver.openFileDescriptor(uri, "r")?.use { it.statSize } ?: -1L
+        } catch (_: Exception) {
+            -1L
+        }
+
         val importsDir = File(context.filesDir, "imports").also { it.mkdirs() }
-        val file = File(importsDir, targetName)
-        val outputStream = FileOutputStream(file)
-        inputStream.use { input ->
-            outputStream.use { output ->
+        val sanitized = targetName.replace(Regex("""[^a-zA-Z0-9._-]"""), "_")
+        val file = File(importsDir, sanitized)
+
+        // Reuse cached file if present and matches length (deduplication on re-pick)
+        if (file.exists() && expectedSize > 0 && file.length() == expectedSize) {
+            return file.absolutePath
+        }
+
+        val tempFile = File.createTempFile("copy_", ".part", importsDir)
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            tempFile.outputStream().use { output ->
                 input.copyTo(output)
             }
+        } ?: return null
+
+        if (file.exists()) file.delete()
+        if (tempFile.renameTo(file)) {
+            file.absolutePath
+        } else {
+            tempFile.absolutePath
         }
-        file.absolutePath
     } catch (e: Exception) {
         e.printStackTrace()
         null
@@ -148,8 +179,29 @@ private fun resolveTreeUriToPath(context: Context, uri: Uri): String {
         val primaryDir = Environment.getExternalStorageDirectory()
         val resolved = File(primaryDir, relativePath)
         if (resolved.exists() || resolved.mkdirs()) {
-            return resolved.absolutePath
+            if (isWritableDirectory(resolved)) {
+                return resolved.absolutePath
+            }
         }
     }
-    return context.getExternalFilesDir(null)?.absolutePath ?: context.filesDir.absolutePath
+
+    // Fallback to app-external directory if primary path is unresolvable or non-writable due to Scoped Storage
+    val fallback = context.getExternalFilesDir("SnapVault") ?: context.filesDir
+    fallback.mkdirs()
+    return fallback.absolutePath
+}
+
+private fun isWritableDirectory(dir: File): Boolean {
+    return try {
+        val testFile = File(dir, ".snapvault_write_test_${System.currentTimeMillis()}.tmp")
+        val created = testFile.createNewFile()
+        if (created) {
+            testFile.delete()
+            true
+        } else {
+            false
+        }
+    } catch (_: Exception) {
+        false
+    }
 }

@@ -1,18 +1,20 @@
 package com.najdev.snapvault
 
+import androidx.compose.runtime.remember
 import androidx.compose.ui.window.ComposeUIViewController
-import com.najdev.snapvault.downloader.NoOpZipPipelineRunner
+import com.najdev.snapvault.downloader.IosZipPipelineRunner
 import com.najdev.snapvault.metadata.IosMediaProcessor
 import okio.FileSystem
 import platform.UIKit.UIViewController
 
 fun MainViewController(): UIViewController = ComposeUIViewController {
-    val mediaProcessor = IosMediaProcessor()
+    val mediaProcessor = remember { IosMediaProcessor() }
+    val zipPipelineRunner = remember { IosZipPipelineRunner(mediaProcessor) }
     val pickers = rememberPlatformPickers()
     App(
         pickers = pickers,
         mediaProcessor = mediaProcessor,
-        zipPipelineRunner = NoOpZipPipelineRunner,
+        zipPipelineRunner = zipPipelineRunner,
         fileSystem = FileSystem.SYSTEM
     )
 }

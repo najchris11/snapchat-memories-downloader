@@ -6,23 +6,17 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.HelpOutline
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.AppBuildConfig
 import com.najdev.snapvault.DraggableArea
-import com.najdev.snapvault.ui.theme.ElectricPurple
 import com.najdev.snapvault.ui.theme.SnapVaultColors
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
@@ -68,41 +62,12 @@ fun AppTopBar(
                     if (AppBuildConfig.IS_DEBUG) DebugBadge()
                 }
 
-                // Actions
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(20.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.Search,
-                        contentDescription = stringResource(Res.string.topbar_search),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Icon(
-                        Icons.Outlined.NotificationsNone,
-                        contentDescription = stringResource(Res.string.topbar_notifications),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Icon(
-                        Icons.AutoMirrored.Outlined.HelpOutline,
-                        contentDescription = stringResource(Res.string.topbar_help),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.size(18.dp)
-                    )
-                    if (showWindowControls) {
-                        Box(
-                            Modifier
-                                .width(1.dp)
-                                .height(16.dp)
-                                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                            WindowControlButton("−", onMinimize)
-                            WindowControlButton("▢", onMaximize)
-                            WindowControlButton("×", onClose)
-                        }
+                // Window Controls
+                if (showWindowControls) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        WindowControlButton("−", onMinimize)
+                        WindowControlButton("▢", onMaximize)
+                        WindowControlButton("×", onClose)
                     }
                 }
             }

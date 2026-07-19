@@ -12,8 +12,19 @@ android {
         applicationId = "com.najdev.snapvault"
         minSdk = 24
         targetSdk = 37
-        versionCode = 10
-        versionName = (project.findProperty("app.version") as? String) ?: "0.0.0"
+        versionCode = 1
+        versionName = (project.findProperty("app.version") as? String) ?: "1.0.0"
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
     }
 
     compileOptions {

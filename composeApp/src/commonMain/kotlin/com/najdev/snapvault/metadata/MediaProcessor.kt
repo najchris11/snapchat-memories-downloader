@@ -10,6 +10,12 @@ interface MediaProcessor {
     fun writeGpsMetadata(filePath: String, latitude: Double, longitude: Double, dateStr: String?): Boolean //META writes GPS + optional date; used in legacy pipeline only
     fun writeDateMetadata(filePath: String, dateTimeUtc: String): Boolean //META writes date to a single file; used by default batch fallback
     fun combineVideoWithOverlay(videoPath: String, overlayPath: String, outputPath: String): Boolean
+    fun combineImageWithOverlay(
+        mainPath: String,
+        overlayPath: String,
+        outputPath: String,
+        onWarning: ((String) -> Unit)? = null
+    ): Boolean = false
 
     // Name of the hardware encoder that passed the runtime probe (e.g. "h264_vaapi"),
     // or null when videos will be software-encoded. First call triggers detection.

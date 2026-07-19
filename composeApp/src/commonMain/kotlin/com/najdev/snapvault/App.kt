@@ -15,6 +15,9 @@ import com.najdev.snapvault.ui.components.AppSidebar
 import com.najdev.snapvault.ui.components.AppTopBar
 import com.najdev.snapvault.ui.theme.SnapVaultTheme
 import com.najdev.snapvault.viewmodel.DashboardViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okio.FileSystem
 
 enum class Screen { Dashboard, Library, Settings }
@@ -47,9 +50,15 @@ fun App(
     }
     DisposableEffect(Unit) { onDispose { dashboardViewModel.dispose() } }
 
+    val scope = rememberCoroutineScope()
+
+    // Off the UI thread: on first launch these unzip the bundled binaries (~27 MB
+    // compressed ffmpeg) and spawn `which`, which would freeze the window for seconds.
     LaunchedEffect(Unit) {
-        hasExifTool = mediaProcessor.checkExifTool()
-        hasFFmpeg = mediaProcessor.checkFFmpeg()
+        withContext(Dispatchers.IO) {
+            hasExifTool = mediaProcessor.checkExifTool()
+            hasFFmpeg = mediaProcessor.checkFFmpeg()
+        }
     }
 
     SnapVaultTheme(darkMode = isDarkMode) {
@@ -87,8 +96,10 @@ fun App(
                                 hasExifTool = hasExifTool,
                                 hasFFmpeg = hasFFmpeg,
                                 onVerifyDependencies = {
-                                    hasExifTool = mediaProcessor.checkExifTool()
-                                    hasFFmpeg = mediaProcessor.checkFFmpeg()
+                                    scope.launch(Dispatchers.IO) {
+                                        hasExifTool = mediaProcessor.checkExifTool()
+                                        hasFFmpeg = mediaProcessor.checkFFmpeg()
+                                    }
                                 },
                                 downloadFolder = dashboardViewModel.downloadFolder,
                                 onResetIndex = { dashboardViewModel.resetVaultIndex() },

@@ -54,7 +54,7 @@ fun DashboardScreen(
     // These are local UI preferences, not pipeline state
     var runDownload by remember { mutableStateOf(true) }
     var runMetadata by remember { mutableStateOf(true) }
-    var experimentalMetadataMatching by remember { mutableStateOf(false) }
+    var experimentalMetadataMatching by remember { mutableStateOf(true) }
     var runCombine by remember { mutableStateOf(true) }
     var runDedupe by remember { mutableStateOf(true) }
     var dryRun by remember { mutableStateOf(false) }
@@ -296,7 +296,7 @@ fun DashboardScreen(
                                 Box(modifier = Modifier.padding(start = 26.dp)) {
                                     PipelineItem(
                                         Icons.Outlined.Info,
-                                        "Experimental ZIP metadata matching",
+                                        "Precise time + GPS matching (experimental, can be turned off)",
                                         experimentalMetadataMatching
                                     ) { experimentalMetadataMatching = it }
                                 }

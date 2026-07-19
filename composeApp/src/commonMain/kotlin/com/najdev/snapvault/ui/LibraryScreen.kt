@@ -65,8 +65,12 @@ fun LibraryScreen(
     onOpenFolder: () -> Unit
 ) {
     var refreshKey by remember { mutableStateOf(0) }
-    val items = remember(downloadFolder, refreshKey) {
-        if (downloadFolder != null) scanMediaFiles(downloadFolder) else emptyList()
+    // Off the UI thread: scanning stats every file in the folder, which visibly hitches
+    // composition for large libraries.
+    val items by produceState(emptyList<LibraryItem>(), downloadFolder, refreshKey) {
+        value = if (downloadFolder != null) {
+            withContext(Dispatchers.IO) { scanMediaFiles(downloadFolder) }
+        } else emptyList()
     }
 
     var selectedFilter by remember { mutableStateOf("All") }
@@ -74,7 +78,7 @@ fun LibraryScreen(
     var selectedItem by remember { mutableStateOf<LibraryItem?>(null) }
     var showPreview by remember { mutableStateOf(false) }
 
-    val filteredItems = remember(selectedFilter, searchQuery) {
+    val filteredItems = remember(items, selectedFilter, searchQuery) {
         items
             .filter { item ->
                 when (selectedFilter) {

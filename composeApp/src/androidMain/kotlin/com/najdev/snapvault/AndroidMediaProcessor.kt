@@ -48,8 +48,43 @@ class AndroidMediaProcessor : MediaProcessor {
     }
 
     override fun writeDateMetadata(filePath: String, dateTimeUtc: String): Boolean {
-        // TODO: Implement using ExifInterface for Android
-        return false
+        return try {
+            val file = File(filePath)
+            if (!file.exists()) return false
+
+            var success = false
+
+            // 1. Try writing EXIF date for image formats supported by ExifInterface
+            val formattedDate = formatToExifDate(dateTimeUtc)
+            if (formattedDate != null) {
+                try {
+                    val exif = ExifInterface(filePath)
+                    exif.setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, formattedDate)
+                    exif.setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED, formattedDate)
+                    exif.setAttribute(ExifInterface.TAG_DATETIME, formattedDate)
+                    exif.saveAttributes()
+                    success = true
+                } catch (_: Exception) {}
+            }
+
+            // 2. Set file modification timestamp as universal fallback (especially for videos)
+            try {
+                val cleaned = dateTimeUtc.replace("UTC", "").trim()
+                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).apply {
+                    timeZone = java.util.TimeZone.getTimeZone("UTC")
+                }
+                val date = sdf.parse(cleaned)
+                if (date != null) {
+                    file.setLastModified(date.time)
+                    success = true
+                }
+            } catch (_: Exception) {}
+
+            success
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
     }
 
     override fun combineVideoWithOverlay(videoPath: String, overlayPath: String, outputPath: String): Boolean {

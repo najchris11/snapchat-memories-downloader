@@ -94,6 +94,9 @@ class DashboardViewModel(
         runDedupe: Boolean,
         dryRun: Boolean,
     ) {
+        // A double-click racing recomposition (before isRunning disables the button)
+        // must not launch a second concurrent pipeline.
+        if (syncJob?.isActive == true) return
         isRunning = true
         logs.clear()
         progress = 0f
@@ -218,7 +221,7 @@ class DashboardViewModel(
         log("[INFO] Indexed $totalMemoryCount memories across ${itemsByZip.size} zip(s).")
 
         if (runMetadata && experimentalMetadataMatching) {
-            log("[WARN] Experimental ZIP metadata matching is enabled. GPS is only applied where a file's exact capture timestamp uniquely matches a memories_history.json record; ambiguous matches fall back to date-only metadata.")
+            log("[INFO] Precise time + GPS matching is on (default). GPS is only applied where a file's exact capture timestamp uniquely matches a memories_history.json record; ambiguous matches fall back to date-only metadata. Turn the toggle off on the Dashboard to force date-only tags for every file.")
         }
 
         if (AppBuildConfig.IS_DEBUG) {

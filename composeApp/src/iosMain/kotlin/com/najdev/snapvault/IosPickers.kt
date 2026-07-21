@@ -7,18 +7,21 @@ import platform.UIKit.UIApplication
 import platform.UIKit.UIDocumentPickerDelegateProtocol
 import platform.UIKit.UIDocumentPickerMode
 import platform.UIKit.UIDocumentPickerViewController
+import platform.UIKit.UISceneActivationStateForegroundActive
 import platform.UIKit.UIViewController
+import platform.UIKit.UIWindow
+import platform.UIKit.UIWindowScene
 import platform.darwin.NSObject
 
-private enum class PickerSlot { HTML, FOLDER, ZIP }
+private enum class PickerSlot { HTML, OUTPUT_FOLDER, ZIP_FOLDER, ZIP_FILES }
 
 class IosPickers : PlatformPickers {
     // Retain a strong reference to the active delegate while the picker is presented.
     // UIDocumentPickerViewController.delegate is a weak reference in UIKit.
     private var activeDelegate: PickerDelegate? = null
 
-    // Track active security-scoped URLs per slot (HTML, FOLDER, ZIP) so resources stay
-    // concurrently accessible across selections during sync execution.
+    // Track active security-scoped URLs per slot so HTML index, ZIP source, and Output folder
+    // stay concurrently accessible during sync execution without revoking each other.
     private val accessedUrlsBySlot = mutableMapOf<PickerSlot, List<NSURL>>()
 
     override fun pickHtmlFile(onResult: (String?) -> Unit) {
@@ -28,15 +31,24 @@ class IosPickers : PlatformPickers {
     }
 
     override fun pickFolder(onResult: (String?) -> Unit) {
-        presentPicker(slot = PickerSlot.FOLDER, types = listOf("public.folder"), multiple = false) { urls ->
+        presentPicker(slot = PickerSlot.OUTPUT_FOLDER, types = listOf("public.folder"), multiple = false) { urls ->
             onResult(urls.firstOrNull()?.path)
         }
     }
 
     override fun pickMultipleZips(onResult: (List<String>) -> Unit) {
-        presentPicker(slot = PickerSlot.ZIP, types = listOf("public.zip-archive", "com.pkware.zip-archive"), multiple = true) { urls ->
+        presentPicker(slot = PickerSlot.ZIP_FILES, types = listOf("public.zip-archive", "com.pkware.zip-archive"), multiple = true) { urls ->
             onResult(urls.mapNotNull { it.path })
         }
+    }
+
+    fun releaseAllSecurityAccess() {
+        accessedUrlsBySlot.values.flatten().forEach { url ->
+            try {
+                url.stopAccessingSecurityScopedResource()
+            } catch (_: Exception) {}
+        }
+        accessedUrlsBySlot.clear()
     }
 
     private fun stopSecurityAccessForSlot(slot: PickerSlot) {
@@ -53,8 +65,7 @@ class IosPickers : PlatformPickers {
         multiple: Boolean,
         onPicked: (List<NSURL>) -> Unit
     ) {
-        // Only stop security access for prior selections of this specific slot,
-        // leaving HTML, ZIP sources, and Output folder concurrently active.
+        // Stop security access only for prior selections of this specific slot
         stopSecurityAccessForSlot(slot)
 
         val rootVc = topViewController() ?: run {
@@ -82,7 +93,11 @@ class IosPickers : PlatformPickers {
     }
 
     private fun topViewController(): UIViewController? {
-        val keyWindow = UIApplication.sharedApplication.keyWindow
+        val scenes = UIApplication.sharedApplication.connectedScenes
+        val windowScene = scenes.filterIsInstance<UIWindowScene>().firstOrNull { it.activationState == UISceneActivationStateForegroundActive }
+            ?: scenes.filterIsInstance<UIWindowScene>().firstOrNull()
+        val keyWindow = windowScene?.windows?.filterIsInstance<UIWindow>()?.firstOrNull { it.isKeyWindow() }
+            ?: UIApplication.sharedApplication.keyWindow
         var top = keyWindow?.rootViewController
         while (top?.presentedViewController != null) {
             top = top.presentedViewController

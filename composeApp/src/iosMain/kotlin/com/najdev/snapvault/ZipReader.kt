@@ -40,7 +40,7 @@ actual fun listZipEntryTimestamps(zipFilePath: String): Map<String, Long> {
                     val metadata = zipFs.metadataOrNull(path)
                     val mtime = metadata?.lastModifiedAtMillis
                     if (mtime != null) {
-                        map[relPath] = mtime
+                        map[relPath] = mtime / 1000L
                     }
                 }
             }

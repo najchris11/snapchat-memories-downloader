@@ -31,7 +31,17 @@ class IosPickers : PlatformPickers {
     }
 
     override fun pickFolder(onResult: (String?) -> Unit) {
+        pickOutputFolder(onResult)
+    }
+
+    override fun pickOutputFolder(onResult: (String?) -> Unit) {
         presentPicker(slot = PickerSlot.OUTPUT_FOLDER, types = listOf("public.folder"), multiple = false) { urls ->
+            onResult(urls.firstOrNull()?.path)
+        }
+    }
+
+    override fun pickZipFolder(onResult: (String?) -> Unit) {
+        presentPicker(slot = PickerSlot.ZIP_FOLDER, types = listOf("public.folder"), multiple = false) { urls ->
             onResult(urls.firstOrNull()?.path)
         }
     }
@@ -42,7 +52,7 @@ class IosPickers : PlatformPickers {
         }
     }
 
-    fun releaseAllSecurityAccess() {
+    override fun releaseAllSecurityAccess() {
         accessedUrlsBySlot.values.flatten().forEach { url ->
             try {
                 url.stopAccessingSecurityScopedResource()

@@ -57,71 +57,78 @@ class IosZipPipelineRunner(
 
         val semaphore = Semaphore(workerCount.coerceAtLeast(1))
 
-        val tasks = itemsByZip.flatMap { (zipPath, entries) ->
-            val zipFile = zipPath.toPath()
-            val zipFs: FileSystem = try {
-                fileSystem.openZip(zipFile)
-            } catch (e: Exception) {
-                entries.forEach { entry ->
-                    channel.trySend(
-                        ExtractResult(
-                            uuid = entry.uuid,
-                            fileName = entry.fileName,
-                            outputPath = "",
-                            skipped = false,
-                            error = "Could not open zip archive: $zipPath (${e.message})"
+        val tasks = itemsByZip.map { (zipPath, entries) ->
+            async {
+                val zipFile = zipPath.toPath()
+                val zipFs = try {
+                    fileSystem.openZip(zipFile)
+                } catch (e: Exception) {
+                    entries.forEach { entry ->
+                        channel.trySend(
+                            ExtractResult(
+                                uuid = entry.uuid,
+                                fileName = entry.fileName,
+                                outputPath = "",
+                                skipped = false,
+                                error = "Could not open zip archive: $zipPath (${e.message})"
+                            )
                         )
-                    )
+                    }
+                    return@async
                 }
-                return@flatMap emptyList()
-            }
 
-            entries.map { entry ->
-                async {
-                    semaphore.withPermit {
-                        var extractedPath = ""
-                        var errorMessage: String? = null
-                        var isSkipped = false
+                try {
+                    val entryTasks = entries.map { entry ->
+                        async {
+                            semaphore.withPermit {
+                                var extractedPath = ""
+                                var errorMessage: String? = null
+                                var isSkipped = false
 
-                        try {
-                            val cleanPath = entry.fileName.removePrefix("/")
-                            val zipEntryPath = "/$cleanPath".toPath()
+                                try {
+                                    val cleanPath = entry.fileName.removePrefix("/")
+                                    val zipEntryPath = "/$cleanPath".toPath()
 
-                            if (!zipFs.exists(zipEntryPath)) {
-                                errorMessage = "Entry not found in ZIP: ${entry.fileName}"
-                            } else {
-                                val destFile = outPath / cleanPath.substringAfterLast("/")
-                                if (fileSystem.exists(destFile)) {
-                                    isSkipped = true
-                                    extractedPath = destFile.toString()
-                                } else {
-                                    val inputSource = zipFs.source(zipEntryPath).buffer()
-                                    val outputSink = fileSystem.sink(destFile).buffer()
-                                    inputSource.use { input ->
-                                        outputSink.use { output ->
-                                            output.writeAll(input)
+                                    if (!zipFs.exists(zipEntryPath)) {
+                                        errorMessage = "Entry not found in ZIP: ${entry.fileName}"
+                                    } else {
+                                        val destFile = outPath / cleanPath.substringAfterLast("/")
+                                        if (fileSystem.exists(destFile)) {
+                                            isSkipped = true
+                                            extractedPath = destFile.toString()
+                                        } else {
+                                            val inputSource = zipFs.source(zipEntryPath).buffer()
+                                            val outputSink = fileSystem.sink(destFile).buffer()
+                                            inputSource.use { input ->
+                                                outputSink.use { output ->
+                                                    output.writeAll(input)
+                                                }
+                                            }
+                                            extractedPath = destFile.toString()
+
+                                            if (entry.date.isNotBlank()) {
+                                                mediaProcessor.writeDateMetadata(extractedPath, entry.date)
+                                            }
                                         }
                                     }
-                                    extractedPath = destFile.toString()
-
-                                    if (entry.date.isNotBlank()) {
-                                        mediaProcessor.writeDateMetadata(extractedPath, entry.date)
-                                    }
+                                } catch (e: Exception) {
+                                    errorMessage = "Failed to extract ${entry.fileName}: ${e.message}"
                                 }
-                            }
-                        } catch (e: Exception) {
-                            errorMessage = "Failed to extract ${entry.fileName}: ${e.message}"
-                        }
 
-                        val result = ExtractResult(
-                            uuid = entry.uuid,
-                            fileName = entry.fileName,
-                            outputPath = extractedPath,
-                            skipped = isSkipped,
-                            error = errorMessage
-                        )
-                        channel.send(result)
+                                val result = ExtractResult(
+                                    uuid = entry.uuid,
+                                    fileName = entry.fileName,
+                                    outputPath = extractedPath,
+                                    skipped = isSkipped,
+                                    error = errorMessage
+                                )
+                                channel.send(result)
+                            }
+                        }
                     }
+                    entryTasks.awaitAll()
+                } finally {
+                    try { zipFs.close() } catch (_: Exception) {}
                 }
             }
         }

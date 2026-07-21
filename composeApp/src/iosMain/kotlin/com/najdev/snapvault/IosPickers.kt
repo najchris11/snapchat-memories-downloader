@@ -11,6 +11,10 @@ import platform.UIKit.UIViewController
 import platform.darwin.NSObject
 
 class IosPickers : PlatformPickers {
+    // Retain a strong reference to the active delegate while the picker is presented.
+    // UIDocumentPickerViewController.delegate is a weak reference in UIKit.
+    private var activeDelegate: PickerDelegate? = null
+
     override fun pickHtmlFile(onResult: (String?) -> Unit) {
         presentPicker(types = listOf("public.html", "public.plain-text"), multiple = false) { urls ->
             onResult(urls.firstOrNull()?.path)
@@ -38,12 +42,19 @@ class IosPickers : PlatformPickers {
             onPicked(emptyList())
             return
         }
+
+        val delegate = PickerDelegate { urls ->
+            activeDelegate = null
+            onPicked(urls)
+        }
+        activeDelegate = delegate
+
         val picker = UIDocumentPickerViewController(
             documentTypes = types,
             inMode = UIDocumentPickerMode.UIDocumentPickerModeOpen
         ).apply {
             allowsMultipleSelection = multiple
-            delegate = PickerDelegate(onPicked)
+            this.delegate = delegate
         }
         rootVc.presentViewController(picker, animated = true, completion = null)
     }

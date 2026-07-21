@@ -1,0 +1,195 @@
+package com.najdev.snapvault.downloader
+
+import com.najdev.snapvault.metadata.MediaProcessor
+import com.najdev.snapvault.parser.HtmlMemoryEntry
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
+import okio.FileSystem
+import okio.Path
+import okio.Path.Companion.toPath
+import okio.buffer
+import okio.openZip
+import okio.use
+
+class IosZipPipelineRunner(
+    private val mediaProcessor: MediaProcessor
+) : ZipPipelineRunner {
+
+    override fun listZipFiles(folderPath: String): List<String> {
+        val folder = folderPath.toPath()
+        val fileSystem = FileSystem.SYSTEM
+        if (!fileSystem.exists(folder)) return emptyList()
+
+        return fileSystem.list(folder)
+            .filter { path ->
+                val name = path.name.lowercase()
+                name.startsWith("mydata~") && name.endsWith(".zip")
+            }
+            .map { it.toString() }
+            .sorted()
+    }
+
+    override suspend fun extractAll(
+        itemsByZip: Map<String, List<HtmlMemoryEntry>>,
+        outputDir: String,
+        workerCount: Int,
+        onProgress: (ExtractResult) -> Unit
+    ) = withContext(Dispatchers.IO) {
+        val outPath = outputDir.toPath()
+        val fileSystem = FileSystem.SYSTEM
+        fileSystem.createDirectories(outPath)
+
+        val totalItems = itemsByZip.values.sumOf { it.size }
+        if (totalItems == 0) return@withContext
+
+        val channel = Channel<ExtractResult>(Channel.UNLIMITED)
+        val consumer = launch {
+            for (res in channel) {
+                onProgress(res)
+            }
+        }
+
+        try {
+            val semaphore = Semaphore(workerCount.coerceAtLeast(1))
+
+            val tasks = itemsByZip.map { (zipPath, entries) ->
+                async {
+                    val zipFile = zipPath.toPath()
+                    val zipFs = try {
+                        fileSystem.openZip(zipFile)
+                    } catch (e: Exception) {
+                        entries.forEach { entry ->
+                            channel.trySend(
+                                ExtractResult(
+                                    uuid = entry.uuid,
+                                    fileName = entry.fileName,
+                                    outputPath = "",
+                                    skipped = false,
+                                    error = "Could not open zip archive: $zipPath (${e.message})"
+                                )
+                            )
+                        }
+                        return@async
+                    }
+
+                    try {
+                        val entryTasks = entries.map { entry ->
+                            async {
+                                semaphore.withPermit {
+                                    var extractedPath = ""
+                                    var errorMessage: String? = null
+                                    var isSkipped = false
+
+                                    try {
+                                        val mainZipEntryPath = findZipEntryPath(zipFs, entry.fileName)
+                                        if (mainZipEntryPath == null) {
+                                            errorMessage = "Entry not found in ZIP: ${entry.fileName}"
+                                        } else {
+                                            val destFile = outPath / entry.fileName.substringAfterLast("/")
+                                            val alreadyExists = fileSystem.exists(destFile)
+
+                                            if (alreadyExists) {
+                                                isSkipped = true
+                                                extractedPath = destFile.toString()
+                                            } else {
+                                                extractToFileAtomic(zipFs, fileSystem, mainZipEntryPath, destFile)
+                                                extractedPath = destFile.toString()
+
+                                                if (entry.date.isNotBlank()) {
+                                                    mediaProcessor.writeDateMetadata(extractedPath, entry.date)
+                                                }
+                                            }
+
+                                            // Extract overlay file if present
+                                            val overlayName = entry.overlayFileName
+                                            if (entry.hasOverlay && !overlayName.isNullOrBlank()) {
+                                                val overlayZipEntryPath = findZipEntryPath(zipFs, overlayName)
+                                                if (overlayZipEntryPath != null) {
+                                                    val overlayDestFile = outPath / overlayName.substringAfterLast("/")
+                                                    if (!fileSystem.exists(overlayDestFile)) {
+                                                        extractToFileAtomic(zipFs, fileSystem, overlayZipEntryPath, overlayDestFile)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        errorMessage = "Failed to extract ${entry.fileName}: ${e.message}"
+                                    }
+
+                                    val result = ExtractResult(
+                                        uuid = entry.uuid,
+                                        fileName = entry.fileName,
+                                        outputPath = extractedPath,
+                                        skipped = isSkipped,
+                                        error = errorMessage
+                                    )
+                                    channel.send(result)
+                                }
+                            }
+                        }
+                        entryTasks.awaitAll()
+                    } finally {
+                        try { zipFs.close() } catch (_: Exception) {}
+                    }
+                }
+            }
+
+            tasks.awaitAll()
+        } finally {
+            channel.close()
+            consumer.join()
+        }
+    }
+
+    private fun findZipEntryPath(zipFs: FileSystem, rawName: String): Path? {
+        val clean = rawName.removePrefix("/")
+        val candidates = listOf(
+            "/memories/$clean".toPath(),
+            "/$clean".toPath(),
+            if (clean.startsWith("memories/")) "/$clean".toPath() else "/memories/${clean.substringAfterLast("/")}".toPath()
+        )
+        return candidates.firstOrNull { zipFs.exists(it) }
+    }
+
+    private fun extractToFileAtomic(
+        zipFs: FileSystem,
+        fileSystem: FileSystem,
+        zipEntryPath: Path,
+        destFile: Path
+    ) {
+        val tmpFile = (destFile.toString() + ".tmp").toPath()
+        try {
+            val inputSource = zipFs.source(zipEntryPath).buffer()
+            val outputSink = fileSystem.sink(tmpFile).buffer()
+            inputSource.use { input ->
+                outputSink.use { output ->
+                    output.writeAll(input)
+                }
+            }
+            fileSystem.atomicMove(tmpFile, destFile)
+        } catch (e: Exception) {
+            try { fileSystem.delete(tmpFile) } catch (_: Exception) {}
+            throw e
+        }
+    }
+
+    override suspend fun combineAll(
+        outputDir: String,
+        deleteOriginals: Boolean,
+        workerCount: Int,
+        onStart: (total: Int) -> Unit,
+        onMetaStart: (total: Int) -> Unit,
+        onMetaError: ((String) -> Unit)?,
+        onProgress: (CombineResult) -> Unit
+    ) {
+        onStart(0)
+        onMetaError?.invoke("Image and video overlay combining on iOS will be implemented in Phase 3.5.")
+    }
+}

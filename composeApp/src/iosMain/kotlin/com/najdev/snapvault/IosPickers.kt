@@ -15,6 +15,9 @@ class IosPickers : PlatformPickers {
     // UIDocumentPickerViewController.delegate is a weak reference in UIKit.
     private var activeDelegate: PickerDelegate? = null
 
+    // Track active security-scoped URLs to balance startAccessingSecurityScopedResource with stopAccessingSecurityScopedResource.
+    private val accessedUrls = mutableListOf<NSURL>()
+
     override fun pickHtmlFile(onResult: (String?) -> Unit) {
         presentPicker(types = listOf("public.html", "public.plain-text"), multiple = false) { urls ->
             onResult(urls.firstOrNull()?.path)
@@ -33,18 +36,30 @@ class IosPickers : PlatformPickers {
         }
     }
 
+    private fun stopPreviousSecurityAccess() {
+        accessedUrls.forEach { url ->
+            try {
+                url.stopAccessingSecurityScopedResource()
+            } catch (_: Exception) {}
+        }
+        accessedUrls.clear()
+    }
+
     private fun presentPicker(
         types: List<String>,
         multiple: Boolean,
         onPicked: (List<NSURL>) -> Unit
     ) {
+        stopPreviousSecurityAccess()
+
         val rootVc = topViewController() ?: run {
             onPicked(emptyList())
             return
         }
 
-        val delegate = PickerDelegate { urls ->
+        val delegate = PickerDelegate { urls, startedUrls ->
             activeDelegate = null
+            accessedUrls.addAll(startedUrls)
             onPicked(urls)
         }
         activeDelegate = delegate
@@ -70,7 +85,7 @@ class IosPickers : PlatformPickers {
 }
 
 private class PickerDelegate(
-    private val onPicked: (List<NSURL>) -> Unit
+    private val onPicked: (urls: List<NSURL>, startedUrls: List<NSURL>) -> Unit
 ) : NSObject(), UIDocumentPickerDelegateProtocol {
 
     override fun documentPicker(
@@ -78,14 +93,17 @@ private class PickerDelegate(
         didPickDocumentsAtURLs: List<*>
     ) {
         val urls = didPickDocumentsAtURLs.filterIsInstance<NSURL>()
+        val startedUrls = mutableListOf<NSURL>()
         urls.forEach { url ->
-            url.startAccessingSecurityScopedResource()
+            if (url.startAccessingSecurityScopedResource()) {
+                startedUrls.add(url)
+            }
         }
-        onPicked(urls)
+        onPicked(urls, startedUrls)
     }
 
     override fun documentPickerWasCancelled(controller: UIDocumentPickerViewController) {
-        onPicked(emptyList())
+        onPicked(emptyList(), emptyList())
     }
 }
 

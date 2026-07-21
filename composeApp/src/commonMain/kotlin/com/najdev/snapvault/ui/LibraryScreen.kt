@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.najdev.snapvault.LocalWindowSize
+import com.najdev.snapvault.WindowSize
 import com.najdev.snapvault.ioDispatcher
 import com.najdev.snapvault.getCachedThumbnail
 import com.najdev.snapvault.scanMediaFiles
@@ -66,8 +68,6 @@ fun LibraryScreen(
     onOpenFolder: () -> Unit
 ) {
     var refreshKey by remember { mutableStateOf(0) }
-    // Off the UI thread: scanning stats every file in the folder, which visibly hitches
-    // composition for large libraries.
     val items by produceState(emptyList<LibraryItem>(), downloadFolder, refreshKey) {
         value = if (downloadFolder != null) {
             withContext(ioDispatcher) { scanMediaFiles(downloadFolder) }
@@ -93,10 +93,13 @@ fun LibraryScreen(
             }
     }
 
+    val windowSize = LocalWindowSize.current
+    val isCompact = windowSize == WindowSize.Compact
+
     Row(modifier = Modifier.fillMaxSize()) {
         // ── Main content ─────────────────────────────────────────────────────
         Column(
-            modifier = Modifier.weight(1f).fillMaxHeight().padding(24.dp),
+            modifier = Modifier.weight(1f).fillMaxHeight().padding(if (isCompact) 14.dp else 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Stats row
@@ -105,27 +108,24 @@ fun LibraryScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     StatChip(
                         icon = Icons.Outlined.PhotoLibrary,
                         label = "${items.size} Memories",
                         tint = SnapVaultColors.electricPurple
                     )
-                    StatChip(
-                        icon = Icons.Outlined.Image,
-                        label = "${items.count { it.type == "photo" }} Photos",
-                        tint = SnapVaultColors.electricPurple
-                    )
-                    StatChip(
-                        icon = Icons.Outlined.Videocam,
-                        label = "${items.count { it.type == "video" }} Videos",
-                        tint = SnapVaultColors.info
-                    )
-                    StatChip(
-                        icon = Icons.Outlined.GpsFixed,
-                        label = "${items.count { it.hasGps }} with GPS",
-                        tint = SnapVaultColors.success
-                    )
+                    if (!isCompact) {
+                        StatChip(
+                            icon = Icons.Outlined.Image,
+                            label = "${items.count { it.type == "photo" }} Photos",
+                            tint = SnapVaultColors.electricPurple
+                        )
+                        StatChip(
+                            icon = Icons.Outlined.Videocam,
+                            label = "${items.count { it.type == "video" }} Videos",
+                            tint = SnapVaultColors.info
+                        )
+                    }
                 }
                 if (downloadFolder != null) {
                     Box(
@@ -145,135 +145,137 @@ fun LibraryScreen(
                 }
             }
 
-            // Filter + search bar + sorting controls
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    // Type filter tabs
+            // Filter + search bar
+            if (isCompact) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
                         modifier = Modifier
                             .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
                             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                            .padding(3.dp)
+                            .padding(3.dp),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        listOf("All", "Photos", "Videos").forEach { filter ->
-                            val active = selectedFilter == filter
-                            val label = when (filter) {
-                                "All" -> stringResource(Res.string.lib_filter_all)
-                                "Photos" -> stringResource(Res.string.lib_filter_photos)
-                                "Videos" -> stringResource(Res.string.lib_filter_videos)
-                                else -> filter
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(5.dp))
-                                    .background(if (active) SnapVaultColors.electricPurple.copy(alpha = 0.15f) else Color.Transparent)
-                                    .clickable { selectedFilter = filter }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = label,
-                                    fontSize = 12.sp,
-                                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = if (active) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
-                                )
-                            }
-                        }
+                        FilterTab("All", selectedFilter == "All") { selectedFilter = "All" }
+                        FilterTab("Photos", selectedFilter == "Photos") { selectedFilter = "Photos" }
+                        FilterTab("Videos", selectedFilter == "Videos") { selectedFilter = "Videos" }
                     }
 
-                }
-
-                // Search field
-                Row(
-                    modifier = Modifier
-                        .width(200.dp)
-                        .height(32.dp)
-                        .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                        .padding(horizontal = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(
-                        Icons.Outlined.Search,
-                        null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        modifier = Modifier.size(13.dp)
-                    )
-                    BasicTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        textStyle = LocalTextStyle.current.copy(
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 12.sp
-                        ),
-                        cursorBrush = SolidColor(SnapVaultColors.electricPurple),
-                        decorationBox = { inner ->
-                            if (searchQuery.isEmpty()) {
-                                Text(
-                                    stringResource(Res.string.lib_search_placeholder),
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                )
-                            }
-                            inner()
-                        }
-                    )
-                }
-            }
-
-            // Grid or empty state
-            if (filteredItems.isEmpty()) {
-                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    // Search field
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(38.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(
-                            Icons.Outlined.PhotoLibrary,
-                            null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                            modifier = Modifier.size(48.dp)
-                        )
-                        Text(
-                            stringResource(Res.string.lib_empty_state),
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            modifier = Modifier.widthIn(max = 280.dp)
-                        )
-                        if (downloadFolder == null) {
-                            TextButton(onClick = onOpenFolder) {
-                                Text(
-                                    "Select Download Folder",
-                                    fontSize = 12.sp,
-                                    color = SnapVaultColors.electricPurple,
-                                    fontWeight = FontWeight.SemiBold
-                                )
+                        Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(16.dp))
+                        BasicTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            cursorBrush = SolidColor(SnapVaultColors.electricPurple),
+                            textStyle = LocalTextStyle.current.copy(
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            ),
+                            decorationBox = { innerTextField ->
+                                if (searchQuery.isEmpty()) {
+                                    Text("Search memories…", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                                }
+                                innerTextField()
                             }
-                        }
+                        )
                     }
                 }
             } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 160.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    modifier = Modifier.weight(1f)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    items(filteredItems) { item ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                                .padding(3.dp),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            FilterTab("All", selectedFilter == "All") { selectedFilter = "All" }
+                            FilterTab("Photos", selectedFilter == "Photos") { selectedFilter = "Photos" }
+                            FilterTab("Videos", selectedFilter == "Videos") { selectedFilter = "Videos" }
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .width(200.dp)
+                                .height(34.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(14.dp))
+                            BasicTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                cursorBrush = SolidColor(SnapVaultColors.electricPurple),
+                                textStyle = LocalTextStyle.current.copy(
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                ),
+                                decorationBox = { innerTextField ->
+                                    if (searchQuery.isEmpty()) {
+                                        Text("Search memories…", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                                    }
+                                    innerTextField()
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Media grid or empty state
+            if (downloadFolder == null) {
+                EmptyLibraryState(
+                    icon = Icons.Outlined.FolderOpen,
+                    title = "No Vault Directory Selected",
+                    subtitle = "Select an output directory on the Dashboard or click below to inspect memories.",
+                    actionLabel = "Select Folder",
+                    onAction = onOpenFolder
+                )
+            } else if (filteredItems.isEmpty()) {
+                EmptyLibraryState(
+                    icon = Icons.Outlined.PhotoLibrary,
+                    title = if (searchQuery.isNotBlank()) "No Matching Memories" else "Library is Empty",
+                    subtitle = if (searchQuery.isNotBlank()) "Try clearing your search query." else "Run a sync on the Dashboard to populate your memory vault.",
+                    actionLabel = null,
+                    onAction = {}
+                )
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(if (isCompact) 110.dp else 160.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(filteredItems, key = { it.id }) { item ->
                         MediaCard(
                             item = item,
-                            selected = item == selectedItem,
+                            selected = selectedItem?.id == item.id,
                             onClick = {
                                 selectedItem = item
                                 showPreview = true
@@ -284,186 +286,84 @@ fun LibraryScreen(
             }
         }
 
-        if (showPreview && selectedItem != null) {
-            MediaPreviewDialog(
-                item = selectedItem!!,
-                onDismiss = { showPreview = false }
-            )
-        }
-
-        // ── Inspector panel ──────────────────────────────────────────────────
-        Surface(
-            modifier = Modifier.width(280.dp).fillMaxHeight(),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            shape = RoundedCornerShape(0.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            AnimatedContent(
-                targetState = selectedItem,
-                transitionSpec = { fadeIn() togetherWith fadeOut() },
-                label = "inspector"
-            ) { selected ->
-                if (selected != null) {
-                    InspectorItemDetail(
-                        item = selected,
-                        onPreview = { showPreview = true },
-                        onClearSelection = { selectedItem = null }
-                    )
-                } else {
-                    InspectorGlobalStats(items = items)
-                }
+        // Inspector side pane (Desktop / Expanded only)
+        if (!isCompact) {
+            Surface(
+                modifier = Modifier.width(280.dp).fillMaxHeight(),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                InspectorPanel(
+                    selectedItem = selectedItem,
+                    items = items,
+                    onOpenPreview = { showPreview = true }
+                )
             }
         }
+    }
+
+    // Media preview dialog (shown on card tap for all size classes)
+    if (showPreview && selectedItem != null) {
+        MediaPreviewDialog(
+            item = selectedItem!!,
+            onDismiss = { showPreview = false }
+        )
     }
 }
 
 @Composable
-private fun InspectorItemDetail(
-    item: LibraryItem,
-    onPreview: () -> Unit,
-    onClearSelection: () -> Unit
-) {
-    val isVideo = item.type == "video"
-    val thumbnail by produceState<ImageBitmap?>(null, item.id) {
-        value = withContext(ioDispatcher) { getCachedThumbnail(item.id) }
-    }
-
-    Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+private fun FilterTab(label: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (selected) SnapVaultColors.electricPurple.copy(alpha = 0.15f) else Color.Transparent)
+            .clickable { onClick() }
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center
     ) {
-        // Thumbnail / preview area
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .clickable(enabled = !isVideo) { onPreview() },
-            contentAlignment = Alignment.Center
+        Text(
+            label,
+            fontSize = 11.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = if (selected) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun EmptyLibraryState(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    actionLabel: String?,
+    onAction: () -> Unit
+) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(32.dp)
         ) {
-            if (thumbnail != null) {
-                Image(
-                    bitmap = thumbnail!!,
-                    contentDescription = item.title,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-                // Hover hint for photos
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.2f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Outlined.ZoomIn,
-                        contentDescription = "Open preview",
-                        tint = Color.White.copy(alpha = 0.8f),
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-            } else {
-                Icon(
-                    imageVector = if (isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.Image,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
-                    modifier = Modifier.size(48.dp)
-                )
-            }
-
-            // Close / deselect
-            IconButton(
-                onClick = onClearSelection,
-                modifier = Modifier.align(Alignment.TopEnd).size(36.dp)
-            ) {
-                Icon(
-                    Icons.Default.Close,
-                    "Clear selection",
-                    tint = Color.White,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-
-            // Type badge
             Box(
                 modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(8.dp)
-                    .clip(RoundedCornerShape(100))
-                    .background(if (isVideo) SnapVaultColors.info.copy(alpha = 0.25f) else SnapVaultColors.electricPurple.copy(alpha = 0.25f))
-                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                    .size(64.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
             ) {
-                Text(
-                    item.type.uppercase(),
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isVideo) SnapVaultColors.info else SnapVaultColors.electricPurple
-                )
+                Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(32.dp))
             }
-        }
-
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            // File name + date
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(
-                    item.title,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    item.date,
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-
-            // Metadata rows
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                InspectorDetailRow(
-                    label = "SIZE",
-                    value = if (item.fileSizeBytes > 0) formatBytes(item.fileSizeBytes) else "—",
-                    valueColor = SnapVaultColors.electricPurple
-                )
-                InspectorDetailRow(
-                    label = "GPS",
-                    value = if (item.hasGps) "Tagged" else "No data",
-                    valueColor = if (item.hasGps) SnapVaultColors.success else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                )
-                InspectorDetailRow(
-                    label = "OVERLAY",
-                    value = if (item.hasOverlay) "Combined" else "None",
-                    valueColor = if (item.hasOverlay) SnapVaultColors.info else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                )
-                item.duration?.let {
-                    InspectorDetailRow(label = "DURATION", value = it, valueColor = MaterialTheme.colorScheme.onSurface)
-                }
-            }
-
-            if (!isVideo) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                Surface(
-                    onClick = onPreview,
-                    shape = RoundedCornerShape(8.dp),
-                    color = SnapVaultColors.electricPurple.copy(alpha = 0.1f),
-                    border = BorderStroke(1.dp, SnapVaultColors.electricPurple.copy(alpha = 0.25f)),
-                    modifier = Modifier.fillMaxWidth()
+            Text(title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+            Text(subtitle, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+            if (actionLabel != null) {
+                Button(
+                    onClick = onAction,
+                    colors = ButtonDefaults.buttonColors(containerColor = SnapVaultColors.electricPurple)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Outlined.ZoomIn, null, tint = SnapVaultColors.electricPurple, modifier = Modifier.size(15.dp))
-                        Text("Open Preview", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = SnapVaultColors.electricPurple)
-                    }
+                    Text(actionLabel)
                 }
             }
         }
@@ -471,33 +371,42 @@ private fun InspectorItemDetail(
 }
 
 @Composable
-private fun InspectorDetailRow(label: String, value: String, valueColor: Color) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
-        Text(value, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = valueColor)
-    }
-}
-
-@Composable
-private fun InspectorGlobalStats(items: List<LibraryItem>) {
+private fun InspectorPanel(
+    selectedItem: LibraryItem?,
+    items: List<LibraryItem>,
+    onOpenPreview: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(Icons.Outlined.Info, null, tint = SnapVaultColors.electricPurple, modifier = Modifier.size(16.dp))
-            Text(
-                stringResource(Res.string.lib_inspector_title),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
-            )
+        Text(stringResource(Res.string.lib_inspector_title), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+
+        if (selectedItem != null) {
+            InspectorItemDetail(item = selectedItem, onOpenPreview = onOpenPreview)
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(140.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerLowest),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "Select an item to view metadata details",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
         }
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
 
         val totalBytes = items.sumOf { it.fileSizeBytes }
         val gpsCount = items.count { it.hasGps }
@@ -558,7 +467,28 @@ private fun InspectorGlobalStats(items: List<LibraryItem>) {
                 subtitle = if (items.isEmpty()) "—" else "$overlayCount asset${if (overlayCount == 1) "" else "s"} combined"
             )
         }
+    }
+}
 
+@Composable
+private fun InspectorItemDetail(item: LibraryItem, onOpenPreview: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(140.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .clickable { onOpenPreview() }
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(item.title, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+        Text(item.title, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(item.date, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (item.fileSizeBytes > 0) {
+            Text(formatBytes(item.fileSizeBytes), fontSize = 11.sp, color = SnapVaultColors.electricPurple, fontWeight = FontWeight.Bold)
+        }
     }
 }
 
@@ -603,132 +533,92 @@ fun MetadataRow(
             Icon(icon, null, tint = iconTint, modifier = Modifier.size(15.dp))
         }
         Column {
-            Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Text(title, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             Text(subtitle, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
         }
     }
 }
 
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
+fun MediaPreviewDialog(
+    item: LibraryItem,
+    onDismiss: () -> Unit
+) {
     val isVideo = item.type == "video"
-    val thumbnail by produceState<ImageBitmap?>(null, item.id) {
-        value = withContext(ioDispatcher) { getCachedThumbnail(item.id) }
-    }
 
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Box(
-            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.88f)).clickable { onDismiss() },
-            contentAlignment = Alignment.Center
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = Color.Black
         ) {
-            Surface(
-                modifier = Modifier
-                    .widthIn(max = 860.dp)
-                    .heightIn(max = 680.dp)
-                    .clickable { }, // absorb clicks so the scrim handler doesn't fire
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-            ) {
-                Column {
-                    // Image / video area
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                            .background(Color.Black),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (thumbnail != null) {
-                            Image(
-                                bitmap = thumbnail!!,
-                                contentDescription = item.title,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Fit
-                            )
-                        } else {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Icon(
-                                    if (isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.Image,
-                                    null,
-                                    tint = Color.White.copy(alpha = 0.25f),
-                                    modifier = Modifier.size(72.dp)
-                                )
-                                if (isVideo) {
-                                    Text("Video preview not available", fontSize = 13.sp, color = Color.White.copy(alpha = 0.4f))
-                                }
-                            }
-                        }
-
-                        // Close button
-                        IconButton(
-                            onClick = onDismiss,
-                            modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
-                        ) {
-                            Box(
-                                Modifier
-                                    .size(28.dp)
-                                    .clip(RoundedCornerShape(100))
-                                    .background(Color.Black.copy(alpha = 0.5f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.Close, "Close", tint = Color.White, modifier = Modifier.size(14.dp))
-                            }
-                        }
+            Box(modifier = Modifier.fillMaxSize()) {
+                if (isVideo) {
+                    VideoPlayer(
+                        videoPath = item.id,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    val fullImage by produceState<ImageBitmap?>(null, item.id) {
+                        value = withContext(ioDispatcher) { com.najdev.snapvault.loadFullImage(item.id) }
                     }
 
-                    // Info bar
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                            .padding(horizontal = 20.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(item.title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(item.date, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                    if (fullImage != null) {
+                        Image(
+                            bitmap = fullImage!!,
+                            contentDescription = item.title,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit
+                        )
+                    } else {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = SnapVaultColors.electricPurple)
                         }
+                    }
+                }
+
+                // Close button
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp)
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(100))
+                        .background(Color.Black.copy(alpha = 0.6f))
+                        .clickable { onDismiss() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Close, "Close", tint = Color.White, modifier = Modifier.size(24.dp))
+                }
+
+                // Bottom metadata info bar
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth(),
+                    color = Color.Black.copy(alpha = 0.75f)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(item.title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
+                            Text(item.date, fontSize = 12.sp, color = Color.White.copy(alpha = 0.7f))
                             if (item.fileSizeBytes > 0) {
-                                Text(formatBytes(item.fileSizeBytes), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SnapVaultColors.electricPurple)
+                                Text(formatBytes(item.fileSizeBytes), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SnapVaultColors.electricPurple)
                             }
                             if (item.hasGps) {
-                                Row(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(SnapVaultColors.electricPurple.copy(alpha = 0.1f))
-                                        .padding(horizontal = 7.dp, vertical = 3.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Outlined.GpsFixed, null, tint = SnapVaultColors.electricPurple, modifier = Modifier.size(11.dp))
-                                    Text("GPS", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = SnapVaultColors.electricPurple)
-                                }
+                                Text("GPS VERIFIED", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = SnapVaultColors.success)
                             }
                             if (item.hasOverlay) {
-                                Row(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(SnapVaultColors.info.copy(alpha = 0.1f))
-                                        .padding(horizontal = 7.dp, vertical = 3.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Outlined.Layers, null, tint = SnapVaultColors.info, modifier = Modifier.size(11.dp))
-                                    Text("OVERLAY", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = SnapVaultColors.info)
-                                }
+                                Text("OVERLAY COMBINED", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = SnapVaultColors.info)
                             }
                         }
                     }
@@ -755,7 +645,6 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
         )
     ) {
         Column {
-            // Thumbnail
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -791,103 +680,32 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                     )
                 }
 
-                // Type badge
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(7.dp)
                         .clip(RoundedCornerShape(100))
                         .background(if (isVideo) SnapVaultColors.info.copy(alpha = 0.2f) else SnapVaultColors.electricPurple.copy(alpha = 0.2f))
-                        .border(
-                            1.dp,
-                            if (isVideo) SnapVaultColors.info.copy(alpha = 0.3f) else SnapVaultColors.electricPurple.copy(alpha = 0.3f),
-                            RoundedCornerShape(100)
-                        )
-                        .padding(horizontal = 7.dp, vertical = 2.dp)
+                        .padding(4.dp)
                 ) {
-                    Text(
-                        text = item.type.uppercase(),
-                        fontSize = 8.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isVideo) SnapVaultColors.info else SnapVaultColors.electricPurple
+                    Icon(
+                        if (isVideo) Icons.Outlined.Videocam else Icons.Outlined.Image,
+                        contentDescription = null,
+                        tint = if (isVideo) SnapVaultColors.info else SnapVaultColors.electricPurple,
+                        modifier = Modifier.size(11.dp)
                     )
                 }
-
-                // Duration badge
-                if (item.duration != null) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(7.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(Color.Black.copy(alpha = 0.55f))
-                            .padding(horizontal = 5.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            item.duration,
-                            fontSize = 9.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = Color.White
-                        )
-                    }
-                }
-
-                // Favorite badge
-                if (item.favorited) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(7.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Favorite,
-                            null,
-                            tint = SnapVaultColors.electricPurple,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                }
-            }
-
-            // Info row
-            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        item.date,
-                        fontSize = 9.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        fontFamily = FontFamily.Monospace
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        if (item.hasGps) Icon(Icons.Outlined.GpsFixed, "GPS", tint = SnapVaultColors.electricPurple, modifier = Modifier.size(11.dp))
-                        if (item.hasOverlay) Icon(Icons.Outlined.Layers, "Overlay", tint = SnapVaultColors.info, modifier = Modifier.size(11.dp))
-                    }
-                }
-                Text(
-                    item.title,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
             }
         }
     }
 }
 
 private fun formatBytes(bytes: Long): String {
-    fun oneDecimal(value: Double): String {
-        val tenths = (value * 10 + 0.5).toLong()
-        return "${tenths / 10}.${tenths % 10}"
-    }
-    return when {
-        bytes >= 1_073_741_824L -> "${oneDecimal(bytes / 1_073_741_824.0)} GB"
-        bytes >= 1_048_576L     -> "${oneDecimal(bytes / 1_048_576.0)} MB"
-        bytes >= 1_024L         -> "${bytes / 1_024L} KB"
-        else                    -> "$bytes B"
-    }
+    if (bytes < 1024) return "$bytes B"
+    val kb = bytes / 1024.0
+    if (kb < 1024) return "${(kb * 10).toInt() / 10.0} KB"
+    val mb = kb / 1024.0
+    if (mb < 1024) return "${(mb * 10).toInt() / 10.0} MB"
+    val gb = mb / 1024.0
+    return "${(gb * 10).toInt() / 10.0} GB"
 }

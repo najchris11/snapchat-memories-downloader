@@ -3,9 +3,17 @@ package com.najdev.snapvault
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import com.najdev.snapvault.downloader.ZipPipelineRunner
 import com.najdev.snapvault.metadata.MediaProcessor
 import com.najdev.snapvault.ui.DashboardScreen
@@ -14,6 +22,7 @@ import com.najdev.snapvault.ui.PhoneRoot
 import com.najdev.snapvault.ui.SettingsScreen
 import com.najdev.snapvault.ui.components.AppSidebar
 import com.najdev.snapvault.ui.components.AppTopBar
+import com.najdev.snapvault.ui.theme.SnapVaultColors
 import com.najdev.snapvault.ui.theme.SnapVaultTheme
 import com.najdev.snapvault.viewmodel.DashboardViewModel
 import kotlinx.coroutines.launch
@@ -53,8 +62,6 @@ fun App(
 
     val scope = rememberCoroutineScope()
 
-    // Off the UI thread: on first launch these unzip the bundled binaries (~27 MB
-    // compressed ffmpeg) and spawn `which`, which would freeze the window for seconds.
     LaunchedEffect(Unit) {
         withContext(ioDispatcher) {
             hasExifTool = mediaProcessor.checkExifTool()
@@ -69,62 +76,114 @@ fun App(
     }
 
     SnapVaultTheme(darkMode = isDarkMode) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            // System-bar padding matters on mobile (edge-to-edge); insets are zero on desktop.
-            Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars)) {
-                AppTopBar(
-                    showWindowControls = showWindowControls,
-                    onClose = onCloseWindow,
-                    onMinimize = onMinimizeWindow,
-                    onMaximize = onMaximizeWindow,
-                )
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val windowSize = getActiveWindowSize(maxWidth, layoutOverride)
 
-                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                    if (getActiveWindowSize(maxWidth, layoutOverride) == WindowSize.Compact) {
-                        PhoneRoot(
-                            dashboardViewModel = dashboardViewModel,
-                            hasExifTool = hasExifTool,
-                            hasFFmpeg = hasFFmpeg,
-                            onVerifyDependencies = onVerifyDependencies,
-                            themeMode = themeMode,
-                            onThemeModeChange = { themeMode = it; saveThemeModePreference(it) },
-                            layoutOverride = layoutOverride,
-                            onLayoutOverrideChange = { layoutOverride = it; saveLayoutOverride(it) },
-                        )
-                    } else {
-                        Row(modifier = Modifier.fillMaxSize()) {
-                            AppSidebar(
-                                currentScreen = currentScreen,
-                                isRunning = dashboardViewModel.isRunning,
-                                currentStep = dashboardViewModel.currentStep,
-                                onNavigate = { currentScreen = it },
+            CompositionLocalProvider(LocalWindowSize provides windowSize) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars)) {
+                        // Top bar is hidden on compact screens to gain 56dp vertical space
+                        if (windowSize != WindowSize.Compact) {
+                            AppTopBar(
+                                showWindowControls = showWindowControls,
+                                onClose = onCloseWindow,
+                                onMinimize = onMinimizeWindow,
+                                onMaximize = onMaximizeWindow,
                             )
+                        }
 
-                            Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                                when (currentScreen) {
-                                    Screen.Dashboard -> DashboardScreen(
-                                        viewModel = dashboardViewModel,
-                                        onNavigateToSettings = { currentScreen = Screen.Settings },
+                        when (windowSize) {
+                            WindowSize.Compact -> {
+                                PhoneRoot(
+                                    dashboardViewModel = dashboardViewModel,
+                                    hasExifTool = hasExifTool,
+                                    hasFFmpeg = hasFFmpeg,
+                                    onVerifyDependencies = onVerifyDependencies,
+                                    themeMode = themeMode,
+                                    onThemeModeChange = { themeMode = it; saveThemeModePreference(it) },
+                                    layoutOverride = layoutOverride,
+                                    onLayoutOverrideChange = { layoutOverride = it; saveLayoutOverride(it) },
+                                )
+                            }
+                            WindowSize.Medium -> {
+                                Row(modifier = Modifier.fillMaxSize()) {
+                                    NavigationRail(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                    ) {
+                                        NavigationRailItem(
+                                            selected = currentScreen == Screen.Dashboard,
+                                            onClick = { currentScreen = Screen.Dashboard },
+                                            icon = { Icon(if (currentScreen == Screen.Dashboard) Icons.Filled.Dashboard else Icons.Outlined.Dashboard, "Dashboard") },
+                                            label = { Text("Dashboard") },
+                                            colors = NavigationRailItemDefaults.colors(
+                                                selectedIconColor = SnapVaultColors.electricPurple,
+                                                indicatorColor = SnapVaultColors.electricPurple.copy(alpha = 0.12f)
+                                            )
+                                        )
+                                        NavigationRailItem(
+                                            selected = currentScreen == Screen.Library,
+                                            onClick = { currentScreen = Screen.Library },
+                                            icon = { Icon(if (currentScreen == Screen.Library) Icons.Filled.PhotoLibrary else Icons.Outlined.PhotoLibrary, "Library") },
+                                            label = { Text("Library") },
+                                            colors = NavigationRailItemDefaults.colors(
+                                                selectedIconColor = SnapVaultColors.electricPurple,
+                                                indicatorColor = SnapVaultColors.electricPurple.copy(alpha = 0.12f)
+                                            )
+                                        )
+                                        NavigationRailItem(
+                                            selected = currentScreen == Screen.Settings,
+                                            onClick = { currentScreen = Screen.Settings },
+                                            icon = { Icon(if (currentScreen == Screen.Settings) Icons.Filled.Settings else Icons.Outlined.Settings, "Settings") },
+                                            label = { Text("Settings") },
+                                            colors = NavigationRailItemDefaults.colors(
+                                                selectedIconColor = SnapVaultColors.electricPurple,
+                                                indicatorColor = SnapVaultColors.electricPurple.copy(alpha = 0.12f)
+                                            )
+                                        )
+                                    }
+
+                                    Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                                        MainContentScreen(
+                                            currentScreen = currentScreen,
+                                            dashboardViewModel = dashboardViewModel,
+                                            hasExifTool = hasExifTool,
+                                            hasFFmpeg = hasFFmpeg,
+                                            onVerifyDependencies = onVerifyDependencies,
+                                            themeMode = themeMode,
+                                            onThemeModeChange = { themeMode = it; saveThemeModePreference(it) },
+                                            layoutOverride = layoutOverride,
+                                            onLayoutOverrideChange = { layoutOverride = it; saveLayoutOverride(it) },
+                                            onNavigateToSettings = { currentScreen = Screen.Settings }
+                                        )
+                                    }
+                                }
+                            }
+                            WindowSize.Expanded -> {
+                                Row(modifier = Modifier.fillMaxSize()) {
+                                    AppSidebar(
+                                        currentScreen = currentScreen,
+                                        isRunning = dashboardViewModel.isRunning,
+                                        currentStep = dashboardViewModel.currentStep,
+                                        onNavigate = { currentScreen = it },
                                     )
-                                    Screen.Library -> LibraryScreen(
-                                        downloadFolder = dashboardViewModel.downloadFolder,
-                                        onOpenFolder = dashboardViewModel::pickOutputFolder,
-                                    )
-                                    Screen.Settings -> SettingsScreen(
-                                        hasExifTool = hasExifTool,
-                                        hasFFmpeg = hasFFmpeg,
-                                        onVerifyDependencies = onVerifyDependencies,
-                                        downloadFolder = dashboardViewModel.downloadFolder,
-                                        onResetIndex = { dashboardViewModel.resetVaultIndex() },
-                                        onEditOutputPath = { dashboardViewModel.pickOutputFolder() },
-                                        themeMode = themeMode,
-                                        onThemeModeChange = { themeMode = it; saveThemeModePreference(it) },
-                                        layoutOverride = layoutOverride,
-                                        onLayoutOverrideChange = { layoutOverride = it; saveLayoutOverride(it) },
-                                    )
+
+                                    Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                                        MainContentScreen(
+                                            currentScreen = currentScreen,
+                                            dashboardViewModel = dashboardViewModel,
+                                            hasExifTool = hasExifTool,
+                                            hasFFmpeg = hasFFmpeg,
+                                            onVerifyDependencies = onVerifyDependencies,
+                                            themeMode = themeMode,
+                                            onThemeModeChange = { themeMode = it; saveThemeModePreference(it) },
+                                            layoutOverride = layoutOverride,
+                                            onLayoutOverrideChange = { layoutOverride = it; saveLayoutOverride(it) },
+                                            onNavigateToSettings = { currentScreen = Screen.Settings }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -132,5 +191,42 @@ fun App(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun MainContentScreen(
+    currentScreen: Screen,
+    dashboardViewModel: DashboardViewModel,
+    hasExifTool: Boolean,
+    hasFFmpeg: Boolean,
+    onVerifyDependencies: () -> Unit,
+    themeMode: ThemeMode,
+    onThemeModeChange: (ThemeMode) -> Unit,
+    layoutOverride: LayoutOverride,
+    onLayoutOverrideChange: (LayoutOverride) -> Unit,
+    onNavigateToSettings: () -> Unit,
+) {
+    when (currentScreen) {
+        Screen.Dashboard -> DashboardScreen(
+            viewModel = dashboardViewModel,
+            onNavigateToSettings = onNavigateToSettings,
+        )
+        Screen.Library -> LibraryScreen(
+            downloadFolder = dashboardViewModel.downloadFolder,
+            onOpenFolder = dashboardViewModel::pickOutputFolder,
+        )
+        Screen.Settings -> SettingsScreen(
+            hasExifTool = hasExifTool,
+            hasFFmpeg = hasFFmpeg,
+            onVerifyDependencies = onVerifyDependencies,
+            downloadFolder = dashboardViewModel.downloadFolder,
+            onResetIndex = { dashboardViewModel.resetVaultIndex() },
+            onEditOutputPath = { dashboardViewModel.pickOutputFolder() },
+            themeMode = themeMode,
+            onThemeModeChange = onThemeModeChange,
+            layoutOverride = layoutOverride,
+            onLayoutOverrideChange = onLayoutOverrideChange,
+        )
     }
 }

@@ -1,10 +1,13 @@
 package com.najdev.snapvault
 
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 enum class WindowSize { Compact, Medium, Expanded }
 enum class LayoutOverride { Auto, Compact, Expanded }
+
+val LocalWindowSize = compositionLocalOf { WindowSize.Compact }
 
 fun getActiveWindowSize(width: Dp, override: LayoutOverride): WindowSize {
     return when (override) {

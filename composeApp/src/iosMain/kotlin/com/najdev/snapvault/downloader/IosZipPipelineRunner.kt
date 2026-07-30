@@ -116,10 +116,10 @@ class IosZipPipelineRunner(
                                             } else {
                                                 extractToFileAtomic(zipFs, fileSystem, mainZipEntryPath, destFile)
                                                 extractedPath = destFile.toString()
-
-                                                if (entry.date.isNotBlank()) {
-                                                    mediaProcessor.writeDateMetadata(extractedPath, entry.date)
-                                                }
+                                                // Date metadata is written in DashboardViewModel's later batch
+                                                // pass (writeDateMetadataBatch), which supplies a full
+                                                // "yyyy-MM-dd 00:00:00 UTC" timestamp; entry.date here is
+                                                // date-only and would fail IosMediaProcessor's format check.
                                             }
                                         }
                                     } catch (e: Exception) {

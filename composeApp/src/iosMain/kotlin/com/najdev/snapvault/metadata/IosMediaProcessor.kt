@@ -119,12 +119,25 @@ class IosMediaProcessor : MediaProcessor {
             CGImageDestinationAddImageFromSource(destination, source, 0uL, properties.toCFDictionary())
             val ok = CGImageDestinationFinalize(destination)
             if (ok) {
-                fileManager.removeItemAtPath(filePath, error = null)
-                fileManager.moveItemAtPath(tmpPath, toPath = filePath, error = null)
+                // replaceItemAtURL swaps the two files as a single atomic operation, so a failure
+                // (or the app getting killed mid-write) leaves the original untouched — unlike a
+                // separate remove-then-move, which can delete the original before the move lands.
+                val replaced = fileManager.replaceItemAtURL(
+                    originalItemURL = NSURL.fileURLWithPath(filePath),
+                    withItemAtURL = NSURL.fileURLWithPath(tmpPath),
+                    backupItemName = null,
+                    options = 0uL,
+                    resultingItemURL = null,
+                    error = null
+                )
+                if (!replaced) {
+                    fileManager.removeItemAtPath(tmpPath, error = null)
+                }
+                replaced
             } else {
                 fileManager.removeItemAtPath(tmpPath, error = null)
+                false
             }
-            ok
         } catch (e: Exception) {
             fileManager.removeItemAtPath(tmpPath, error = null)
             false

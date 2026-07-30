@@ -4,20 +4,31 @@ import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import com.najdev.snapvault.downloader.NoOpZipPipelineRunner
+import com.najdev.snapvault.metadata.AndroidMediaProcessor
 import java.io.File
 import java.io.FileOutputStream
+import okio.FileSystem
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ContextHolder.context = applicationContext
         setContent {
             val pickers = rememberAndroidPickers()
-            App(pickers = pickers)
+            val mediaProcessor = remember { AndroidMediaProcessor() }
+            App(
+                pickers = pickers,
+                mediaProcessor = mediaProcessor,
+                zipPipelineRunner = NoOpZipPipelineRunner,
+                fileSystem = FileSystem.SYSTEM
+            )
         }
     }
 }

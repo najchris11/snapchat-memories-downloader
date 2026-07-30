@@ -33,6 +33,11 @@ import platform.ImageIO.kCGImagePropertyTIFFDictionary
 import kotlin.math.abs
 
 private val videoExtensions = setOf("mp4", "mov")
+
+// ImageIO's CGImageDestination is created with a single-image count and only frame 0 is
+// copied across, so routing GIFs through writeImageMetadata would silently flatten every
+// animated GIF to a still. Treat them like video: no destructive rewrite.
+private val singleFrameUnsafeExtensions = setOf("gif")
 private val dateRegex = Regex("""(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})""")
 
 // Seconds between the Unix epoch (1970-01-01) and NSDate's reference date (2001-01-01),
@@ -59,9 +64,10 @@ class IosMediaProcessor : MediaProcessor {
     override fun checkFFmpeg(): Boolean = false
 
     // GPS is only embeddable in image formats via ImageIO; video GPS tagging would need a
-    // full AVAssetExportSession re-encode and isn't implemented yet.
+    // full AVAssetExportSession re-encode and isn't implemented yet. GIFs are skipped too—
+    // ImageIO would flatten the animation just to add a GPS tag.
     override fun writeGpsMetadata(filePath: String, latitude: Double, longitude: Double, dateStr: String?): Boolean {
-        if (isVideo(filePath)) return false
+        if (isVideo(filePath) || isSingleFrameUnsafe(filePath)) return false
         return writeImageMetadata(filePath) { properties ->
             val gps = NSMutableDictionary()
             gps.setObject(if (latitude >= 0) "N" else "S", forKey = kCGImagePropertyGPSLatitudeRef.asKey())
@@ -74,7 +80,9 @@ class IosMediaProcessor : MediaProcessor {
     }
 
     override fun writeDateMetadata(filePath: String, dateTimeUtc: String): Boolean {
-        if (isVideo(filePath)) return writeFileModificationDate(filePath, dateTimeUtc)
+        if (isVideo(filePath) || isSingleFrameUnsafe(filePath)) {
+            return writeFileModificationDate(filePath, dateTimeUtc)
+        }
         return writeImageMetadata(filePath) { properties -> applyExifDate(properties, dateTimeUtc) }
     }
 
@@ -163,4 +171,7 @@ class IosMediaProcessor : MediaProcessor {
 
     private fun isVideo(filePath: String): Boolean =
         filePath.substringAfterLast('.', "").lowercase() in videoExtensions
+
+    private fun isSingleFrameUnsafe(filePath: String): Boolean =
+        filePath.substringAfterLast('.', "").lowercase() in singleFrameUnsafeExtensions
 }

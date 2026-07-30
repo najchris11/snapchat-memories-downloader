@@ -75,6 +75,21 @@ class IosZipPipelineRunner(
                                     error = "Could not open zip archive: $zipPath (${e.message})"
                                 )
                             )
+                            // Overlay counts as its own item in DashboardViewModel's totalItems, so it
+                            // needs its own failed result here too, or progress stalls short of 100%
+                            // for a corrupt/unreadable archive that contains overlays.
+                            val overlayName = entry.overlayFileName
+                            if (entry.hasOverlay && !overlayName.isNullOrBlank()) {
+                                channel.trySend(
+                                    ExtractResult(
+                                        uuid = entry.uuid,
+                                        fileName = overlayName,
+                                        outputPath = "",
+                                        skipped = false,
+                                        error = "Could not open zip archive: $zipPath (${e.message})"
+                                    )
+                                )
+                            }
                         }
                         return@async
                     }

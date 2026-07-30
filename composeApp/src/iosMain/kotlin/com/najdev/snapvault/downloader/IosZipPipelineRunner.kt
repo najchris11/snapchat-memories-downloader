@@ -17,6 +17,7 @@ import okio.Path.Companion.toPath
 import okio.buffer
 import okio.openZip
 import okio.use
+import kotlin.random.Random
 
 class IosZipPipelineRunner(
     private val mediaProcessor: MediaProcessor
@@ -206,7 +207,11 @@ class IosZipPipelineRunner(
         zipEntryPath: Path,
         destFile: Path
     ) {
-        val tmpFile = (destFile.toString() + ".tmp").toPath()
+        // Unique per call (not just per destination) — concurrent tasks across different
+        // selected archives can legitimately target the same destFile, and a fixed ".tmp"
+        // name would let their writes race into the same temp file. Mirrors desktop's
+        // ZipExtractEngine, which uses File.createTempFile for the same reason.
+        val tmpFile = (destFile.toString() + ".${Random.nextLong().toString(16)}.tmp").toPath()
         try {
             val inputSource = zipFs.source(zipEntryPath).buffer()
             val outputSink = fileSystem.sink(tmpFile).buffer()

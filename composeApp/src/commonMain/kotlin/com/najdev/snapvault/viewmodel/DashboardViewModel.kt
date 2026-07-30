@@ -73,8 +73,8 @@ class DashboardViewModel(
 
     // ── Picker actions ───────────────────────────────────────────────────────
     fun pickHtmlFile() = pickers.pickHtmlFile { it?.let { path -> htmlFile = path } }
-    fun pickOutputFolder() = pickers.pickFolder { it?.let { path -> downloadFolder = path } }
-    fun pickZipFolder() = pickers.pickFolder { it?.let { path -> zipFolder = path; selectedZipFiles = emptyList() } }
+    fun pickOutputFolder() = pickers.pickOutputFolder { it?.let { path -> downloadFolder = path } }
+    fun pickZipFolder() = pickers.pickZipFolder { it?.let { path -> zipFolder = path; selectedZipFiles = emptyList() } }
     fun pickMultipleZips() = pickers.pickMultipleZips { paths -> if (paths.isNotEmpty()) { selectedZipFiles = paths; zipFolder = null } }
 
     fun changeImportMode(mode: ImportMode) { importMode = mode }
@@ -154,7 +154,10 @@ class DashboardViewModel(
         // isRunning flips in the pipeline's finally block once cancellation completes.
     }
 
-    fun dispose() = scope.cancel()
+    fun dispose() {
+        scope.cancel()
+        pickers.releaseAllSecurityAccess()
+    }
 
     fun resetVaultIndex(): Boolean {
         val folder = downloadFolder ?: return false

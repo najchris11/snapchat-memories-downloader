@@ -106,31 +106,58 @@ class IosZipPipelineRunner(
                                                     mediaProcessor.writeDateMetadata(extractedPath, entry.date)
                                                 }
                                             }
-
-                                            // Extract overlay file if present
-                                            val overlayName = entry.overlayFileName
-                                            if (entry.hasOverlay && !overlayName.isNullOrBlank()) {
-                                                val overlayZipEntryPath = findZipEntryPath(zipFs, overlayName)
-                                                if (overlayZipEntryPath != null) {
-                                                    val overlayDestFile = outPath / overlayName.substringAfterLast("/")
-                                                    if (!fileSystem.exists(overlayDestFile)) {
-                                                        extractToFileAtomic(zipFs, fileSystem, overlayZipEntryPath, overlayDestFile)
-                                                    }
-                                                }
-                                            }
                                         }
                                     } catch (e: Exception) {
                                         errorMessage = "Failed to extract ${entry.fileName}: ${e.message}"
                                     }
 
-                                    val result = ExtractResult(
-                                        uuid = entry.uuid,
-                                        fileName = entry.fileName,
-                                        outputPath = extractedPath,
-                                        skipped = isSkipped,
-                                        error = errorMessage
+                                    channel.send(
+                                        ExtractResult(
+                                            uuid = entry.uuid,
+                                            fileName = entry.fileName,
+                                            outputPath = extractedPath,
+                                            skipped = isSkipped,
+                                            error = errorMessage
+                                        )
                                     )
-                                    channel.send(result)
+
+                                    // Overlay is counted as a separate unit of work in DashboardViewModel's
+                                    // totalItems (see the +1 for entry.hasOverlay), so it needs its own
+                                    // ExtractResult here too — otherwise "done" can never reach the total
+                                    // for any import with overlays. Mirrors desktop's ZipExtractEngine,
+                                    // which extracts the overlay as a second, independently tracked task.
+                                    val overlayName = entry.overlayFileName
+                                    if (entry.hasOverlay && !overlayName.isNullOrBlank()) {
+                                        var overlayPath = ""
+                                        var overlayError: String? = null
+                                        var overlaySkipped = false
+                                        try {
+                                            val overlayZipEntryPath = findZipEntryPath(zipFs, overlayName)
+                                            if (overlayZipEntryPath == null) {
+                                                overlayError = "Overlay entry not found in ZIP: $overlayName"
+                                            } else {
+                                                val overlayDestFile = outPath / overlayName.substringAfterLast("/")
+                                                if (fileSystem.exists(overlayDestFile)) {
+                                                    overlaySkipped = true
+                                                    overlayPath = overlayDestFile.toString()
+                                                } else {
+                                                    extractToFileAtomic(zipFs, fileSystem, overlayZipEntryPath, overlayDestFile)
+                                                    overlayPath = overlayDestFile.toString()
+                                                }
+                                            }
+                                        } catch (e: Exception) {
+                                            overlayError = "Failed to extract overlay $overlayName: ${e.message}"
+                                        }
+                                        channel.send(
+                                            ExtractResult(
+                                                uuid = entry.uuid,
+                                                fileName = overlayName,
+                                                outputPath = overlayPath,
+                                                skipped = overlaySkipped,
+                                                error = overlayError
+                                            )
+                                        )
+                                    }
                                 }
                             }
                         }

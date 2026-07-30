@@ -8,7 +8,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import com.najdev.snapvault.downloader.NoOpZipPipelineRunner
 import com.najdev.snapvault.metadata.AndroidMediaProcessor
@@ -36,9 +39,9 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun rememberAndroidPickers(): PlatformPickers {
     val context = LocalContext.current
-    var onHtmlResult: ((String?) -> Unit)? = null
-    var onFolderResult: ((String?) -> Unit)? = null
-    var onZipsResult: ((List<String>) -> Unit)? = null
+    var onHtmlResult by remember { mutableStateOf<((String?) -> Unit)?>(null) }
+    var onFolderResult by remember { mutableStateOf<((String?) -> Unit)?>(null) }
+    var onZipsResult by remember { mutableStateOf<((List<String>) -> Unit)?>(null) }
 
     val htmlPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()

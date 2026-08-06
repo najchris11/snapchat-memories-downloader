@@ -164,4 +164,36 @@ class ZipExtractEngineTest {
         assertTrue(!stale.exists(), "stale .part file from an interrupted run must be removed")
         assertEquals("bytes", File(outDir, "2023-10-12_ABC-main.jpg").readText())
     }
+
+    @Test
+    fun concurrentExtractionOfSameFileIsSafe() {
+        // Two zips both containing the same entry name. ZipExtractEngine should handle
+        // the race by one worker winning the move and the other deleting its temp file.
+        val bytes1 = "v1".toByteArray()
+        val bytes2 = "v2".toByteArray()
+        val zip1 = createZip("export1.zip", mapOf("memories/shared.jpg" to bytes1))
+        val zip2 = createZip("export2.zip", mapOf("memories/shared.jpg" to bytes2))
+
+        val results = mutableListOf<ExtractResult>()
+        runBlocking {
+            ZipExtractEngine().extractAll(
+                mapOf(
+                    zip1.absolutePath to listOf(entry("shared.jpg")),
+                    zip2.absolutePath to listOf(entry("shared.jpg")),
+                ),
+                outDir.absolutePath,
+                workerCount = 4,
+            ) { results.add(it) }
+        }
+
+        assertEquals(2, results.size)
+        val oneSkipped = results.any { it.skipped }
+        val oneOk = results.any { !it.skipped && it.error == null }
+        assertTrue(oneOk, "at least one must succeed")
+        assertTrue(oneSkipped, "the second one must be skipped because the file was moved into place")
+        
+        // Final content should be either v1 or v2 (atomic move won)
+        val finalContent = File(outDir, "shared.jpg").readText()
+        assertTrue(finalContent == "v1" || finalContent == "v2")
+    }
 }

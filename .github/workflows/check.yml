@@ -1,0 +1,30 @@
+name: PR Check
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (JetBrains Runtime)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21.0.7'
+          distribution: 'jetbrains'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Run Desktop Tests
+        run: ./gradlew :composeApp:desktopTest
+
+      - name: Assemble Android Debug
+        run: ./gradlew :composeApp:assembleDebug -Pandroid.suppressUnsupportedCompileSdk=37.0
+
+      - name: Compile iOS Simulator Target
+        run: ./gradlew :composeApp:compileKotlinIosSimulatorArm64

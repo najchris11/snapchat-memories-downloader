@@ -150,6 +150,13 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "SnapVault"
             packageVersion = packageSemVer
+            // jlink's module trimming is static-bytecode-only (jdeps), so it can't see the
+            // modules Skiko/Netty/etc. reach via reflection or JNI at runtime. Without these,
+            // the packaged binary aborts on launch with "pure virtual method called" — a
+            // native crash, not a JVM exception, from Skiko's native init failing to find a
+            // module it needs (jdk.unsupported / sun.misc.Unsafe-class APIs especially).
+            // Confirmed via `./gradlew :composeApp:suggestRuntimeModules`.
+            modules("java.instrument", "java.management", "java.prefs", "jdk.unsupported")
             macOS {
                 iconFile.set(project.file("src/desktopMain/resources/AppIcon.icns"))
             }

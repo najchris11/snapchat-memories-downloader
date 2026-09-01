@@ -466,30 +466,49 @@ tests for:
      `DeduplicatorTest.testFailedDeleteIsReportedSeparatelyFromDeleted` (fault-injected via
      `ForwardingFileSystem`) already exercises the exact code path deterministically.
    - **Large overlay batch:** already covered by the Pass 2 real 42 GB / 4830-pair export re-run.
-4. ⚠️ **Attempted (2026-09-01) — found a real, confirmed release-blocking bug, separate from
-   everything in this plan.**
+4. ✅ **Investigated fully (2026-09-01). Root-caused to a jpackage/environment limitation of this
+   specific dev machine — not a SnapVault, Compose, or ProGuard bug.** One genuine improvement kept.
    - `./gradlew :composeApp:packageReleaseDistributionForCurrentOS` reached ProGuard (which
      completed — the "78 duplicate class definitions" / duplicate-`MANIFEST.MF` notes Codex saw are
      confirmed harmless, standard multi-dependency shrinking noise), then **failed** at
      `packageReleaseDeb`: `Error: Invalid or unsupported type: [deb]`. Root cause: this dev machine
      is CachyOS/Arch-based and has no `dpkg-deb` (Debian/Ubuntu-only tool `jpackage --type deb`
-     shells out to). **This part is a local-environment gap, not a project bug** — GitHub's
-     `ubuntu-latest` release runner has `dpkg-deb`.
-   - To verify past that, ran `:composeApp:createReleaseDistributable` instead (same ProGuard-shrunk
-     app-image jpackage builds before wrapping it in a `.deb`, doesn't need `dpkg-deb`). **This
-     succeeded** and produced a real native app-image at
-     `composeApp/build/compose/binaries/main-release/app/SnapVault/` (253 MB, bundled JRE runtime).
-   - **Launched the actual packaged binary** (`SnapVault/bin/SnapVault`) to confirm it starts.
-     **It crashes immediately**: `pure virtual method called` / `terminate called without an active
-     exception` — a native C++ abort, not a JVM exception. The unpackaged dev build
-     (`./gradlew :composeApp:run`, no ProGuard) was confirmed working minutes earlier on this exact
-     machine/display (see the smoke-test session), which points at ProGuard's shrinking — not the
-     environment — as the cause: something it strips/renames is breaking Skiko's native JNI
-     bridge. The project has **no custom `.pro` file and no ProGuard block in `build.gradle.kts`**;
-     it runs entirely on the Compose Multiplatform Gradle plugin's bundled default rules, which is
-     consistent with a known pitfall class (default rules not covering every `org.jetbrains.skiko.**`
-     surface a given Skiko/platform version's JNI layer needs).
-   - **This is not one of the 18 bugs tracked in this plan** — it's a new finding surfaced by
-     actually running the verification step, exactly the kind of thing Codex's original "inconclusive,
-     do not use as evidence" flag was warning about. **Not investigated further or fixed** — deciding
-     how to prioritize/fix this is the user's call, not something to act on unilaterally mid-checklist.
+     shells out to). **Local-environment gap, not a project bug** — the release workflow's Linux job
+     (`.github/workflows/release.yml`) runs on `ubuntu-latest`, which has `dpkg-deb`.
+   - Worked around that with `:composeApp:createReleaseDistributable` (same ProGuard-shrunk
+     app-image jpackage builds before wrapping it in a `.deb`, doesn't need `dpkg-deb`) to verify
+     further. This succeeded and produced a real native app-image
+     (`composeApp/build/compose/binaries/main-release/app/SnapVault/`, 253 MB, bundled JRE).
+     **Launching it crashed immediately**: `pure virtual method called` / `terminate called without
+     an active exception` — a native C++ abort.
+   - Chased this down through several hypotheses, each disproven in turn:
+     - *Missing jlink modules* — `./gradlew :composeApp:suggestRuntimeModules` found the bundled
+       runtime was missing `java.instrument`/`java.management`/`jdk.unsupported`. Added them (kept,
+       see below) — **crash persisted identically.**
+     - *ProGuard shrinking* — ran the ProGuard-shrunk **uber jar** (same shrunk classes, no
+       jlink/jpackage at all) directly via both JBR and plain OpenJDK. **Neither crashed** — ruled
+       ProGuard out entirely.
+     - *JBR vs. plain-OpenJDK vendor* — the crash reproduced identically whether the packaged
+       runtime was built from JBR 21.0.11 or Arch's OpenJDK 21.0.12. Ruled out.
+     - *Missing native libs in the jlinked runtime* (e.g. Wayland AWT support) — diffed the
+       packaged runtime's `lib/*.so` against its actual source JDK; they matched exactly. Ruled out.
+     - *`-Dskiko.library.path=$APPDIR`* — removing it changed the failure mode (a catchable
+       `LibraryLoadException`, reaching much further into Compose startup) but **the same native
+       abort still appeared**, proving it's independent of Skiko's library-loading path entirely.
+   - **Decisive isolation test:** built and ran a trivial "Hello World" Java app (zero Compose,
+     zero Skiko, zero project code) through plain `jpackage --type app-image` on this same machine.
+     **It crashed with the identical `pure virtual method called` abort.** This conclusively proves
+     the crash is a jpackage/native-launcher/JVM issue specific to this CachyOS machine's
+     environment (likely a `libapplauncher.so` incompatibility with its glibc/kernel/CPU), with no
+     connection whatsoever to this project's code, dependencies, or build configuration.
+   - **Net effect:** the packaged-binary crash is **not a bug in this repository** and needed no
+     code fix. This dev machine simply cannot reliably build-and-run *any* jpackage app-image —
+     verifying packaging further requires either the `ubuntu-latest` CI runner or a different local
+     machine. Genuinely fixing/protecting `checkJdkVendor=false` and `dpkg-deb` provisioning here
+     would only be worth it if this machine needs to keep producing local Linux release builds.
+   - **Kept as a real improvement regardless:** `modules("java.instrument", "java.management",
+     "java.prefs", "jdk.unsupported")` in `composeApp/build.gradle.kts`'s `nativeDistributions`
+     block, per `suggestRuntimeModules`'s legitimate recommendation — the app's actual runtime
+     dependency graph does reach these reflectively/via-JNI in ways jlink's static `jdeps`-based
+     trimming can't see, so leaving them out was a real (if not this particular crash's) risk for
+     an end user on a genuinely jlink-sensitive environment.

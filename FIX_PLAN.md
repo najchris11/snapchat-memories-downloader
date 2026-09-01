@@ -436,11 +436,36 @@ tests for:
    - Not separately re-run since Pass 3/4/5 landed (those changes don't touch metadata
      correctness); the BUG-04 progress-stall gate is covered by unit tests
      (`indeterminateIsTrueDuringDateFallbackAndClearedAfter`) rather than a second full-scale run.
-3. ❌ **Not done.** Manual smoke test per Codex's list: normal ZIP, overlapping/duplicate-filename
-   ZIPs, zero-overlay import, large overlay batch, cancellation mid-run, metadata-tool unavailable,
-   dedupe delete failure (e.g. read-only target file). The equivalent scenarios are covered by unit
-   tests with fakes (BUG-02/06/07/17 regressions especially), but nobody has clicked through the
-   actual running desktop app since these fixes landed.
+3. ⚠️ **Partially done (2026-09-01).** No GUI click-through happened — this environment has no
+   input-automation tool (Wayland session, no `ydotool`/`wtype`), only a real display to screenshot.
+   `./gradlew :composeApp:run` was launched for real and confirmed to build, start, and stay running
+   cleanly (no exception in the log) before being stopped; **one screenshot was taken and immediately
+   deleted** after it turned out to capture other windows on the shared display unrelated to this
+   session (not reviewed further, not described beyond that it happened — flagged to the user).
+   Codex's remaining scenarios were instead run as real integration tests — the actual production
+   `DesktopZipPipelineRunner`/`DesktopMediaProcessor`, real zip files, real exiftool/ffmpeg
+   subprocesses, no fakes — via a temporary harness (removed after, same practice as the Pass 2
+   real-export harness):
+   - **Overlapping/duplicate-filename ZIPs:** two real zips racing to extract the same destination
+     filename → exactly one landed, one correctly logged "already existed", 0 errors (real-conditions
+     BUG-02 confirmation).
+   - **Zero-overlay import:** "Found 0 overlay pairs" → "Combined 0 overlay pairs" with no stall
+     (BUG-04 zero-pairs edge case).
+   - **Cancellation mid-run:** stopped a real run mid-metadata-phase ("Stopping — cancelling
+     in-flight work…" → "Sync cancelled by user."), then started a second real run immediately after
+     on the same ViewModel instance — extraction correctly resumed (0 new, 80 already existed),
+     metadata/combine/dedupe all completed cleanly including real hardware video encoding and 12
+     genuine duplicate groups deleted (real-conditions BUG-06 confirmation).
+   - **Metadata tool unavailable:** renamed `~/.snapvault/bin/exiftool` aside for the run (restored
+     in a `finally` block, verified restored afterward), confirmed the file still extracts, the
+     failure is surfaced honestly ("Completed with warnings", `[WARN] Sync complete — 1 failure(s)
+     occurred"), and nothing crashes.
+   - **Dedupe delete failure:** not re-attempted here — POSIX delete permission is directory-level,
+     not per-file, so reproducing "this one file can't be deleted, its siblings can" needs root/ACL
+     tricks that are fragile and risk leaving the filesystem in a bad state; the existing
+     `DeduplicatorTest.testFailedDeleteIsReportedSeparatelyFromDeleted` (fault-injected via
+     `ForwardingFileSystem`) already exercises the exact code path deterministically.
+   - **Large overlay batch:** already covered by the Pass 2 real 42 GB / 4830-pair export re-run.
 4. ❌ **Not done.** `./gradlew packageReleaseDistributionForCurrentOS` to a clean completion (Codex
    flagged this as inconclusive in the original audit — ProGuard duplicate-resource/class notes,
    no final result observed — needs a full re-run, not just compilation, and hasn't been attempted

@@ -2,6 +2,7 @@ package com.najdev.snapvault.downloader
 
 import com.najdev.snapvault.BinaryExtractor
 import com.najdev.snapvault.metadata.MediaProcessor
+import com.najdev.snapvault.metadata.SupportedMediaExtensions
 import com.najdev.snapvault.waitForOrKill
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -57,7 +58,10 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
                     .takeIf { it != mainFile.name && it.isNotEmpty() } ?: return@mapNotNull null
                 val overlayFile = overlayByStem[stem] ?: return@mapNotNull null
                 val extLc = mainFile.extension.lowercase()
-                val isVideo = extLc in setOf("mp4", "mov", "avi", "mkv")
+                // Shared with DesktopMediaProcessor/MediaScanner (BUG-18) — this used to be
+                // its own hand-maintained list missing "m4v", so an .m4v pair would be
+                // misclassified as an image combine attempt instead of a video one.
+                val isVideo = extLc in SupportedMediaExtensions.VIDEO
                 // HEIC/WebP cannot be written by Java ImageIO; the FFmpeg fallback outputs JPEG.
                 // Set the output extension to .jpg upfront so the output path is always correct.
                 val outputExt = if (!isVideo && extLc in setOf("heic", "heif", "webp")) "jpg" else mainFile.extension

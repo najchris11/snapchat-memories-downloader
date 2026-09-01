@@ -72,6 +72,10 @@ object ZipImportParser {
         val memoriesFiles = allEntries
             .filter { it.startsWith("memories/") && it != "memories/" }
             .filter { !it.endsWith("/") }
+            // memories/memories.html is the export's own index page, not media — it has no
+            // date-UUID prefix and would otherwise report as an unmatched-format anomaly on
+            // every single zip (BUG-13), training users to ignore real warnings.
+            .filter { !it.endsWith(".html", ignoreCase = true) }
 
         if (memoriesFiles.isEmpty()) return entries
 

@@ -2,6 +2,7 @@ package com.najdev.snapvault
 
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import com.najdev.snapvault.metadata.SupportedMediaExtensions
 import com.najdev.snapvault.model.FileMeta
 import com.najdev.snapvault.ui.LibraryItem
 import kotlinx.serialization.decodeFromString
@@ -25,8 +26,8 @@ actual fun scanMediaFiles(folderPath: String): List<LibraryItem> {
         )
     }.getOrDefault(emptyMap())
 
-    val mediaExtensions = setOf("jpg", "jpeg", "png", "mp4", "mov", "gif")
-    val videoExtensions = setOf("mp4", "mov")
+    val mediaExtensions = SupportedMediaExtensions.ALL
+    val videoExtensions = SupportedMediaExtensions.VIDEO
     return (folder.listFiles() ?: return emptyList())
         .filter { it.isFile && it.extension.lowercase() in mediaExtensions }
         .sortedByDescending { it.lastModified() }

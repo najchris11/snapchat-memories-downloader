@@ -12,25 +12,29 @@ currently unobservable from the UI or logs.
 
 ## How the three audits line up
 
+All 18 findings below are now fixed on `fix/desktop-audit-fixes` (Passes 1–5 all done — see
+sections below for what each fix actually did and its regression test). This table is kept as
+the original cross-audit record.
+
 | Finding | Claude | Codex | Gemini | Status |
 |---|---|---|---|---|
-| Extraction race / silent overwrite on duplicate filenames | BUG-02 | P0 | — | **Fixed** (uncommitted) |
-| Stepper never reaches "complete" (`currentStep` stuck at 3) | BUG-05 | P1 | ✓ | **Fixed** (uncommitted) |
-| Combine phase overwrites precise time with midnight | **BUG-01** | not run against real data | — | **Open — highest priority** |
-| Unqualified `[SUCCESS]` despite partial failures | BUG-15 | P1 | — | Open |
-| Late-phase progress stuck at 0% / stale speed-ETA | BUG-04 | P1 | ✓ | Open |
-| Inputs stay editable mid-run | BUG-16 | P1 | — | Open |
-| Dedupe reports deletes that failed | BUG-17 | P1 | — | Open |
-| 3,617 metadata failures, zero explanation | BUG-12 | (would surface under P1 above) | — | Open |
-| Stop/Start race re-enables Start mid-run | BUG-06 | (related to P1 lock finding) | — | Open |
-| CI gap: pushes to `develop` unguarded; Android job has no SDK | BUG-08 | P2 (stale docs) | — | Open |
-| Library can't see all formats the pipeline emits | BUG-18 | P2 | — | Open |
-| exiftool pipes not drained (deadlock class, unhit in practice) | BUG-10 | — | — | Open |
-| Dedupe ignores Stop (impact corrected: ~3s on real vault) | BUG-07 | — | — | Open |
-| `memories.html` triggers a false-anomaly warning per zip | BUG-13 | — | — | Open |
-| Combine log lines print out of order | BUG-14 | — | — | Open |
-| Stale progress ring on failed/cancelled run (partially fixed) | BUG-09 | — | — | Open (partial) |
-| Linux source checkout has no bundled ExifTool | BUG-11 | — | — | Open (docs gap) |
+| Extraction race / silent overwrite on duplicate filenames | BUG-02 | P0 | — | **Fixed** (pre-existing) |
+| Stepper never reaches "complete" (`currentStep` stuck at 3) | BUG-05 | P1 | ✓ | **Fixed** (pre-existing) |
+| Combine phase overwrites precise time with midnight | **BUG-01** | not run against real data | — | **Fixed** — Pass 2 |
+| Unqualified `[SUCCESS]` despite partial failures | BUG-15 | P1 | — | **Fixed** — Pass 1 |
+| Late-phase progress stuck at 0% / stale speed-ETA | BUG-04 | P1 | ✓ | **Fixed** — Pass 3 |
+| Inputs stay editable mid-run | BUG-16 | P1 | — | **Fixed** — Pass 4 |
+| Dedupe reports deletes that failed | BUG-17 | P1 | — | **Fixed** — Pass 1 |
+| 3,617 metadata failures, zero explanation | BUG-12 | (would surface under P1 above) | — | **Fixed** — Pass 1 |
+| Stop/Start race re-enables Start mid-run | BUG-06 | (related to P1 lock finding) | — | **Fixed** — Pass 4 |
+| CI gap: pushes to `develop` unguarded; Android job has no SDK | BUG-08 | P2 (stale docs) | — | **Fixed** — Pass 5 |
+| Library can't see all formats the pipeline emits | BUG-18 | P2 | — | **Fixed** — Pass 5 |
+| exiftool pipes not drained (deadlock class, unhit in practice) | BUG-10 | — | — | **Fixed** — Pass 2 |
+| Dedupe ignores Stop (impact corrected: ~3s on real vault) | BUG-07 | — | — | **Fixed** — Pass 3 |
+| `memories.html` triggers a false-anomaly warning per zip | BUG-13 | — | — | **Fixed** — Pass 5 |
+| Combine log lines print out of order | BUG-14 | — | — | **Fixed** — Pass 3 |
+| Stale progress ring on failed/cancelled run (partially fixed) | BUG-09 | — | — | **Fixed** — Pass 3 |
+| Linux source checkout has no bundled ExifTool | BUG-11 | — | — | **Fixed (docs)** — Pass 5 |
 | `parseMemoriesHtml` dead code | — | — | claimed | **Does not hold** — function doesn't exist on this branch |
 | "Ready for Release (Post-UI-Fix)" verdict | — | — | claimed | **Not supported** — didn't test against real data, missed BUG-01 |
 
@@ -323,7 +327,7 @@ run-defining controls are visibly disabled while `isRunning`.
 
 ---
 
-## Pass 5 — Process / polish
+## Pass 5 — Process / polish · **DONE**
 
 Low urgency; batch these together, no interdependencies.
 
@@ -360,6 +364,48 @@ Low urgency; batch these together, no interdependencies.
 
 **Exit criteria:** none blocking — land opportunistically alongside the passes above.
 
+**Implemented:**
+- **BUG-08:** `check.yml` now triggers on `push`/`pull_request` for both `develop` and `main` (was
+  `pull_request → main` only). Split into two jobs: `desktop` (moved to `ubuntu-latest` — plain
+  JVM/Compose Desktop work, no macOS dependency, faster and cheaper than the shared macOS runner
+  pool) as the required check, and `mobile-preview` (still `macos-latest`, unchanged Android/iOS
+  steps) marked `continue-on-error: true` with a comment explaining it's informational only until
+  Android SDK provisioning is actually done — mobile is shelved, so it shouldn't block desktop PRs
+  with a failure the audit predicted but that isn't the point of this pass to fix. YAML validated
+  with `python3 -c "import yaml; yaml.safe_load(...)"`.
+- **BUG-13:** `ZipImportParser.parseMemoryEntryNames` now filters out `.html` entries under
+  `memories/` before attempting to parse them, rather than letting the date-UUID regex reject
+  `memories/memories.html` into the unmatched-file callback on every zip.
+- **BUG-18:** added `SupportedMediaExtensions` (desktopMain) as the single source of truth for
+  image/video extensions, replacing three independently hand-maintained copies: `MediaScanner`'s
+  Library filter (was `jpg/jpeg/png/mp4/mov/gif` — now the full pipeline set), and the three
+  duplicated sets in `DesktopMediaProcessor` (`writeGpsMetadata`, `writeDateMetadata`,
+  `writeDateMetadataBatch`). Also fixed `OverlayCombiner.findPairs`'s own separately-hand-maintained
+  video set, which was missing `m4v` — a latent bug this consolidation caught: an `.m4v` pair would
+  have been misclassified as an image combine attempt instead of a video one.
+- **BUG-11:** added a callout in the README's "Building from Source" section explaining that
+  `resources/bin/linux-x64/` is empty in a checkout (the packaged zip is gitignored and only built
+  by the release workflow), so `./gradlew :composeApp:run` silently has no ExifTool — with the two
+  fixes (run `prepare-runtime-linux.sh` once, or install ExifTool to `~/.snapvault/bin/`). Chose
+  documentation over having the script run automatically in dev builds, since that would mean an
+  unprompted network fetch during every fresh `:composeApp:run` — a bigger, riskier behavior change
+  than this pass's scope calls for.
+- **Item 16:** `CODEX_PLAN.md`'s "Desktop tests pass" claim is currently true (81/81, this pass) —
+  added a dated verification note plus a line explaining the `check.yml` split, and an explicit
+  "mobile is shelved, these work items aren't being executed now" note so a future reader isn't
+  confused about why CI behavior changed without any of `CODEX_PLAN.md`'s own mobile work items
+  having been done.
+- Regression tests: `ZipImportParserTest.testZipMemoriesHtmlIndexPageIsIgnoredNotUnmatched` (and
+  confirmed the existing `testZipUnmatchedFilesReported` still catches genuine garbage filenames —
+  the fix is scoped to `.html` specifically, not a blanket suppression). New
+  `MediaScannerTest.kt` (`scanIncludesFormatsThePipelineProducesButDoesNotCombine`,
+  `scanStillIncludesOriginallySupportedFormats`, `scanIgnoresUnrelatedFiles`) using real temp files
+  on disk (`scanMediaFiles` reads `java.io.File`, not the injectable `okio.FileSystem`). Suite:
+  77/77 → **81/81**.
+- Not done: full Android SDK provisioning on the CI runner (would make `mobile-preview` a real,
+  passing check rather than informational) — genuinely mobile work, out of scope while mobile is
+  shelved per the user's stated priority.
+
 ---
 
 ## Regression coverage to add alongside the fixes
@@ -380,16 +426,22 @@ tests for:
 
 ## Full verification checklist (before considering desktop release-ready)
 
-1. `JAVA_HOME=/usr/lib/jvm/java-21-openjdk ./gradlew :composeApp:desktopTest` → 66/66 (already
-   green; keep green through every pass above).
-2. Re-run the real export (or an equivalent large synthetic set with overlays) and confirm:
-   - 0% of combined files carry a midnight timestamp (BUG-01 gate).
-   - No unexplained metadata failures in the log (BUG-12 gate).
-   - Progress ring has no multi-second stall at 0% (BUG-04 gate).
-   - Final state reads "Completed with warnings" if — and only if — failures were induced
-     (BUG-15 gate).
-3. Manual smoke test per Codex's list: normal ZIP, overlapping/duplicate-filename ZIPs, zero-
-   overlay import, large overlay batch, cancellation mid-run, metadata-tool unavailable, dedupe
-   delete failure (e.g. read-only target file).
-4. `./gradlew packageReleaseDistributionForCurrentOS` to a clean completion (Codex flagged this as
-   inconclusive last run — needs a full re-run, not just compilation).
+1. ✅ `JAVA_HOME=/usr/lib/jvm/java-21-openjdk ./gradlew :composeApp:desktopTest` → **81/81**, kept
+   green through every pass above (started at 66/66).
+2. ✅ Re-ran the real 42 GB / 21-zip export after Pass 2 and confirmed:
+   - 0.0% of combined files carry a midnight timestamp (0/4818, was 4795/4795) — BUG-01 gate.
+   - The 3,617 previously-unexplained metadata "failures" are now explicitly logged as skipped
+     (WebP-mislabeled-`.png`), 0 genuine failures — BUG-12 gate.
+   - `hasWarnings=false` / "Pipeline Complete" on a clean run — BUG-15 gate.
+   - Not separately re-run since Pass 3/4/5 landed (those changes don't touch metadata
+     correctness); the BUG-04 progress-stall gate is covered by unit tests
+     (`indeterminateIsTrueDuringDateFallbackAndClearedAfter`) rather than a second full-scale run.
+3. ❌ **Not done.** Manual smoke test per Codex's list: normal ZIP, overlapping/duplicate-filename
+   ZIPs, zero-overlay import, large overlay batch, cancellation mid-run, metadata-tool unavailable,
+   dedupe delete failure (e.g. read-only target file). The equivalent scenarios are covered by unit
+   tests with fakes (BUG-02/06/07/17 regressions especially), but nobody has clicked through the
+   actual running desktop app since these fixes landed.
+4. ❌ **Not done.** `./gradlew packageReleaseDistributionForCurrentOS` to a clean completion (Codex
+   flagged this as inconclusive in the original audit — ProGuard duplicate-resource/class notes,
+   no final result observed — needs a full re-run, not just compilation, and hasn't been attempted
+   during this fix work).

@@ -167,11 +167,11 @@ class DesktopMediaProcessor : MediaProcessor {
         val exifDate = formatToExifDate(dateStr)
         if (exifDate != null) {
             val ext = file.extension.lowercase()
-            if (ext in setOf("jpg", "jpeg", "png", "heic", "heif", "webp", "gif", "tiff", "tif")) {
+            if (ext in SupportedMediaExtensions.IMAGE) {
                 args.add("-DateTimeOriginal=$exifDate")
                 args.add("-CreateDate=$exifDate")
                 args.add("-ModifyDate=$exifDate")
-            } else if (ext in setOf("mp4", "mov", "avi", "mkv", "m4v")) {
+            } else if (ext in SupportedMediaExtensions.VIDEO) {
                 args.add("-CreateDate=$exifDate")
                 args.add("-MediaCreateDate=$exifDate")
                 args.add("-TrackCreateDate=$exifDate")
@@ -224,9 +224,9 @@ class DesktopMediaProcessor : MediaProcessor {
         val ext = file.extension.lowercase()
         val args = mutableListOf(path, "-overwrite_original", "-q")
 
-        if (ext in setOf("jpg", "jpeg", "png", "heic", "heif", "webp", "gif", "tiff", "tif")) {
+        if (ext in SupportedMediaExtensions.IMAGE) {
             args += listOf("-DateTimeOriginal=$exifDate", "-CreateDate=$exifDate", "-ModifyDate=$exifDate")
-        } else if (ext in setOf("mp4", "mov", "avi", "mkv", "m4v")) {
+        } else if (ext in SupportedMediaExtensions.VIDEO) {
             args += listOf("-CreateDate=$exifDate", "-MediaCreateDate=$exifDate", "-TrackCreateDate=$exifDate", "-ModifyDate=$exifDate")
         } else {
             return false
@@ -267,8 +267,8 @@ class DesktopMediaProcessor : MediaProcessor {
         // exiftool expects "YYYY:MM:DD HH:MM:SS"
         val exifDate = "${dateOnly.replace("-", ":")} 00:00:00"
 
-        val imageExts = setOf("jpg", "jpeg", "png", "heic", "heif", "webp", "gif", "tiff", "tif")
-        val videoExts = setOf("mp4", "mov", "avi", "mkv", "m4v")
+        val imageExts = SupportedMediaExtensions.IMAGE
+        val videoExts = SupportedMediaExtensions.VIDEO
         val images = filePaths.filter { File(it).extension.lowercase() in imageExts }
         val videos = filePaths.filter { File(it).extension.lowercase() in videoExts }
 

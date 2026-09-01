@@ -385,7 +385,7 @@ fun DashboardScreen(
                     StepperDivider(viewModel.currentStep > 1)
                     StepItem(3, stringResource(Res.string.dash_step_processing), viewModel.currentStep == 2, viewModel.currentStep > 2, Icons.Outlined.AutoFixHigh)
                     StepperDivider(viewModel.currentStep > 2)
-                    StepItem(4, stringResource(Res.string.dash_step_complete), viewModel.currentStep == 3, viewModel.currentStep > 3, Icons.Outlined.TaskAlt)
+                    StepItem(4, stringResource(Res.string.dash_step_complete), viewModel.currentStep == 3, viewModel.currentStep > 3, Icons.Outlined.TaskAlt, warning = viewModel.hasWarnings)
                 }
 
                 Spacer(Modifier.weight(1f))
@@ -695,7 +695,11 @@ fun StepItem(
     active: Boolean,
     complete: Boolean,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
+    warning: Boolean = false,
 ) {
+    // A run can reach the terminal step while reporting failures (BUG-15/BUG-01-class
+    // issues) — that must not render identically to a clean success.
+    val accentColor = if (complete && warning) SnapVaultColors.warning else SnapVaultColors.electricPurple
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(5.dp)
@@ -704,8 +708,8 @@ fun StepItem(
             modifier = Modifier
                 .size(30.dp)
                 .clip(RoundedCornerShape(100))
-                .background(when { complete -> SnapVaultColors.electricPurple; active -> SnapVaultColors.electricPurple.copy(alpha = 0.2f); else -> MaterialTheme.colorScheme.surfaceContainerLowest })
-                .border(1.5.dp, if (active || complete) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(100)),
+                .background(when { complete -> accentColor; active -> accentColor.copy(alpha = 0.2f); else -> MaterialTheme.colorScheme.surfaceContainerLowest })
+                .border(1.5.dp, if (active || complete) accentColor else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(100)),
             contentAlignment = Alignment.Center
         ) {
             when {

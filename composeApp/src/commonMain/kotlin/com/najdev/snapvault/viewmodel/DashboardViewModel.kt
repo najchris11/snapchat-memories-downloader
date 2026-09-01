@@ -19,6 +19,8 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okio.FileSystem
 import okio.Path.Companion.toPath
+import okio.buffer
+import okio.use
 import kotlin.time.TimeSource
 
 private class PipelineAbortException(message: String) : Exception(message)
@@ -57,10 +59,19 @@ class DashboardViewModel(
         private set
     var currentStep by mutableStateOf(0)
         private set
+    // True once a completed (non-cancelled, non-aborted) run reported at least one
+    // extraction/metadata/combine/dedupe failure — set only on the terminal success path.
+    var hasWarnings by mutableStateOf(false)
+        private set
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var syncJob: Job? = null
     private val workerCount = computeWorkerCount()
+
+    // Accumulates failure counts across every phase of the current run so the terminal
+    // state can tell "clean success" from "reported success but something failed" apart —
+    // see hasWarnings. Reset per run in startSync.
+    private var pipelineFailureCount = 0
 
     private val logLock = SyncLock()
 
@@ -103,6 +114,8 @@ class DashboardViewModel(
         currentStep = 1
         speedText = "SPEED: --"
         etaText = "ETA: --"
+        hasWarnings = false
+        pipelineFailureCount = 0
 
         syncJob = scope.launch {
             try {
@@ -121,21 +134,35 @@ class DashboardViewModel(
                     runLegacyPipeline(outDir, runDownload, runMetadata, runCombine, runDedupe, dryRun, workerCount)
                 }
                 progress = 1.0f
-                progressText = "Pipeline Complete"
-                currentStep = 3
-                log("[SUCCESS] Sync complete!")
+                currentStep = 4
+                speedText = "SPEED: --"
+                etaText = "ETA: --"
+                if (pipelineFailureCount > 0) {
+                    hasWarnings = true
+                    progressText = "Completed with warnings"
+                    log("[WARN] Sync complete — $pipelineFailureCount failure(s) occurred, see warnings above.")
+                } else {
+                    progressText = "Pipeline Complete"
+                    log("[SUCCESS] Sync complete!")
+                }
             } catch (e: CancellationException) {
                 log("[WARN] Sync cancelled by user.")
                 progressText = "Cancelled"
+                speedText = "SPEED: --"
+                etaText = "ETA: --"
                 currentStep = 0
                 throw e
             } catch (e: PipelineAbortException) {
                 log("[ERROR] ${e.message}")
                 progressText = "Failed"
+                speedText = "SPEED: --"
+                etaText = "ETA: --"
                 currentStep = 0
             } catch (e: Exception) {
                 log("[ERROR] Pipeline failed: ${e.message}")
                 progressText = "Failed"
+                speedText = "SPEED: --"
+                etaText = "ETA: --"
                 currentStep = 0
             } finally {
                 // Runs only after all pipeline children have finished cancelling — the
@@ -287,6 +314,7 @@ class DashboardViewModel(
             append(".")
         }
         log(extractSummary)
+        pipelineFailureCount += extractErrorCount
         currentStep = 2
 
         var pipelineCombinedCount = 0
@@ -444,6 +472,7 @@ class DashboardViewModel(
                         }
                         else -> {
                             errorCount++
+                            pipelineFailureCount++
                             log("[ERROR] Failed $name: ${result.status}")
                         }
                     }
@@ -555,6 +584,25 @@ class DashboardViewModel(
         speedText = "SPEED: --"
         etaText = "ETA: --"
         log("[INFO] Metadata: $metaCount files tagged${if (metaFailCount > 0) ", $metaFailCount could not be tagged (see [WARN] lines above)" else ""}.")
+        pipelineFailureCount += metaFailCount
+    }
+
+    // Snapchat sometimes stores overlay images as WebP but names them ".png"; exiftool
+    // rejects them ("looks more like a RIFF") and the write fails. Checked by magic bytes,
+    // not extension — matches the guard writeDateMetadataBatch.runGroup already applies on
+    // the date-only path, so both metadata paths skip these before spawning exiftool.
+    // internal (not private) so DashboardViewModelTest can verify it directly.
+    internal fun isRiffMislabeledAsPng(path: String): Boolean {
+        if (!path.endsWith(".png", ignoreCase = true)) return false
+        return try {
+            fileSystem.source(path.toPath()).buffer().use { source ->
+                val header = source.readByteArray(4L)
+                header[0] == 'R'.code.toByte() && header[1] == 'I'.code.toByte() &&
+                    header[2] == 'F'.code.toByte() && header[3] == 'F'.code.toByte()
+            }
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private suspend fun writeZipExperimentalMetadata(
@@ -570,6 +618,9 @@ class DashboardViewModel(
         var gpsCount = 0
         var dateCount = 0
         var failCount = 0
+        var riffSkippedCount = 0
+        val failSamples = mutableListOf<String>()
+        val riffSkippedSamples = mutableListOf<String>()
         var done = 0
         val metaEta = EtaEstimator()
 
@@ -590,7 +641,14 @@ class DashboardViewModel(
                             dateCount++
                             downloadedMeta[result.target.fileName] = FileMeta(hasGps = false, hasOverlay = result.target.hasOverlay)
                         }
-                        else -> failCount++
+                        "skipped_riff" -> {
+                            riffSkippedCount++
+                            if (riffSkippedSamples.size < 5) riffSkippedSamples.add(result.target.fileName)
+                        }
+                        else -> {
+                            failCount++
+                            if (failSamples.size < 5) failSamples.add(result.target.fileName)
+                        }
                     }
                     done++
                     metaEta.record(done)
@@ -613,11 +671,15 @@ class DashboardViewModel(
                     currentCoroutineContext().ensureActive()
                     semaphore.withPermit {
                         val path = "$outDir/${target.fileName}"
-                        val outcome = runInterruptibleCompat {
-                            if (target.latitude != null && target.longitude != null) {
-                                if (mediaProcessor.writeGpsMetadata(path, target.latitude, target.longitude, target.dateStr)) "gps" else "fail"
-                            } else {
-                                if (mediaProcessor.writeDateMetadata(path, target.dateStr)) "date" else "fail"
+                        val outcome = if (isRiffMislabeledAsPng(path)) {
+                            "skipped_riff"
+                        } else {
+                            runInterruptibleCompat {
+                                if (target.latitude != null && target.longitude != null) {
+                                    if (mediaProcessor.writeGpsMetadata(path, target.latitude, target.longitude, target.dateStr)) "gps" else "fail"
+                                } else {
+                                    if (mediaProcessor.writeDateMetadata(path, target.dateStr)) "date" else "fail"
+                                }
                             }
                         }
                         channel.send(Result(target, outcome))
@@ -630,7 +692,19 @@ class DashboardViewModel(
 
         speedText = "SPEED: --"
         etaText = "ETA: --"
-        log("[INFO] Metadata: ${gpsCount + dateCount} tagged ($gpsCount with GPS)${if (failCount > 0) ", $failCount failed" else ""}.")
+        if (riffSkippedCount > 0) {
+            log("[INFO] Skipped $riffSkippedCount overlay(s) stored as WebP but named .png — exiftool would reject them; harmless, they're consumed by the combine phase. Examples: ${riffSkippedSamples.joinToString(", ")}")
+        }
+        if (failCount > 0) {
+            log("[WARN] Metadata: $failCount file(s) failed to tag. Examples: ${failSamples.joinToString(", ")}")
+        }
+        log(
+            "[INFO] Metadata: ${gpsCount + dateCount} tagged ($gpsCount with GPS)" +
+                (if (riffSkippedCount > 0) ", $riffSkippedCount skipped (mislabeled)" else "") +
+                (if (failCount > 0) ", $failCount failed" else "") +
+                "."
+        )
+        pipelineFailureCount += failCount
     }
 
     // Shared by both pipelines: combines every -main/-overlay pair in outDir.
@@ -697,6 +771,7 @@ class DashboardViewModel(
             append(".")
         }
         log(combineSummary)
+        pipelineFailureCount += combineErrorCount
         mediaProcessor.videoEncodeStats()?.let { stats ->
             if (stats.hardware + stats.software > 0) {
                 log("[INFO] Video encodes: ${stats.hardware} hardware, ${stats.software} software.")
@@ -821,11 +896,12 @@ class DashboardViewModel(
             append(".")
         }
         log(summary)
+        pipelineFailureCount += failCount
     }
 
     private suspend fun runDeduplication(outDir: String, dryRun: Boolean) {
         log("[INFO] Scanning for duplicate files…${if (dryRun) " (dry run — nothing will be deleted)" else ""}")
-        progressText = "Deduplicating…"
+        progressText = "Deduplicating: Scanning…"
         val deduplicator = Deduplicator(fileSystem)
         val results = withContext(ioDispatcher) {
             deduplicator.deduplicateFolder(outDir.toPath(), dryRun)
@@ -833,16 +909,26 @@ class DashboardViewModel(
         if (results.isEmpty()) {
             log("[INFO] No duplicate files found.")
         } else {
+            val totalDeleted = results.sumOf { it.deletedFiles.size }
+            val totalFailed = results.sumOf { it.failedFiles.size }
+            progressText = if (dryRun) "Deduplicating: Found $totalDeleted duplicates" else "Deduplicating: Removed $totalDeleted files"
             results.forEach { res ->
                 if (dryRun) {
                     log("[WARN] Dry run — would keep ${res.keptFile} and delete: ${res.deletedFiles.joinToString()}")
                 } else {
-                    log("[DELETED DUPES] Kept ${res.keptFile}, deleted: ${res.deletedFiles.joinToString()}")
+                    if (res.deletedFiles.isNotEmpty()) {
+                        log("[DELETED DUPES] Kept ${res.keptFile}, deleted: ${res.deletedFiles.joinToString()}")
+                    }
+                    if (res.failedFiles.isNotEmpty()) {
+                        log("[WARN] Kept ${res.keptFile}, but could not delete (still on disk): ${res.failedFiles.joinToString()}")
+                    }
                 }
             }
             if (dryRun) {
-                val total = results.sumOf { it.deletedFiles.size }
-                log("[INFO] Dry run complete — $total duplicate file(s) would be deleted. Disable dry run to apply.")
+                log("[INFO] Dry run complete — $totalDeleted duplicate file(s) would be deleted. Disable dry run to apply.")
+            } else if (totalFailed > 0) {
+                pipelineFailureCount += totalFailed
+                log("[WARN] Deduplication: $totalDeleted file(s) deleted, $totalFailed could not be deleted.")
             }
         }
     }

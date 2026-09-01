@@ -28,7 +28,8 @@ class Deduplicator(
     data class DedupeResult(
         val folder: String,
         val keptFile: String,
-        val deletedFiles: List<String>
+        val deletedFiles: List<String>,
+        val failedFiles: List<String> = emptyList()
     )
 
     // Files the pipeline manages that must never be considered for deletion.
@@ -68,18 +69,26 @@ class Deduplicator(
                 val toDelete = sorted.drop(1)
 
                 if (toDelete.isNotEmpty()) {
+                    val actuallyDeleted = mutableListOf<String>()
+                    val failedToDelete = mutableListOf<String>()
                     if (!dryRun) {
                         for (file in toDelete) {
                             try {
                                 fileSystem.delete(file)
-                            } catch (_: Exception) {}
+                                actuallyDeleted.add(file.name)
+                            } catch (_: Exception) {
+                                failedToDelete.add(file.name)
+                            }
                         }
+                    } else {
+                        actuallyDeleted.addAll(toDelete.map { it.name })
                     }
                     results.add(
                         DedupeResult(
                             folder = folderPath.name,
                             keptFile = primary.name,
-                            deletedFiles = toDelete.map { it.name }
+                            deletedFiles = actuallyDeleted,
+                            failedFiles = failedToDelete
                         )
                     )
                 }

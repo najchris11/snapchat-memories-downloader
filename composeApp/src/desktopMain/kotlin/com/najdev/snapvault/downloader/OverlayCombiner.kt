@@ -83,7 +83,11 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
         onStart(pairs.size)
         val channel = Channel<CombineResult>(Channel.UNLIMITED)
         val semaphore = Semaphore(workerCount)
-        val successfulPairs = mutableListOf<OverlayPair>()
+        // needsDateFallback is the subset of successful pairs whose combined output still has
+        // no real capture timestamp after copyExif/TagsFromFile ran — see BUG-01: this batch
+        // used to run unconditionally and clobber the precise time the metadata phase had
+        // already propagated onto every combined file with "$dateOnly 00:00:00".
+        val needsDateFallback = mutableListOf<OverlayPair>()
         val lock = Any()
 
         coroutineScope {
@@ -99,7 +103,9 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
                         // single channel consumer is the only thread touching caller state.
                         val warnings = mutableListOf<String>()
                         val status = processPair(pair, deleteOriginals) { msg -> warnings.add("[combine] $msg") }
-                        if (status == "combined") synchronized(lock) { successfulPairs.add(pair) }
+                        if (status == "combined" && !hasDateTag(pair.outputFile.absolutePath, pair.isVideo)) {
+                            synchronized(lock) { needsDateFallback.add(pair) }
+                        }
                         channel.send(CombineResult(uuid, pair.outputFile.absolutePath, status, warnings))
                     }
                 }
@@ -108,14 +114,15 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
             channel.close()
         }
 
-        //META batch date write after combining: groups combined output files by YYYY-MM-DD prefix from filename
-        //META date source: filename prefix of mainFile (same as ZIP pipeline — date-only, no time, no GPS)
-        //META combined output file gets the date tag; original -main/-overlay files are deleted before this runs
-        if (successfulPairs.isNotEmpty()) {
-            val dateGroups = successfulPairs
+        //META fallback date write: only for combined outputs that came out of the copy step
+        //META above with no real capture timestamp (metadata phase was off, or never matched
+        //META a timestamp for this file) — groups those by the YYYY-MM-DD prefix in the
+        //META filename, same as the ZIP pipeline's date-only path.
+        if (needsDateFallback.isNotEmpty()) {
+            val dateGroups = needsDateFallback
                 .groupBy { it.mainFile.name.substringBefore('_').takeIf { d -> d.length == 10 } }
                 .filterKeys { it != null }
-            onMetaStart(successfulPairs.size)
+            onMetaStart(needsDateFallback.size)
             withContext(Dispatchers.IO) {
                 dateGroups.forEach { (date, datePairs) ->
                     val d = date ?: return@forEach
@@ -168,7 +175,8 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
             // Preserve the original's metadata on the combined image (the video path does
             // this inside combineVideoWithOverlay); must happen before originals are deleted.
             if (!pair.isVideo) {
-                runInterruptible { copyExif(pair.mainFile.absolutePath, pair.outputFile.absolutePath) }
+                val copied = runInterruptible { copyExif(pair.mainFile.absolutePath, pair.outputFile.absolutePath) }
+                if (!copied) onWarning("could not copy metadata onto combined output: ${pair.outputFile.name}")
             }
 
             if (deleteOriginals) {
@@ -256,16 +264,45 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
         } catch (_: Exception) { "unreadable" }
     }
 
-    private fun copyExif(sourcePath: String, destPath: String) {
-        val exiftoolPath = BinaryExtractor.checkCommand("exiftool") ?: return
-        try {
-            ProcessBuilder(
+    // Returns whether the copy actually succeeded — callers use this to decide whether the
+    // combined output needs a fallback date stamp (see combineAll). Drains stdout/stderr
+    // before waiting on the process, matching the guard already applied to every other
+    // exiftool invocation in the codebase (the pipe otherwise fills and waitFor() blocks
+    // forever on verbose output).
+    private fun copyExif(sourcePath: String, destPath: String): Boolean {
+        val exiftoolPath = BinaryExtractor.checkCommand("exiftool") ?: return false
+        return try {
+            val proc = ProcessBuilder(
                 exiftoolPath, "-overwrite_original", "-q",
                 "-TagsFromFile", sourcePath, "-all:all", destPath
-            ).start().waitForOrKill()
+            ).redirectErrorStream(true).start()
+            proc.inputStream.bufferedReader().readText()
+            proc.waitForOrKill() == 0
         } catch (e: InterruptedException) {
             throw e
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    // A combined output already has a real capture timestamp when copyExif (images) or the
+    // TagsFromFile copy inside combineVideoWithOverlay (videos) propagated one from the
+    // -main file's own metadata. Read it back by content rather than trusting the copy step's
+    // exit code alone — the copy can "succeed" while copying zero useful tags (metadata phase
+    // was disabled, or never matched a timestamp for this file), which must still fall back to
+    // combineAll's date-only batch below.
+    private fun hasDateTag(filePath: String, isVideo: Boolean): Boolean {
+        val exiftoolPath = BinaryExtractor.checkCommand("exiftool") ?: return false
+        val tag = if (isVideo) "-CreateDate" else "-DateTimeOriginal"
+        return try {
+            val proc = ProcessBuilder(exiftoolPath, "-s3", tag, filePath)
+                .redirectErrorStream(true)
+                .start()
+            val output = proc.inputStream.bufferedReader().readText()
+            proc.waitForOrKill() == 0 && output.isNotBlank()
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun extractUuid(name: String): String? {

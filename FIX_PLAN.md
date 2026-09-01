@@ -100,7 +100,7 @@ corrupt overlay) visibly reports "Completed with warnings" with an accurate fail
 
 ---
 
-## Pass 2 — Metadata correctness (the headline bug)
+## Pass 2 — Metadata correctness (the headline bug) · **DONE**
 
 4. **BUG-01 — Combining an overlay destroys the precise capture time · CRITICAL**
    `OverlayCombiner.kt:114–131` → `DesktopMediaProcessor.kt:263`
@@ -123,6 +123,31 @@ corrupt overlay) visibly reports "Completed with warnings" with an accurate fail
    invocations, but the fix is one flag and free: `.redirectErrorStream(true)` + read before
    `waitForOrKill()`. Capturing this output would also explain BUG-12 failures for free — do this
    alongside item 2.
+
+**Implemented:**
+- `OverlayCombiner.copyExif` now returns whether the copy actually succeeded (draining
+  stdout/stderr first — BUG-10) instead of silently swallowing every outcome; `processPair` warns
+  when it fails. A new `hasDateTag(file, isVideo)` reads the combined output back by content
+  (`exiftool -s3 -DateTimeOriginal` for images, `-CreateDate` for videos) rather than trusting the
+  copy step's exit code alone, because a copy can "succeed" while copying zero useful tags (source
+  had none — metadata phase was off, or never matched a timestamp for that file).
+- `combineAll` now collects a `needsDateFallback` subset — only pairs whose combined output still
+  has no real timestamp after the copy step — and runs the post-combine `writeDateMetadataBatch`
+  fallback against that subset instead of unconditionally against every successful pair. A file the
+  metadata phase already tagged precisely keeps that timestamp; a file that was never tagged still
+  gets the filename-derived date-only fallback, exactly as before. `onMetaStart` (and the "Tagging
+  N combined file(s)…" log line) now only fires when there's actually something left to backfill.
+- BUG-10 also fixed at its other two sites: `DesktopMediaProcessor.writeGpsMetadata` and
+  `writeDateMetadata` now drain stdout/stderr before `waitForOrKill()`, matching the pattern
+  `writeDateMetadataBatch.runGroup` and the video metadata-copy step already used.
+- Regression test: `OverlayCombinerTest.combinedOutputPreservesPreciseTimeInsteadOfMidnight` — uses
+  the real `DesktopMediaProcessor` (not the fake), writes a precise non-midnight timestamp to a
+  `-main` file the way the metadata phase would, runs the real combine, and reads the combined
+  output's `DateTimeOriginal` back via exiftool to confirm the time-of-day survived. Skips
+  gracefully (no assertions run) on a machine with no exiftool resolvable via `BinaryExtractor`
+  (fresh checkout — BUG-11) rather than failing for an unrelated reason; confirmed to actually run
+  on this machine (0.51s — four real exiftool spawns — vs. ~0s for the trivial `findPairs` tests).
+  Suite: 71/71 → **72/72**.
 
 **Exit criteria:** re-run the real export; 0% of combined files show a `00:00:00` timestamp; GPS
 tagging rate unchanged (~99.7%).

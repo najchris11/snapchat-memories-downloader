@@ -182,9 +182,13 @@ class DesktopMediaProcessor : MediaProcessor {
         args.add(filePath)
 
         return try {
-            val process = ProcessBuilder(args).start()
+            // Drain stdout/stderr before waiting — the same deadlock class guarded against
+            // elsewhere in this file (see writeDateMetadataBatch.runGroup): an unread pipe
+            // buffer fills and waitFor() blocks forever on verbose exiftool output.
+            val process = ProcessBuilder(args).redirectErrorStream(true).start()
+            process.inputStream.bufferedReader().readText()
             val exitCode = process.waitForOrKill()
-            
+
             // Apply system modification date fallback
             if (exifDate != null) {
                 // Try setting file system modification time
@@ -231,7 +235,8 @@ class DesktopMediaProcessor : MediaProcessor {
         args.add(filePath)
 
         return try {
-            val process = ProcessBuilder(args).start()
+            val process = ProcessBuilder(args).redirectErrorStream(true).start()
+            process.inputStream.bufferedReader().readText()
             val exitCode = process.waitForOrKill()
             if (exitCode == 0) {
                 val prefix = parseDateToFilenamePrefix(dateTimeUtc)

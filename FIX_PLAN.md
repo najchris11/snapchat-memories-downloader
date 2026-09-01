@@ -466,7 +466,30 @@ tests for:
      `DeduplicatorTest.testFailedDeleteIsReportedSeparatelyFromDeleted` (fault-injected via
      `ForwardingFileSystem`) already exercises the exact code path deterministically.
    - **Large overlay batch:** already covered by the Pass 2 real 42 GB / 4830-pair export re-run.
-4. ❌ **Not done.** `./gradlew packageReleaseDistributionForCurrentOS` to a clean completion (Codex
-   flagged this as inconclusive in the original audit — ProGuard duplicate-resource/class notes,
-   no final result observed — needs a full re-run, not just compilation, and hasn't been attempted
-   during this fix work).
+4. ⚠️ **Attempted (2026-09-01) — found a real, confirmed release-blocking bug, separate from
+   everything in this plan.**
+   - `./gradlew :composeApp:packageReleaseDistributionForCurrentOS` reached ProGuard (which
+     completed — the "78 duplicate class definitions" / duplicate-`MANIFEST.MF` notes Codex saw are
+     confirmed harmless, standard multi-dependency shrinking noise), then **failed** at
+     `packageReleaseDeb`: `Error: Invalid or unsupported type: [deb]`. Root cause: this dev machine
+     is CachyOS/Arch-based and has no `dpkg-deb` (Debian/Ubuntu-only tool `jpackage --type deb`
+     shells out to). **This part is a local-environment gap, not a project bug** — GitHub's
+     `ubuntu-latest` release runner has `dpkg-deb`.
+   - To verify past that, ran `:composeApp:createReleaseDistributable` instead (same ProGuard-shrunk
+     app-image jpackage builds before wrapping it in a `.deb`, doesn't need `dpkg-deb`). **This
+     succeeded** and produced a real native app-image at
+     `composeApp/build/compose/binaries/main-release/app/SnapVault/` (253 MB, bundled JRE runtime).
+   - **Launched the actual packaged binary** (`SnapVault/bin/SnapVault`) to confirm it starts.
+     **It crashes immediately**: `pure virtual method called` / `terminate called without an active
+     exception` — a native C++ abort, not a JVM exception. The unpackaged dev build
+     (`./gradlew :composeApp:run`, no ProGuard) was confirmed working minutes earlier on this exact
+     machine/display (see the smoke-test session), which points at ProGuard's shrinking — not the
+     environment — as the cause: something it strips/renames is breaking Skiko's native JNI
+     bridge. The project has **no custom `.pro` file and no ProGuard block in `build.gradle.kts`**;
+     it runs entirely on the Compose Multiplatform Gradle plugin's bundled default rules, which is
+     consistent with a known pitfall class (default rules not covering every `org.jetbrains.skiko.**`
+     surface a given Skiko/platform version's JNI layer needs).
+   - **This is not one of the 18 bugs tracked in this plan** — it's a new finding surfaced by
+     actually running the verification step, exactly the kind of thing Codex's original "inconclusive,
+     do not use as evidence" flag was warning about. **Not investigated further or fixed** — deciding
+     how to prioritize/fix this is the user's call, not something to act on unilaterally mid-checklist.

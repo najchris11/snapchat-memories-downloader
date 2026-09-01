@@ -152,6 +152,28 @@ corrupt overlay) visibly reports "Completed with warnings" with an accurate fail
 **Exit criteria:** re-run the real export; 0% of combined files show a `00:00:00` timestamp; GPS
 tagging rate unchanged (~99.7%).
 
+**Re-verified at real scale (2026-09-01), same 21-zip / 42 GB export in `~/Downloads/snap 2`:**
+
+```
+62.9 min end-to-end (was 73.2 min) · 10125 memories · 10107 output files · 47.56 GB
+0 [ERROR] lines · 0 stderr output · 0 stray .part files
+2635 hardware video encodes, 0 software fallbacks
+final: step=4 progress=1.0 text='Pipeline Complete' hasWarnings=false
+```
+
+| | Combined files | Uncombined `-main` files |
+|---|---|---|
+| Midnight `00:00:00` (before fix) | 4795 / 4795 (100%) | 0 / 5260 |
+| Midnight `00:00:00` (after fix) | **0 / 4818 (0.0%)** | 0 / 5260 |
+
+Spot-checked combined files carry real times (`16:01:12`, `01:01:31`, `15:59:09`, …), not midnight.
+BUG-12 also confirmed at the same scale — the same 3,617 WebP-mislabeled-`.png` overlays are now
+explicitly logged as `[INFO] Skipped 3617 overlay(s) stored as WebP but named .png … Examples: …`
+instead of an unexplained failure count, and genuine failures are 0. BUG-15's terminal state is
+accurate: a clean run reports `hasWarnings=false` / "Pipeline Complete", matching that nothing
+failed. Timestamp-match rate held at 10091/10125 (99.7%); GPS and hardware-encode stats unchanged
+from the original audit run.
+
 ---
 
 ## Pass 3 — Pipeline UI (the reported symptom)

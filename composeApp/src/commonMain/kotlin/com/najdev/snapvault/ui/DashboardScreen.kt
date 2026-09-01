@@ -392,19 +392,32 @@ fun DashboardScreen(
 
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Box(modifier = Modifier.size(110.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(
-                            progress = { viewModel.progress.coerceIn(0f, 1f) },
-                            modifier = Modifier.fillMaxSize(),
-                            color = SnapVaultColors.electricPurple,
-                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                            strokeWidth = 9.dp
-                        )
-                        Text(
-                            "${(viewModel.progress * 100).toInt()}%",
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        if (viewModel.indeterminate) {
+                            // Real work is happening but has no per-item signal to report
+                            // (post-combine date fallback, dedupe scanning) — an animated
+                            // indeterminate ring, not a percentage that would otherwise sit
+                            // at a misleadingly precise 0%.
+                            CircularProgressIndicator(
+                                modifier = Modifier.fillMaxSize(),
+                                color = SnapVaultColors.electricPurple,
+                                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                strokeWidth = 9.dp
+                            )
+                        } else {
+                            CircularProgressIndicator(
+                                progress = { viewModel.progress.coerceIn(0f, 1f) },
+                                modifier = Modifier.fillMaxSize(),
+                                color = SnapVaultColors.electricPurple,
+                                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                strokeWidth = 9.dp
+                            )
+                            Text(
+                                "${(viewModel.progress * 100).toInt()}%",
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
 

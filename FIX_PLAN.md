@@ -176,7 +176,7 @@ from the original audit run.
 
 ---
 
-## Pass 3 — Pipeline UI (the reported symptom)
+## Pass 3 — Pipeline UI (the reported symptom) · **DONE**
 
 This is the "progress indicators don't fully update" complaint that kicked off the audit.
 BUG-05/BUG-09-partial are already fixed by the concurrent edit; the rest of the symptom is BUG-04.
@@ -212,6 +212,54 @@ BUG-05/BUG-09-partial are already fixed by the concurrent edit; the rest of the 
 
 **Exit criteria:** manually run a large import and confirm the ring monotonically advances to
 100%/step-4-complete with no multi-second stalls at 0%, and that Stop is responsive during dedupe.
+
+**Implemented:**
+- Added `DashboardViewModel.indeterminate: Boolean`. Set `true` for the two sub-phases that have
+  real work in flight but no per-item signal (the post-combine date-fallback batch, dedupe
+  scanning/hashing), `false` everywhere else — reset per run in `startSync` and in all three
+  cancel/abort/exception paths (alongside `progress = 0f`, closing out the BUG-09 gap the plan
+  identified). `DashboardScreen`'s progress ring now renders the parameterless (animated,
+  indeterminate) `CircularProgressIndicator` in that state and hides the percentage label, instead
+  of showing a truthful-looking `0%` for however long the sub-phase takes.
+- `runCombinePhase` now does a phase-completion write (`progress = 1f`, `indeterminate = false`)
+  once `combineAll` returns, whatever ran inside it. The zero-pairs edge case (`onStart(0)`) now
+  sets `progress = 1f` immediately instead of leaving the ring parked at 0 with no callback to ever
+  close it out. `onMetaStart` resets `speedText`/`etaText` the instant the sub-phase begins, instead
+  of only after the whole combine phase (sub-phase included) eventually returns — fixes the "stale
+  `N pairs/s ETA: Xs`" artifact called out in the original measurement.
+- **BUG-14:** the "`[INFO] Combined N overlay pairs`" summary (plus the video-encode-stats lines)
+  now logs the moment the per-pair combine loop itself finishes — from inside the last `onProgress`
+  callback (`combineDone == combineTotal`), guarded by a `summaryLogged` flag so the zero-pairs path
+  (which logs it from `onStart` instead) can't double-log. This is strictly before `onMetaStart` can
+  fire, since `onMetaStart` is only called after `combineAll`'s internal `coroutineScope` (which
+  waits for every `onProgress` delivery) completes — so the summary now reads as describing work
+  that just finished, not work from several minutes earlier.
+- `runDeduplication` sets `indeterminate = true` for the scan/hash/delete call (which has no
+  suspension point to report through) and `indeterminate = false` / `progress = 1f` once it returns;
+  also resets `speedText`/`etaText` at its own start rather than relying on a prior phase to have
+  done it.
+- **BUG-07:** `Deduplicator.deduplicateFolder` (and `deduplicateAll`, which calls it) are now
+  `suspend fun`, with `currentCoroutineContext().ensureActive()` checks in both the hashing loop and
+  the per-group deletion loop — Stop can now actually interrupt a scan in flight instead of the
+  pipeline running the whole hash pass to completion regardless of cancellation.
+- Regression tests: `DashboardViewModelTest.indeterminateIsTrueDuringDateFallbackAndClearedAfter`
+  (captures `indeterminate` synchronously from inside a fake `onMetaStart` callback, proving it's
+  `true` mid-phase and `false` after) and `combineSummaryLogsBeforeDateFallbackTaggingLine` (asserts
+  log order directly, the BUG-14 regression). `DeduplicatorTest.testCancellationStopsBeforeAnyDeletion`
+  cancels the coroutine's own job before calling `deduplicateFolder` and asserts nothing was
+  deleted — proves the `ensureActive()` checks are reachable and effective, not just present.
+  Converting `Deduplicator` to `suspend` required wrapping the existing `DeduplicatorTest` bodies in
+  `kotlinx.coroutines.test.runTest` (already a project dependency, same pattern `DownloadEngineTest`
+  already used). Suite: 72/72 → **75/75**.
+- Not done: true per-file progress reporting *during* the date-fallback batch or the dedupe hash
+  loop (the plan's first-choice fix, "have the tagging pass report per-file counts like the
+  others") — would require adding a new callback to the `ZipPipelineRunner` interface and updating
+  every implementation (`DesktopZipPipelineRunner`, `IosZipPipelineRunner`, `NoOpZipPipelineRunner`).
+  The plan's own fallback — "a phase that genuinely can't report increments should show an
+  indeterminate state rather than a truthful-looking 0%" — was implemented instead, and in
+  practice the Pass 2 fix already shrank the date-fallback batch to only the files that actually
+  need it (near-zero on a real export with metadata matching on), so the indeterminate window is
+  rare in the first place.
 
 ---
 

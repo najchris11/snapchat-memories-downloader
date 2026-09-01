@@ -63,6 +63,12 @@ class DashboardViewModel(
     // extraction/metadata/combine/dedupe failure — set only on the terminal success path.
     var hasWarnings by mutableStateOf(false)
         private set
+    // True during a sub-phase that has real work in flight but no per-item signal to report
+    // (the post-combine date-fallback batch, dedupe scanning) — the UI shows an animated
+    // indeterminate ring instead of a progress value that would otherwise sit at a
+    // misleadingly precise 0% for however long that sub-phase takes.
+    var indeterminate by mutableStateOf(false)
+        private set
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var syncJob: Job? = null
@@ -115,6 +121,7 @@ class DashboardViewModel(
         speedText = "SPEED: --"
         etaText = "ETA: --"
         hasWarnings = false
+        indeterminate = false
         pipelineFailureCount = 0
 
         syncJob = scope.launch {
@@ -134,6 +141,7 @@ class DashboardViewModel(
                     runLegacyPipeline(outDir, runDownload, runMetadata, runCombine, runDedupe, dryRun, workerCount)
                 }
                 progress = 1.0f
+                indeterminate = false
                 currentStep = 4
                 speedText = "SPEED: --"
                 etaText = "ETA: --"
@@ -148,6 +156,8 @@ class DashboardViewModel(
             } catch (e: CancellationException) {
                 log("[WARN] Sync cancelled by user.")
                 progressText = "Cancelled"
+                progress = 0f
+                indeterminate = false
                 speedText = "SPEED: --"
                 etaText = "ETA: --"
                 currentStep = 0
@@ -155,12 +165,16 @@ class DashboardViewModel(
             } catch (e: PipelineAbortException) {
                 log("[ERROR] ${e.message}")
                 progressText = "Failed"
+                progress = 0f
+                indeterminate = false
                 speedText = "SPEED: --"
                 etaText = "ETA: --"
                 currentStep = 0
             } catch (e: Exception) {
                 log("[ERROR] Pipeline failed: ${e.message}")
                 progressText = "Failed"
+                progress = 0f
+                indeterminate = false
                 speedText = "SPEED: --"
                 etaText = "ETA: --"
                 currentStep = 0
@@ -715,10 +729,39 @@ class DashboardViewModel(
         var combineSkippedCount = 0
         var combineDone = 0
         var combineTotal = 1
+        var summaryLogged = false
         val combineEta = EtaEstimator()
         var combineEncoder: String? = null
         progress = 0f
+        indeterminate = false
         progressText = "Combining overlays…"
+
+        // The per-pair combine summary used to be logged after the whole combine phase
+        // returned — which is after the date-fallback sub-phase below, so it read as
+        // describing work that had finished several minutes earlier (BUG-14). Logging it
+        // the moment the per-pair loop itself finishes keeps the log chronological.
+        fun logCombineSummaryOnce() {
+            if (summaryLogged) return
+            summaryLogged = true
+            val combineSummary = buildString {
+                append("[INFO] Combined $combinedCount overlay pairs")
+                if (combineSkippedCount > 0) append(", $combineSkippedCount skipped (unsupported format)")
+                if (combineErrorCount > 0) append(", $combineErrorCount errors")
+                append(".")
+            }
+            log(combineSummary)
+            pipelineFailureCount += combineErrorCount
+            mediaProcessor.videoEncodeStats()?.let { stats ->
+                if (stats.hardware + stats.software > 0) {
+                    log("[INFO] Video encodes: ${stats.hardware} hardware, ${stats.software} software.")
+                    // A hardware encoder was active at start but some files still went software.
+                    if (combineEncoder != null && stats.software > 0) {
+                        log("[WARN] ${stats.software} video(s) fell back to software encoding (see stderr for per-file reasons).")
+                    }
+                }
+            }
+        }
+
         zipPipelineRunner.combineAll(
             outDir,
             deleteOriginals = true,
@@ -732,11 +775,23 @@ class DashboardViewModel(
                 val encoderLabel = combineEncoder?.let { "hardware ($it)" } ?: "software (libx264)"
                 log("[INFO] Found $actual overlay pairs. Combining… [video encoder: $encoderLabel]")
                 progressText = "Combining: 0 / $actual"
+                // Nothing to combine — no onProgress callback will ever fire to close this out.
+                if (actual == 0) {
+                    progress = 1f
+                    logCombineSummaryOnce()
+                }
             },
             onMetaStart = { total ->
+                // The batch below reports no per-file progress; show that honestly instead
+                // of a precise-looking 0% (BUG-04) — and reset stale combine-phase metrics
+                // (BUG-04's "stale ETA/pairs-per-sec" complaint) the moment this sub-phase
+                // starts, not whenever the whole combine phase eventually returns.
                 log("[INFO] Tagging $total combined file(s) with date metadata…")
                 progressText = "Tagging combined files…"
                 progress = 0f
+                indeterminate = true
+                speedText = "SPEED: --"
+                etaText = "ETA: --"
             }
         ) { result ->
             result.warnings.forEach { log("[WARN] $it") }
@@ -761,26 +816,18 @@ class DashboardViewModel(
                     else -> "ETA: ${formatEta(etaSec)}"
                 }
             }
-        }
-        speedText = "SPEED: --"
-        etaText = "ETA: --"
-        val combineSummary = buildString {
-            append("[INFO] Combined $combinedCount overlay pairs")
-            if (combineSkippedCount > 0) append(", $combineSkippedCount skipped (unsupported format)")
-            if (combineErrorCount > 0) append(", $combineErrorCount errors")
-            append(".")
-        }
-        log(combineSummary)
-        pipelineFailureCount += combineErrorCount
-        mediaProcessor.videoEncodeStats()?.let { stats ->
-            if (stats.hardware + stats.software > 0) {
-                log("[INFO] Video encodes: ${stats.hardware} hardware, ${stats.software} software.")
-                // A hardware encoder was active at start but some files still went software.
-                if (combineEncoder != null && stats.software > 0) {
-                    log("[WARN] ${stats.software} video(s) fell back to software encoding (see stderr for per-file reasons).")
-                }
+            if (combineDone == combineTotal) {
+                speedText = "SPEED: --"
+                etaText = "ETA: --"
+                logCombineSummaryOnce()
             }
         }
+        // Phase completion write (BUG-04): whether or not the date-fallback sub-phase ran,
+        // the combine phase as a whole is done here — don't leave the ring parked at 0%.
+        indeterminate = false
+        progress = 1f
+        speedText = "SPEED: --"
+        etaText = "ETA: --"
         return Triple(combinedCount, combineSkippedCount, combineErrorCount)
     }
 
@@ -902,10 +949,18 @@ class DashboardViewModel(
     private suspend fun runDeduplication(outDir: String, dryRun: Boolean) {
         log("[INFO] Scanning for duplicate files…${if (dryRun) " (dry run — nothing will be deleted)" else ""}")
         progressText = "Deduplicating: Scanning…"
+        speedText = "SPEED: --"
+        etaText = "ETA: --"
+        // Hashing/deletion runs as one blocking call with no per-file callback — show that
+        // honestly (BUG-04) instead of parking the ring at whatever value the prior phase
+        // left it on.
+        indeterminate = true
         val deduplicator = Deduplicator(fileSystem)
         val results = withContext(ioDispatcher) {
             deduplicator.deduplicateFolder(outDir.toPath(), dryRun)
         }
+        indeterminate = false
+        progress = 1f
         if (results.isEmpty()) {
             log("[INFO] No duplicate files found.")
         } else {

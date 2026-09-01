@@ -121,7 +121,7 @@ android {
         applicationId = "com.najdev.snapvault"
         minSdk = 24
         targetSdk = 37
-        versionCode = 10
+        versionCode = 11
         versionName = appVersion
     }
     sourceSets["main"].manifest.srcFile("src/androidMain/AndroidManifest.xml")

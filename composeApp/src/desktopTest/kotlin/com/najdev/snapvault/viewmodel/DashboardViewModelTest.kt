@@ -7,8 +7,14 @@ import com.najdev.snapvault.downloader.ExtractResult
 import com.najdev.snapvault.downloader.ZipPipelineRunner
 import com.najdev.snapvault.metadata.MediaProcessor
 import com.najdev.snapvault.parser.HtmlMemoryEntry
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import okio.Path.Companion.toPath
 import okio.fakefilesystem.FakeFileSystem
@@ -72,6 +78,70 @@ private class FakePlatformPickers(
     override fun pickOutputFolder(onResult: (String?) -> Unit) = onResult(outputDir)
     override fun pickZipFolder(onResult: (String?) -> Unit) = onResult(null)
     override fun pickMultipleZips(onResult: (List<String>) -> Unit) = onResult(emptyList())
+}
+
+// Signals when it starts, then hangs until cancelled — for tests that just need "a run is
+// genuinely still in progress" with no timing precision required.
+private class HangingZipPipelineRunner(
+    private val startedSignal: CompletableDeferred<Unit>,
+) : ZipPipelineRunner {
+    override fun listZipFiles(folderPath: String): List<String> = emptyList()
+    override suspend fun extractAll(
+        itemsByZip: Map<String, List<HtmlMemoryEntry>>,
+        outputDir: String,
+        workerCount: Int,
+        onProgress: (ExtractResult) -> Unit,
+    ) = Unit
+    override suspend fun extractDownloadedArchives(outputDir: String, onWarn: (String) -> Unit): List<String> {
+        startedSignal.complete(Unit)
+        awaitCancellation()
+    }
+    override suspend fun combineAll(
+        outputDir: String,
+        deleteOriginals: Boolean,
+        workerCount: Int,
+        onStart: (total: Int) -> Unit,
+        onMetaStart: (total: Int) -> Unit,
+        onMetaError: ((String) -> Unit)?,
+        onProgress: (CombineResult) -> Unit,
+    ) = Unit
+}
+
+// Simulates the real BUG-06 timing: the first run's cancellation is acknowledged only
+// after a short delay it deliberately doesn't respond to cancellation during (mirroring
+// waiting for an in-flight ffmpeg/exiftool child to actually die); the second run takes
+// noticeably longer and is never cancelled, giving the test a real window to check its
+// state after the first (stale) job's cleanup has already run.
+private class RaceZipPipelineRunner(
+    private val startedSignal: CompletableDeferred<Unit>,
+) : ZipPipelineRunner {
+    private var callIndex = 0
+    override fun listZipFiles(folderPath: String): List<String> = emptyList()
+    override suspend fun extractAll(
+        itemsByZip: Map<String, List<HtmlMemoryEntry>>,
+        outputDir: String,
+        workerCount: Int,
+        onProgress: (ExtractResult) -> Unit,
+    ) = Unit
+    override suspend fun extractDownloadedArchives(outputDir: String, onWarn: (String) -> Unit): List<String> {
+        if (callIndex++ == 0) {
+            startedSignal.complete(Unit)
+            withContext(NonCancellable) { delay(50) }
+            currentCoroutineContext().ensureActive()
+        } else {
+            delay(300)
+        }
+        return emptyList()
+    }
+    override suspend fun combineAll(
+        outputDir: String,
+        deleteOriginals: Boolean,
+        workerCount: Int,
+        onStart: (total: Int) -> Unit,
+        onMetaStart: (total: Int) -> Unit,
+        onMetaError: ((String) -> Unit)?,
+        onProgress: (CombineResult) -> Unit,
+    ) = Unit
 }
 
 class DashboardViewModelTest {
@@ -244,5 +314,94 @@ class DashboardViewModelTest {
         assertFalse(viewModel.isRiffMislabeledAsPng("/out/real.png"))
         assertFalse(viewModel.isRiffMislabeledAsPng("/out/does-not-exist.png"))
         assertFalse(viewModel.isRiffMislabeledAsPng("/out/not-a-png.jpg"))
+    }
+
+    // Regression for BUG-06: job.cancel() flips Job.isActive false immediately, well
+    // before the cancelled coroutine actually unwinds to its finally block. A run started
+    // in that window must not have its isRunning = true clobbered back to false by the
+    // stale job's belated cleanup.
+    @Test
+    fun stopThenImmediateStartDoesNotLetStaleJobClobberNewRun() {
+        val fs = FakeFileSystem()
+        fs.createDirectories("/out".toPath())
+        fs.write("/history.json".toPath()) { writeUtf8(historyJson) }
+
+        val startedSignal = CompletableDeferred<Unit>()
+        val viewModel = DashboardViewModel(
+            zipPipelineRunner = RaceZipPipelineRunner(startedSignal),
+            mediaProcessor = FakeMediaProcessor(),
+            fileSystem = fs,
+            pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+        )
+        viewModel.changeImportMode(ImportMode.Legacy)
+        viewModel.pickHtmlFile()
+        viewModel.pickOutputFolder()
+
+        fun startPipeline() = viewModel.startSync(
+            runDownload = false,
+            runMetadata = false,
+            experimentalMetadataMatching = false,
+            runCombine = true,
+            runDedupe = false,
+            dryRun = false,
+        )
+
+        startPipeline()
+        runBlocking { withTimeout(5_000) { startedSignal.await() } }
+
+        viewModel.stopSync()
+        // Immediately start a second run — bypasses the UI's isRunning-gated Start button
+        // entirely, exercising the ViewModel API directly the way the race actually happens.
+        startPipeline()
+
+        // Give the first (stopped) job time to finish its delayed cancellation and reach
+        // its finally block, while the second run is still well inside its own longer delay.
+        runBlocking { delay(150) }
+
+        assertTrue(
+            viewModel.isRunning,
+            "BUG-06 regression: a stale job's belated cleanup clobbered the new run's isRunning state",
+        )
+
+        awaitCompletion(viewModel)
+        assertFalse(viewModel.isRunning)
+    }
+
+    // Regression for BUG-16: resetVaultIndex is reachable from Settings on a separate
+    // screen — it must refuse to run while a sync is in progress rather than deleting the
+    // index out from under a pipeline that's about to read or write it.
+    @Test
+    fun resetVaultIndexIsRefusedWhileRunning() {
+        val fs = FakeFileSystem()
+        fs.createDirectories("/out".toPath())
+        fs.write("/history.json".toPath()) { writeUtf8(historyJson) }
+        fs.write("/out/vault_index.json".toPath()) { writeUtf8("{}") }
+
+        val startedSignal = CompletableDeferred<Unit>()
+        val viewModel = DashboardViewModel(
+            zipPipelineRunner = HangingZipPipelineRunner(startedSignal),
+            mediaProcessor = FakeMediaProcessor(),
+            fileSystem = fs,
+            pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+        )
+        viewModel.changeImportMode(ImportMode.Legacy)
+        viewModel.pickHtmlFile()
+        viewModel.pickOutputFolder()
+
+        viewModel.startSync(
+            runDownload = false,
+            runMetadata = false,
+            experimentalMetadataMatching = false,
+            runCombine = true,
+            runDedupe = false,
+            dryRun = false,
+        )
+        runBlocking { withTimeout(5_000) { startedSignal.await() } }
+
+        assertFalse(viewModel.resetVaultIndex(), "must refuse to reset the vault index while a run is in progress")
+        assertTrue(fs.exists("/out/vault_index.json".toPath()), "vault_index.json must survive a refused reset")
+
+        viewModel.stopSync()
+        awaitCompletion(viewModel)
     }
 }

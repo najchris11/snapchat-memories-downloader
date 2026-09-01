@@ -115,7 +115,11 @@ class DashboardViewModel(
         // must not launch a second concurrent pipeline.
         if (syncJob?.isActive == true) return
         isRunning = true
-        logs.clear()
+        // logs.clear() races the previous job's still-in-flight log() calls during the
+        // cancellation window (see stopSync/BUG-06) — both must go through logLock, since
+        // SnapshotStateList isn't safe against an unsynchronized clear happening concurrently
+        // with an append.
+        logLock.withLock { logs.clear() }
         progress = 0f
         currentStep = 1
         speedText = "SPEED: --"
@@ -124,7 +128,13 @@ class DashboardViewModel(
         indeterminate = false
         pipelineFailureCount = 0
 
-        syncJob = scope.launch {
+        // Captured so the finally block below can tell whether it's still the current run —
+        // job.cancel() flips isActive false immediately, well before the cancelled
+        // coroutine actually unwinds to its finally block. Without this, a new run started
+        // in that window would have its isRunning = true clobbered back to false by the
+        // stale job's belated cleanup (BUG-06).
+        lateinit var thisJob: Job
+        thisJob = scope.launch {
             try {
                 val outDir = downloadFolder ?: throw PipelineAbortException("No output folder selected.")
                 if (importMode == ImportMode.Zip) {
@@ -181,9 +191,15 @@ class DashboardViewModel(
             } finally {
                 // Runs only after all pipeline children have finished cancelling — the
                 // Start button must not re-enable while ffmpeg/exiftool work is in flight.
-                isRunning = false
+                // Only clear isRunning if this is still the current job (BUG-06) — a stale
+                // job whose cancellation is still unwinding after a newer run has already
+                // started must not clobber that newer run's state.
+                if (syncJob === thisJob) {
+                    isRunning = false
+                }
             }
         }
+        syncJob = thisJob
     }
 
     fun stopSync() {
@@ -201,6 +217,12 @@ class DashboardViewModel(
     }
 
     fun resetVaultIndex(): Boolean {
+        // A running pipeline reads/writes vault_index.json at multiple points and holds its
+        // own in-memory copy — deleting the on-disk file out from under it (e.g. from
+        // Settings, reachable while a sync is in progress) risks losing entries the run is
+        // about to persist. Model-level guard so this is safe regardless of which screen can
+        // reach it (BUG-16).
+        if (isRunning) return false
         val folder = downloadFolder ?: return false
         return runCatching {
             val path = "$folder/vault_index.json".toPath()

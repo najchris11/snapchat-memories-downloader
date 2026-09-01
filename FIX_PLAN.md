@@ -263,7 +263,7 @@ BUG-05/BUG-09-partial are already fixed by the concurrent edit; the rest of the 
 
 ---
 
-## Pass 4 — Lifecycle / concurrency
+## Pass 4 — Lifecycle / concurrency · **DONE**
 
 10. **BUG-06 — Stop then immediate Start re-enables Start mid-run**
     `DashboardViewModel.kt:99–101, 148–152`
@@ -287,6 +287,39 @@ BUG-05/BUG-09-partial are already fixed by the concurrent edit; the rest of the 
 
 **Exit criteria:** rapid Stop→Start no longer produces a run that can't be cancelled; all
 run-defining controls are visibly disabled while `isRunning`.
+
+**Implemented:**
+- **BUG-06:** `startSync` now captures its own job via a `lateinit var thisJob: Job` before
+  assigning it to the `syncJob` field, so the `finally` block can check `syncJob === thisJob`
+  before clearing `isRunning` — a stale job whose cancellation is still unwinding after a newer
+  run has already started now leaves that newer run's state alone instead of clobbering it.
+  `logs.clear()` now goes through `logLock.withLock { }`, the same lock every `log()` call already
+  uses, instead of mutating the `SnapshotStateList` unsynchronized against the dying job's
+  still-in-flight appends.
+- **BUG-16:** `FilePickerBox` and `ModeToggleButton` both gained an `enabled: Boolean = true`
+  parameter (dimming their content to 50% alpha and disabling the click when `false`), wired to
+  `enabled = !viewModel.isRunning` at all 8 call sites — both import-mode toggles, both ZIP
+  source-mode toggles, the ZIP folder/multi-file/HTML/output pickers, and the "Clear" selected-files
+  link. Also added a model-level guard: `resetVaultIndex()` now returns `false` immediately when
+  `isRunning` is true, closing the "Settings can delete `vault_index.json` out from under a live
+  run" risk the finding called out — done at the ViewModel layer rather than by threading `isRunning`
+  through `SettingsScreen`/`App.kt`, since the risk is the same regardless of which screen can reach
+  it and this doesn't touch navigation/screen-composition code.
+- Regression tests: `DashboardViewModelTest.stopThenImmediateStartDoesNotLetStaleJobClobberNewRun`
+  reproduces the actual race with a `RaceZipPipelineRunner` fake (first run's cancellation
+  acknowledged only after a 50ms `NonCancellable` delay it deliberately doesn't respond to
+  cancellation during; second run takes 300ms, uncancelled) — calls `stopSync()` then immediately
+  `startSync()` again (bypassing the UI's disabled button entirely, exercising the ViewModel API
+  directly), checks at the 150ms mark (comfortably after the first job's stale cleanup, comfortably
+  before the second job's own completion) that `isRunning` is still `true`. Verified non-flaky with
+  5 forced re-runs (`--rerun-tasks`), all green. `resetVaultIndexIsRefusedWhileRunning` uses a
+  `HangingZipPipelineRunner` (suspends on `awaitCancellation()` until stopped) to prove the guard
+  and that the file survives on disk. Suite: 75/75 → **77/77**.
+- Not done: gating the pipeline-option switches (`runMetadata`, `runCombine`, `runDedupe`, etc.) —
+  out of BUG-16's stated scope. They're local Composable state in `DashboardScreen`, not ViewModel
+  state; `startSync` already captures their values by parameter at launch, so changing them mid-run
+  only affects the *next* run, not the one in progress — there's no live-run inconsistency to fix
+  there the way there is for the source/output pickers.
 
 ---
 

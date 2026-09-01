@@ -55,6 +55,8 @@ Requires JDK 21.
 
 Debug mode is opt-in everywhere else via `-PisDebug=true`. Third-party license notices for the bundled tools ship inside the app (`THIRD_PARTY_LICENSES.md`).
 
+> **ExifTool isn't bundled in a source checkout.** The "bundled on Linux" note above is true for *release* installers — `scripts/prepare-runtime-linux.sh` packages it fresh during the release workflow, and the packaged zip is gitignored — but a plain `git clone` has nothing under `composeApp/src/desktopMain/resources/bin/linux-x64/`, so `./gradlew :composeApp:run` from source will silently have no ExifTool (date/GPS tagging becomes a no-op). Either run `bash scripts/prepare-runtime-linux.sh` once yourself, or install ExifTool with your package manager / into `~/.snapvault/bin/` (the second location the app already probes, no root needed) before running from source.
+
 The app version is set in `gradle.properties` (`app.version`). Releases are cut manually via the **Release** workflow (Actions → Release → Run workflow), which bumps the version, tags, runs the desktop test suite, and publishes installers.
 
 ## Legacy Python Scripts

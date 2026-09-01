@@ -137,6 +137,8 @@ class ZipExtractEngine {
     // full entry is copied and size-verified. A crash or cancellation mid-copy therefore
     // never leaves a truncated file under the final name (which the exists() skip-check
     // would otherwise treat as complete forever).
+    private val moveLock = Any()
+
     private fun extractEntry(zf: ZipFile, entryName: String, destFileName: String, outDir: File): String {
         val destFile = File(outDir, destFileName)
         if (destFile.exists()) return "skipped"
@@ -162,17 +164,23 @@ class ZipExtractEngine {
         }
     }
 
-    private fun moveIntoPlace(tmpFile: File, destFile: File): String = try {
-        try {
-            Files.move(tmpFile.toPath(), destFile.toPath(), StandardCopyOption.ATOMIC_MOVE)
-        } catch (_: AtomicMoveNotSupportedException) {
-            Files.move(tmpFile.toPath(), destFile.toPath())
+    private fun moveIntoPlace(tmpFile: File, destFile: File): String = synchronized(moveLock) {
+        if (destFile.exists()) {
+            tmpFile.delete()
+            return "skipped"
         }
-        "ok"
-    } catch (_: FileAlreadyExistsException) {
-        // Another worker extracted the same filename first — not an error.
-        tmpFile.delete()
-        "skipped"
+        return try {
+            try {
+                Files.move(tmpFile.toPath(), destFile.toPath(), StandardCopyOption.ATOMIC_MOVE)
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(tmpFile.toPath(), destFile.toPath())
+            }
+            "ok"
+        } catch (_: FileAlreadyExistsException) {
+            // Another worker extracted the same filename first — not an error.
+            tmpFile.delete()
+            "skipped"
+        }
     }
 
     private fun cleanStalePartFiles(outDir: File) {

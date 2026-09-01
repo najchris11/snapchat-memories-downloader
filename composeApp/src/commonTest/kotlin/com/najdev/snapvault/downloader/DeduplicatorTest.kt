@@ -1,6 +1,12 @@
 package com.najdev.snapvault.downloader
 
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runTest
 import okio.FileSystem
+import okio.ForwardingFileSystem
+import okio.IOException
+import okio.Path
 import okio.Path.Companion.toPath
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -27,11 +33,11 @@ class DeduplicatorTest {
     }
 
     @Test
-    fun testDeduplication() {
+    fun testDeduplication() = runTest {
         val fs = FileSystem.SYSTEM
         val tempDir = "build/test-dedupe-run_UUID".toPath()
         fs.createDirectories(tempDir)
-        
+
         val file1 = tempDir / "file1.txt"
         val file2 = tempDir / "file2.txt"
 
@@ -39,7 +45,7 @@ class DeduplicatorTest {
         fs.write(file2) { writeUtf8("same content") }
 
         val deduplicator = Deduplicator(fs)
-        
+
         // Dry run test
         val dryResults = deduplicator.deduplicateFolder(tempDir, dryRun = true)
         assertEquals(1, dryResults.size)
@@ -52,7 +58,7 @@ class DeduplicatorTest {
         assertEquals(1, actualResults.size)
         val deletedFile = actualResults[0].deletedFiles[0]
         val keptFile = actualResults[0].keptFile
-        
+
         assertTrue(fs.exists(tempDir / keptFile))
         assertTrue(!fs.exists(tempDir / deletedFile))
 
@@ -63,7 +69,7 @@ class DeduplicatorTest {
     // Keep-selection must be deterministic: filenames start with YYYY-MM-DD, so the
     // lexicographically-first (earliest-dated) copy survives — not filesystem order.
     @Test
-    fun testKeepsEarliestDatedCopy() {
+    fun testKeepsEarliestDatedCopy() = runTest {
         val fs = okio.fakefilesystem.FakeFileSystem()
         val dir = "/out".toPath()
         fs.createDirectories(dir)
@@ -84,7 +90,7 @@ class DeduplicatorTest {
 
     // Pipeline-managed files must never be deletion candidates, even with identical bytes.
     @Test
-    fun testProtectedFilesAreNeverTouched() {
+    fun testProtectedFilesAreNeverTouched() = runTest {
         val fs = okio.fakefilesystem.FakeFileSystem()
         val dir = "/out".toPath()
         fs.createDirectories(dir)
@@ -98,5 +104,74 @@ class DeduplicatorTest {
         assertTrue(fs.exists(dir / "vault_index.json"))
         assertTrue(fs.exists(dir / "photo.jpg"))
         assertTrue(fs.exists(dir / "video.mp4.abc.part"))
+    }
+
+    // Regression for BUG-17: a delete that throws (permission error, file lock, read-only
+    // mount) must be reported as failed, not silently folded into deletedFiles as if it
+    // had succeeded — and the file must still be on disk.
+    @Test
+    fun testFailedDeleteIsReportedSeparatelyFromDeleted() = runTest {
+        val real = okio.fakefilesystem.FakeFileSystem()
+        val dir = "/out".toPath()
+        real.createDirectories(dir)
+        real.write(dir / "2021-05-01_AAA.jpg") { writeUtf8("dupe-bytes") }
+        real.write(dir / "2022-07-04_MMM.jpg") { writeUtf8("dupe-bytes") }
+
+        val faulty = object : ForwardingFileSystem(real) {
+            override fun delete(path: Path, mustExist: Boolean) {
+                if (path.name == "2022-07-04_MMM.jpg") throw IOException("permission denied (simulated)")
+                super.delete(path, mustExist)
+            }
+        }
+
+        val results = Deduplicator(faulty).deduplicateFolder(dir, dryRun = false)
+
+        assertEquals(1, results.size)
+        assertEquals("2021-05-01_AAA.jpg", results[0].keptFile)
+        assertTrue(results[0].deletedFiles.isEmpty())
+        assertEquals(listOf("2022-07-04_MMM.jpg"), results[0].failedFiles)
+        // The point of the fix: a failed delete must leave the file on disk, and the
+        // result must say so rather than claiming it was deleted.
+        assertTrue(real.exists(dir / "2022-07-04_MMM.jpg"))
+    }
+
+    // Dry run must never report a failure — it never attempts a delete in the first place.
+    @Test
+    fun testDryRunNeverReportsFailures() = runTest {
+        val fs = okio.fakefilesystem.FakeFileSystem()
+        val dir = "/out".toPath()
+        fs.createDirectories(dir)
+        fs.write(dir / "2021-05-01_AAA.jpg") { writeUtf8("dupe-bytes") }
+        fs.write(dir / "2022-07-04_MMM.jpg") { writeUtf8("dupe-bytes") }
+
+        val results = Deduplicator(fs).deduplicateFolder(dir, dryRun = true)
+
+        assertEquals(1, results.size)
+        assertTrue(results[0].failedFiles.isEmpty())
+        assertEquals(listOf("2022-07-04_MMM.jpg"), results[0].deletedFiles)
+        assertTrue(fs.exists(dir / "2022-07-04_MMM.jpg"))
+    }
+
+    // Regression for BUG-07: deduplicateFolder used to be a plain blocking function with no
+    // suspension point at all, so cancellation could never interrupt it. Cancelling the
+    // coroutine's own job before it does any real work must now stop it before it deletes
+    // anything, proving the ensureActive() checks are actually reachable and effective.
+    @Test
+    fun testCancellationStopsBeforeAnyDeletion() = runTest {
+        val fs = okio.fakefilesystem.FakeFileSystem()
+        val dir = "/out".toPath()
+        fs.createDirectories(dir)
+        fs.write(dir / "2021-05-01_AAA.jpg") { writeUtf8("dupe-bytes") }
+        fs.write(dir / "2022-07-04_MMM.jpg") { writeUtf8("dupe-bytes") }
+
+        val job = launch {
+            cancel()
+            Deduplicator(fs).deduplicateFolder(dir, dryRun = false)
+        }
+        job.join()
+
+        assertTrue(job.isCancelled)
+        assertTrue(fs.exists(dir / "2021-05-01_AAA.jpg"))
+        assertTrue(fs.exists(dir / "2022-07-04_MMM.jpg"))
     }
 }

@@ -3,9 +3,10 @@
 ## Current assessment
 
 - Remote `main` includes PR #25, the iOS/mobile Phase 3 implementation. This was a squash merge, not a partial merge: its file tree is identical to `mobile/pr-g-ios-pipeline-and-pickers`.
-- Desktop tests pass and the iOS simulator Kotlin target compiles.
+- Desktop tests pass and the iOS simulator Kotlin target compiles. (Last verified 2026-09-01, after `fix/desktop-audit-fixes`: 77/77 — see `FIX_PLAN.md`. `.github/workflows/check.yml` was split into a required `desktop` job and an informational `mobile-preview` job, `continue-on-error: true`, since it's expected to fail until item 2 below — Android SDK provisioning — is actually done.)
 - Android assembly has not been verified on this machine because the Android SDK is not configured.
 - Do **not** remove or revert the mobile code as a cleanup action without a product decision; it is the current contents of `main`.
+- Mobile is currently shelved as a non-priority future release — desktop is the active release target. The work items below remain the right plan for when mobile picks back up; they are not being executed now.
 
 ## Work items
 

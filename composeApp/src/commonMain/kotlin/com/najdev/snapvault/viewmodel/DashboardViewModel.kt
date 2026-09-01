@@ -19,6 +19,8 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okio.FileSystem
 import okio.Path.Companion.toPath
+import okio.buffer
+import okio.use
 import kotlin.time.TimeSource
 
 private class PipelineAbortException(message: String) : Exception(message)
@@ -57,10 +59,25 @@ class DashboardViewModel(
         private set
     var currentStep by mutableStateOf(0)
         private set
+    // True once a completed (non-cancelled, non-aborted) run reported at least one
+    // extraction/metadata/combine/dedupe failure — set only on the terminal success path.
+    var hasWarnings by mutableStateOf(false)
+        private set
+    // True during a sub-phase that has real work in flight but no per-item signal to report
+    // (the post-combine date-fallback batch, dedupe scanning) — the UI shows an animated
+    // indeterminate ring instead of a progress value that would otherwise sit at a
+    // misleadingly precise 0% for however long that sub-phase takes.
+    var indeterminate by mutableStateOf(false)
+        private set
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var syncJob: Job? = null
     private val workerCount = computeWorkerCount()
+
+    // Accumulates failure counts across every phase of the current run so the terminal
+    // state can tell "clean success" from "reported success but something failed" apart —
+    // see hasWarnings. Reset per run in startSync.
+    private var pipelineFailureCount = 0
 
     private val logLock = SyncLock()
 
@@ -98,13 +115,26 @@ class DashboardViewModel(
         // must not launch a second concurrent pipeline.
         if (syncJob?.isActive == true) return
         isRunning = true
-        logs.clear()
+        // logs.clear() races the previous job's still-in-flight log() calls during the
+        // cancellation window (see stopSync/BUG-06) — both must go through logLock, since
+        // SnapshotStateList isn't safe against an unsynchronized clear happening concurrently
+        // with an append.
+        logLock.withLock { logs.clear() }
         progress = 0f
         currentStep = 1
         speedText = "SPEED: --"
         etaText = "ETA: --"
+        hasWarnings = false
+        indeterminate = false
+        pipelineFailureCount = 0
 
-        syncJob = scope.launch {
+        // Captured so the finally block below can tell whether it's still the current run —
+        // job.cancel() flips isActive false immediately, well before the cancelled
+        // coroutine actually unwinds to its finally block. Without this, a new run started
+        // in that window would have its isRunning = true clobbered back to false by the
+        // stale job's belated cleanup (BUG-06).
+        lateinit var thisJob: Job
+        thisJob = scope.launch {
             try {
                 val outDir = downloadFolder ?: throw PipelineAbortException("No output folder selected.")
                 if (importMode == ImportMode.Zip) {
@@ -121,28 +151,55 @@ class DashboardViewModel(
                     runLegacyPipeline(outDir, runDownload, runMetadata, runCombine, runDedupe, dryRun, workerCount)
                 }
                 progress = 1.0f
-                progressText = "Pipeline Complete"
-                currentStep = 3
-                log("[SUCCESS] Sync complete!")
+                indeterminate = false
+                currentStep = 4
+                speedText = "SPEED: --"
+                etaText = "ETA: --"
+                if (pipelineFailureCount > 0) {
+                    hasWarnings = true
+                    progressText = "Completed with warnings"
+                    log("[WARN] Sync complete — $pipelineFailureCount failure(s) occurred, see warnings above.")
+                } else {
+                    progressText = "Pipeline Complete"
+                    log("[SUCCESS] Sync complete!")
+                }
             } catch (e: CancellationException) {
                 log("[WARN] Sync cancelled by user.")
                 progressText = "Cancelled"
+                progress = 0f
+                indeterminate = false
+                speedText = "SPEED: --"
+                etaText = "ETA: --"
                 currentStep = 0
                 throw e
             } catch (e: PipelineAbortException) {
                 log("[ERROR] ${e.message}")
                 progressText = "Failed"
+                progress = 0f
+                indeterminate = false
+                speedText = "SPEED: --"
+                etaText = "ETA: --"
                 currentStep = 0
             } catch (e: Exception) {
                 log("[ERROR] Pipeline failed: ${e.message}")
                 progressText = "Failed"
+                progress = 0f
+                indeterminate = false
+                speedText = "SPEED: --"
+                etaText = "ETA: --"
                 currentStep = 0
             } finally {
                 // Runs only after all pipeline children have finished cancelling — the
                 // Start button must not re-enable while ffmpeg/exiftool work is in flight.
-                isRunning = false
+                // Only clear isRunning if this is still the current job (BUG-06) — a stale
+                // job whose cancellation is still unwinding after a newer run has already
+                // started must not clobber that newer run's state.
+                if (syncJob === thisJob) {
+                    isRunning = false
+                }
             }
         }
+        syncJob = thisJob
     }
 
     fun stopSync() {
@@ -160,6 +217,12 @@ class DashboardViewModel(
     }
 
     fun resetVaultIndex(): Boolean {
+        // A running pipeline reads/writes vault_index.json at multiple points and holds its
+        // own in-memory copy — deleting the on-disk file out from under it (e.g. from
+        // Settings, reachable while a sync is in progress) risks losing entries the run is
+        // about to persist. Model-level guard so this is safe regardless of which screen can
+        // reach it (BUG-16).
+        if (isRunning) return false
         val folder = downloadFolder ?: return false
         return runCatching {
             val path = "$folder/vault_index.json".toPath()
@@ -287,6 +350,7 @@ class DashboardViewModel(
             append(".")
         }
         log(extractSummary)
+        pipelineFailureCount += extractErrorCount
         currentStep = 2
 
         var pipelineCombinedCount = 0
@@ -444,6 +508,7 @@ class DashboardViewModel(
                         }
                         else -> {
                             errorCount++
+                            pipelineFailureCount++
                             log("[ERROR] Failed $name: ${result.status}")
                         }
                     }
@@ -555,6 +620,25 @@ class DashboardViewModel(
         speedText = "SPEED: --"
         etaText = "ETA: --"
         log("[INFO] Metadata: $metaCount files tagged${if (metaFailCount > 0) ", $metaFailCount could not be tagged (see [WARN] lines above)" else ""}.")
+        pipelineFailureCount += metaFailCount
+    }
+
+    // Snapchat sometimes stores overlay images as WebP but names them ".png"; exiftool
+    // rejects them ("looks more like a RIFF") and the write fails. Checked by magic bytes,
+    // not extension — matches the guard writeDateMetadataBatch.runGroup already applies on
+    // the date-only path, so both metadata paths skip these before spawning exiftool.
+    // internal (not private) so DashboardViewModelTest can verify it directly.
+    internal fun isRiffMislabeledAsPng(path: String): Boolean {
+        if (!path.endsWith(".png", ignoreCase = true)) return false
+        return try {
+            fileSystem.source(path.toPath()).buffer().use { source ->
+                val header = source.readByteArray(4L)
+                header[0] == 'R'.code.toByte() && header[1] == 'I'.code.toByte() &&
+                    header[2] == 'F'.code.toByte() && header[3] == 'F'.code.toByte()
+            }
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private suspend fun writeZipExperimentalMetadata(
@@ -570,6 +654,9 @@ class DashboardViewModel(
         var gpsCount = 0
         var dateCount = 0
         var failCount = 0
+        var riffSkippedCount = 0
+        val failSamples = mutableListOf<String>()
+        val riffSkippedSamples = mutableListOf<String>()
         var done = 0
         val metaEta = EtaEstimator()
 
@@ -590,7 +677,14 @@ class DashboardViewModel(
                             dateCount++
                             downloadedMeta[result.target.fileName] = FileMeta(hasGps = false, hasOverlay = result.target.hasOverlay)
                         }
-                        else -> failCount++
+                        "skipped_riff" -> {
+                            riffSkippedCount++
+                            if (riffSkippedSamples.size < 5) riffSkippedSamples.add(result.target.fileName)
+                        }
+                        else -> {
+                            failCount++
+                            if (failSamples.size < 5) failSamples.add(result.target.fileName)
+                        }
                     }
                     done++
                     metaEta.record(done)
@@ -613,11 +707,15 @@ class DashboardViewModel(
                     currentCoroutineContext().ensureActive()
                     semaphore.withPermit {
                         val path = "$outDir/${target.fileName}"
-                        val outcome = runInterruptibleCompat {
-                            if (target.latitude != null && target.longitude != null) {
-                                if (mediaProcessor.writeGpsMetadata(path, target.latitude, target.longitude, target.dateStr)) "gps" else "fail"
-                            } else {
-                                if (mediaProcessor.writeDateMetadata(path, target.dateStr)) "date" else "fail"
+                        val outcome = if (isRiffMislabeledAsPng(path)) {
+                            "skipped_riff"
+                        } else {
+                            runInterruptibleCompat {
+                                if (target.latitude != null && target.longitude != null) {
+                                    if (mediaProcessor.writeGpsMetadata(path, target.latitude, target.longitude, target.dateStr)) "gps" else "fail"
+                                } else {
+                                    if (mediaProcessor.writeDateMetadata(path, target.dateStr)) "date" else "fail"
+                                }
                             }
                         }
                         channel.send(Result(target, outcome))
@@ -630,7 +728,19 @@ class DashboardViewModel(
 
         speedText = "SPEED: --"
         etaText = "ETA: --"
-        log("[INFO] Metadata: ${gpsCount + dateCount} tagged ($gpsCount with GPS)${if (failCount > 0) ", $failCount failed" else ""}.")
+        if (riffSkippedCount > 0) {
+            log("[INFO] Skipped $riffSkippedCount overlay(s) stored as WebP but named .png — exiftool would reject them; harmless, they're consumed by the combine phase. Examples: ${riffSkippedSamples.joinToString(", ")}")
+        }
+        if (failCount > 0) {
+            log("[WARN] Metadata: $failCount file(s) failed to tag. Examples: ${failSamples.joinToString(", ")}")
+        }
+        log(
+            "[INFO] Metadata: ${gpsCount + dateCount} tagged ($gpsCount with GPS)" +
+                (if (riffSkippedCount > 0) ", $riffSkippedCount skipped (mislabeled)" else "") +
+                (if (failCount > 0) ", $failCount failed" else "") +
+                "."
+        )
+        pipelineFailureCount += failCount
     }
 
     // Shared by both pipelines: combines every -main/-overlay pair in outDir.
@@ -641,10 +751,39 @@ class DashboardViewModel(
         var combineSkippedCount = 0
         var combineDone = 0
         var combineTotal = 1
+        var summaryLogged = false
         val combineEta = EtaEstimator()
         var combineEncoder: String? = null
         progress = 0f
+        indeterminate = false
         progressText = "Combining overlays…"
+
+        // The per-pair combine summary used to be logged after the whole combine phase
+        // returned — which is after the date-fallback sub-phase below, so it read as
+        // describing work that had finished several minutes earlier (BUG-14). Logging it
+        // the moment the per-pair loop itself finishes keeps the log chronological.
+        fun logCombineSummaryOnce() {
+            if (summaryLogged) return
+            summaryLogged = true
+            val combineSummary = buildString {
+                append("[INFO] Combined $combinedCount overlay pairs")
+                if (combineSkippedCount > 0) append(", $combineSkippedCount skipped (unsupported format)")
+                if (combineErrorCount > 0) append(", $combineErrorCount errors")
+                append(".")
+            }
+            log(combineSummary)
+            pipelineFailureCount += combineErrorCount
+            mediaProcessor.videoEncodeStats()?.let { stats ->
+                if (stats.hardware + stats.software > 0) {
+                    log("[INFO] Video encodes: ${stats.hardware} hardware, ${stats.software} software.")
+                    // A hardware encoder was active at start but some files still went software.
+                    if (combineEncoder != null && stats.software > 0) {
+                        log("[WARN] ${stats.software} video(s) fell back to software encoding (see stderr for per-file reasons).")
+                    }
+                }
+            }
+        }
+
         zipPipelineRunner.combineAll(
             outDir,
             deleteOriginals = true,
@@ -658,11 +797,23 @@ class DashboardViewModel(
                 val encoderLabel = combineEncoder?.let { "hardware ($it)" } ?: "software (libx264)"
                 log("[INFO] Found $actual overlay pairs. Combining… [video encoder: $encoderLabel]")
                 progressText = "Combining: 0 / $actual"
+                // Nothing to combine — no onProgress callback will ever fire to close this out.
+                if (actual == 0) {
+                    progress = 1f
+                    logCombineSummaryOnce()
+                }
             },
             onMetaStart = { total ->
+                // The batch below reports no per-file progress; show that honestly instead
+                // of a precise-looking 0% (BUG-04) — and reset stale combine-phase metrics
+                // (BUG-04's "stale ETA/pairs-per-sec" complaint) the moment this sub-phase
+                // starts, not whenever the whole combine phase eventually returns.
                 log("[INFO] Tagging $total combined file(s) with date metadata…")
                 progressText = "Tagging combined files…"
                 progress = 0f
+                indeterminate = true
+                speedText = "SPEED: --"
+                etaText = "ETA: --"
             }
         ) { result ->
             result.warnings.forEach { log("[WARN] $it") }
@@ -687,25 +838,18 @@ class DashboardViewModel(
                     else -> "ETA: ${formatEta(etaSec)}"
                 }
             }
-        }
-        speedText = "SPEED: --"
-        etaText = "ETA: --"
-        val combineSummary = buildString {
-            append("[INFO] Combined $combinedCount overlay pairs")
-            if (combineSkippedCount > 0) append(", $combineSkippedCount skipped (unsupported format)")
-            if (combineErrorCount > 0) append(", $combineErrorCount errors")
-            append(".")
-        }
-        log(combineSummary)
-        mediaProcessor.videoEncodeStats()?.let { stats ->
-            if (stats.hardware + stats.software > 0) {
-                log("[INFO] Video encodes: ${stats.hardware} hardware, ${stats.software} software.")
-                // A hardware encoder was active at start but some files still went software.
-                if (combineEncoder != null && stats.software > 0) {
-                    log("[WARN] ${stats.software} video(s) fell back to software encoding (see stderr for per-file reasons).")
-                }
+            if (combineDone == combineTotal) {
+                speedText = "SPEED: --"
+                etaText = "ETA: --"
+                logCombineSummaryOnce()
             }
         }
+        // Phase completion write (BUG-04): whether or not the date-fallback sub-phase ran,
+        // the combine phase as a whole is done here — don't leave the ring parked at 0%.
+        indeterminate = false
+        progress = 1f
+        speedText = "SPEED: --"
+        etaText = "ETA: --"
         return Triple(combinedCount, combineSkippedCount, combineErrorCount)
     }
 
@@ -821,28 +965,47 @@ class DashboardViewModel(
             append(".")
         }
         log(summary)
+        pipelineFailureCount += failCount
     }
 
     private suspend fun runDeduplication(outDir: String, dryRun: Boolean) {
         log("[INFO] Scanning for duplicate files…${if (dryRun) " (dry run — nothing will be deleted)" else ""}")
-        progressText = "Deduplicating…"
+        progressText = "Deduplicating: Scanning…"
+        speedText = "SPEED: --"
+        etaText = "ETA: --"
+        // Hashing/deletion runs as one blocking call with no per-file callback — show that
+        // honestly (BUG-04) instead of parking the ring at whatever value the prior phase
+        // left it on.
+        indeterminate = true
         val deduplicator = Deduplicator(fileSystem)
         val results = withContext(ioDispatcher) {
             deduplicator.deduplicateFolder(outDir.toPath(), dryRun)
         }
+        indeterminate = false
+        progress = 1f
         if (results.isEmpty()) {
             log("[INFO] No duplicate files found.")
         } else {
+            val totalDeleted = results.sumOf { it.deletedFiles.size }
+            val totalFailed = results.sumOf { it.failedFiles.size }
+            progressText = if (dryRun) "Deduplicating: Found $totalDeleted duplicates" else "Deduplicating: Removed $totalDeleted files"
             results.forEach { res ->
                 if (dryRun) {
                     log("[WARN] Dry run — would keep ${res.keptFile} and delete: ${res.deletedFiles.joinToString()}")
                 } else {
-                    log("[DELETED DUPES] Kept ${res.keptFile}, deleted: ${res.deletedFiles.joinToString()}")
+                    if (res.deletedFiles.isNotEmpty()) {
+                        log("[DELETED DUPES] Kept ${res.keptFile}, deleted: ${res.deletedFiles.joinToString()}")
+                    }
+                    if (res.failedFiles.isNotEmpty()) {
+                        log("[WARN] Kept ${res.keptFile}, but could not delete (still on disk): ${res.failedFiles.joinToString()}")
+                    }
                 }
             }
             if (dryRun) {
-                val total = results.sumOf { it.deletedFiles.size }
-                log("[INFO] Dry run complete — $total duplicate file(s) would be deleted. Disable dry run to apply.")
+                log("[INFO] Dry run complete — $totalDeleted duplicate file(s) would be deleted. Disable dry run to apply.")
+            } else if (totalFailed > 0) {
+                pipelineFailureCount += totalFailed
+                log("[WARN] Deduplication: $totalDeleted file(s) deleted, $totalFailed could not be deleted.")
             }
         }
     }

@@ -102,6 +102,23 @@ class ZipImportParserTest {
         assertEquals(listOf("memories/weird name.dat"), unmatched)
     }
 
+    // Regression for BUG-13: memories/memories.html is the export's own index page, not
+    // media — it fired an unmatched-format warning on every single one of 21 real zips,
+    // training users to ignore real warnings. It has no date-UUID prefix, so it must be
+    // excluded up front rather than relying on the regex to reject it into onUnmatched.
+    @Test
+    fun testZipMemoriesHtmlIndexPageIsIgnoredNotUnmatched() {
+        val unmatched = mutableListOf<String>()
+        val entries = ZipImportParser.parseMemoryEntryNames(
+            listOf(
+                "memories/memories.html",
+                "memories/2023-10-12_OK-main.jpg",
+            )
+        ) { unmatched.add(it) }
+        assertEquals(1, entries.size)
+        assertTrue(unmatched.isEmpty(), "memories.html must not be reported as an unmatched-format anomaly")
+    }
+
     @Test
     fun testZipVideoExtensionsRecognized() {
         val entries = ZipImportParser.parseMemoryEntryNames(

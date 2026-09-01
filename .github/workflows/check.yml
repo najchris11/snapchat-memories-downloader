@@ -2,12 +2,17 @@ name: PR Check
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]
+  push:
+    branches: [ main, develop ]
   workflow_dispatch:
 
 jobs:
-  validate:
-    runs-on: macos-latest
+  # Desktop is the priority release target — this is the required check. Runs on Linux
+  # because it's plain JVM/Compose Desktop work and doesn't need the macOS toolchain,
+  # which is both faster and cheaper than the shared macOS runner pool.
+  desktop:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -22,6 +27,25 @@ jobs:
 
       - name: Run Desktop Tests
         run: ./gradlew :composeApp:desktopTest
+
+  # Mobile is shelved for now — see FIX_PLAN.md. This job is informational only
+  # (continue-on-error) rather than a required check: current arm64 macOS runner images no
+  # longer ship the Android SDK with no setup-android step here to provision one, so
+  # assembleDebug is expected to fail until mobile work resumes and that gap is closed.
+  mobile-preview:
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (JetBrains Runtime)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21.0.7'
+          distribution: 'jetbrains'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
 
       - name: Assemble Android Debug
         run: ./gradlew :composeApp:assembleDebug -Pandroid.suppressUnsupportedCompileSdk=37.0

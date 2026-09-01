@@ -1,5 +1,7 @@
 package com.najdev.snapvault.downloader
 
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import okio.FileSystem
 import okio.HashingSource
 import okio.Path
@@ -28,14 +30,18 @@ class Deduplicator(
     data class DedupeResult(
         val folder: String,
         val keptFile: String,
-        val deletedFiles: List<String>
+        val deletedFiles: List<String>,
+        val failedFiles: List<String> = emptyList()
     )
 
     // Files the pipeline manages that must never be considered for deletion.
     private fun isProtected(path: Path): Boolean =
         path.name == "vault_index.json" || path.name.endsWith(".part")
 
-    fun deduplicateFolder(folderPath: Path, dryRun: Boolean): List<DedupeResult> {
+    // suspend so a running pipeline can actually be cancelled mid-scan (BUG-07) — this used
+    // to be a plain blocking call with no suspension point, so Stop did nothing until the
+    // whole folder had been hashed.
+    suspend fun deduplicateFolder(folderPath: Path, dryRun: Boolean): List<DedupeResult> {
         if (!fileSystem.metadata(folderPath).isDirectory) return emptyList()
 
         data class FileEntry(val path: Path, val size: Long?)
@@ -51,6 +57,7 @@ class Deduplicator(
 
         val fileHashes = mutableMapOf<String, MutableList<Path>>()
         for (file in candidates) {
+            currentCoroutineContext().ensureActive()
             val hash = calculateSha256(file)
             if (hash != null) {
                 fileHashes.getOrPut(hash) { mutableListOf() }.add(file)
@@ -59,6 +66,7 @@ class Deduplicator(
 
         val results = mutableListOf<DedupeResult>()
         for ((_, filepaths) in fileHashes) {
+            currentCoroutineContext().ensureActive()
             if (filepaths.size > 1) {
                 // Deterministic keep: the lexicographically-first name. Pipeline filenames
                 // start with YYYY-MM-DD, so this keeps the earliest-dated copy of the
@@ -68,18 +76,26 @@ class Deduplicator(
                 val toDelete = sorted.drop(1)
 
                 if (toDelete.isNotEmpty()) {
+                    val actuallyDeleted = mutableListOf<String>()
+                    val failedToDelete = mutableListOf<String>()
                     if (!dryRun) {
                         for (file in toDelete) {
                             try {
                                 fileSystem.delete(file)
-                            } catch (_: Exception) {}
+                                actuallyDeleted.add(file.name)
+                            } catch (_: Exception) {
+                                failedToDelete.add(file.name)
+                            }
                         }
+                    } else {
+                        actuallyDeleted.addAll(toDelete.map { it.name })
                     }
                     results.add(
                         DedupeResult(
                             folder = folderPath.name,
                             keptFile = primary.name,
-                            deletedFiles = toDelete.map { it.name }
+                            deletedFiles = actuallyDeleted,
+                            failedFiles = failedToDelete
                         )
                     )
                 }
@@ -89,7 +105,7 @@ class Deduplicator(
         return results
     }
 
-    fun deduplicateAll(rootDirectory: String, dryRun: Boolean): List<DedupeResult> {
+    suspend fun deduplicateAll(rootDirectory: String, dryRun: Boolean): List<DedupeResult> {
         val rootPath = rootDirectory.toPath()
         if (!fileSystem.exists(rootPath) || !fileSystem.metadata(rootPath).isDirectory) return emptyList()
 

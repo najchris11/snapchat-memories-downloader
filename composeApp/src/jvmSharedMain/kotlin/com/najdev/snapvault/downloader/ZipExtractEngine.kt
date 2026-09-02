@@ -12,10 +12,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import java.io.File
-import java.nio.file.AtomicMoveNotSupportedException
-import java.nio.file.FileAlreadyExistsException
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import java.util.zip.ZipFile
 
 class ZipExtractEngine {
@@ -137,8 +133,6 @@ class ZipExtractEngine {
     // full entry is copied and size-verified. A crash or cancellation mid-copy therefore
     // never leaves a truncated file under the final name (which the exists() skip-check
     // would otherwise treat as complete forever).
-    private val moveLock = Any()
-
     private fun extractEntry(zf: ZipFile, entryName: String, destFileName: String, outDir: File): String {
         val destFile = File(outDir, destFileName)
         if (destFile.exists()) return "skipped"
@@ -164,22 +158,24 @@ class ZipExtractEngine {
         }
     }
 
-    private fun moveIntoPlace(tmpFile: File, destFile: File): String = synchronized(moveLock) {
+    private fun moveIntoPlace(tmpFile: File, destFile: File): String {
+        // java.io.File.renameTo's behavior on existing files varies by platform (overwrites on
+        // most Unix, fails on Windows). We check destFile.exists() before renaming to stay
+        // consistent with our "skipped" reporting, though a race is still possible.
         if (destFile.exists()) {
             tmpFile.delete()
             return "skipped"
         }
-        return try {
-            try {
-                Files.move(tmpFile.toPath(), destFile.toPath(), StandardCopyOption.ATOMIC_MOVE)
-            } catch (_: AtomicMoveNotSupportedException) {
-                Files.move(tmpFile.toPath(), destFile.toPath())
-            }
+        return if (tmpFile.renameTo(destFile)) {
             "ok"
-        } catch (_: FileAlreadyExistsException) {
-            // Another worker extracted the same filename first — not an error.
-            tmpFile.delete()
-            "skipped"
+        } else {
+            // If rename failed, it might be because another worker just moved it into place
+            if (destFile.exists()) {
+                tmpFile.delete()
+                "skipped"
+            } else {
+                "error: could not move ${tmpFile.name} into place"
+            }
         }
     }
 

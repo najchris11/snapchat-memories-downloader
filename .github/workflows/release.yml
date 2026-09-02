@@ -141,8 +141,11 @@ jobs:
         shell: bash
         run: ./gradlew :composeApp:desktopTest -Pcompose.javaHome="$JAVA_HOME"
 
-      # packageRelease* is the ProGuard-processed variant — the same variant used for
-      # local testing, so released artifacts match what was actually validated.
+      # packageRelease* is the "release" build type Gradle-side, but ProGuard is disabled
+      # for it (composeApp/build.gradle.kts) — the default shrink pass corrupts merged
+      # Okio bytecode (VerifyError) for this dependency graph, with no tuned keep rules to
+      # fix it. Same variant used for local testing either way, so released artifacts match
+      # what was actually validated.
       - name: Build & package desktop distribution (release variant)
         shell: bash
         run: ./gradlew packageReleaseDistributionForCurrentOS -Pcompose.javaHome="$JAVA_HOME"

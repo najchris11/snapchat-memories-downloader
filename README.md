@@ -49,7 +49,7 @@ Requires JDK 21.
 # Run in development (implies debug mode: import capped at 2,500 items)
 ./gradlew :composeApp:run
 
-# Build a native installer for the current OS (release/ProGuard variant)
+# Build a native installer for the current OS (release variant)
 ./gradlew packageReleaseDistributionForCurrentOS
 ```
 

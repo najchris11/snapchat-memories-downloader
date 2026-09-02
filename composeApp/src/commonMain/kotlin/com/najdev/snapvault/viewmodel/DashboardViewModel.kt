@@ -188,6 +188,19 @@ class DashboardViewModel(
                 speedText = "SPEED: --"
                 etaText = "ETA: --"
                 currentStep = 0
+            } catch (e: Throwable) {
+                // Plain `catch (e: Exception)` above doesn't match JVM Errors (e.g.
+                // OutOfMemoryError) — those would otherwise skip every catch, propagate to
+                // the SupervisorJob root with no installed CoroutineExceptionHandler, and
+                // get silently printed to stderr while `finally` still reset the UI to idle.
+                // That read as the pipeline hanging then vanishing with zero log output.
+                log("[ERROR] Pipeline crashed: ${e::class.simpleName}: ${e.message}")
+                progressText = "Failed"
+                progress = 0f
+                indeterminate = false
+                speedText = "SPEED: --"
+                etaText = "ETA: --"
+                currentStep = 0
             } finally {
                 // Runs only after all pipeline children have finished cancelling — the
                 // Start button must not re-enable while ffmpeg/exiftool work is in flight.

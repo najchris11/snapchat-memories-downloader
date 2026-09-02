@@ -146,6 +146,16 @@ compose.desktop {
             "-Dhidpi=true",
             "-Dapple.awt.application.appearance=system"
         )
+        // No keep rules are tuned for this dependency graph (Okio, kotlinx-serialization,
+        // coroutines, Ktor), and the default ProGuard pass corrupts merged Okio bytecode —
+        // Okio__OkioKt.buffer() ends up declared to return RealBufferedSource while its
+        // body returns the wider BufferedSource, which the JVM verifier rejects at class-load
+        // time (VerifyError, not a normal exception — silently killed every release run with
+        // no log line before pipeline failures started being caught as Throwable). This is a
+        // personal utility, not something that needs code-size minification or obfuscation.
+        buildTypes.release.proguard {
+            isEnabled.set(false)
+        }
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "SnapVault"

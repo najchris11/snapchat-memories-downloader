@@ -19,14 +19,7 @@ class AndroidMediaProcessor : MediaProcessor {
             exif.setLatLong(latitude, longitude)
 
             // Set Date/Time if available
-            dateStr?.let {
-                val formattedDate = formatToExifDate(it)
-                if (formattedDate != null) {
-                    exif.setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, formattedDate)
-                    exif.setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED, formattedDate)
-                    exif.setAttribute(ExifInterface.TAG_DATETIME, formattedDate)
-                }
-            }
+            dateStr?.let { applyExifDate(exif, it) }
 
             exif.saveAttributes()
             true
@@ -36,11 +29,33 @@ class AndroidMediaProcessor : MediaProcessor {
         }
     }
 
+    override fun writeDateMetadata(filePath: String, dateTimeUtc: String): Boolean {
+        return try {
+            val file = File(filePath)
+            if (!file.exists()) return false
+
+            val exif = ExifInterface(filePath)
+            applyExifDate(exif, dateTimeUtc)
+            exif.saveAttributes()
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    private fun applyExifDate(exif: ExifInterface, dateStr: String) {
+        val formattedDate = formatToExifDate(dateStr)
+        if (formattedDate != null) {
+            exif.setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, formattedDate)
+            exif.setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED, formattedDate)
+            exif.setAttribute(ExifInterface.TAG_DATETIME, formattedDate)
+        }
+    }
+
     private fun formatToExifDate(dateStr: String): String? {
-        // Simple conversion for common formats. SnapVault already has date parsing logic elsewhere
-        // but for now we'll do a quick check. 
         // ExifInterface expects "yyyy:MM:dd HH:mm:ss"
-        val cleaned = dateStr.trim()
+        val cleaned = dateStr.trim().removeSuffix(" UTC")
         val regex = Regex("""(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})""")
         val match = regex.find(cleaned)
         return if (match != null) {
@@ -48,13 +63,8 @@ class AndroidMediaProcessor : MediaProcessor {
         } else null
     }
 
-    override fun writeDateMetadata(filePath: String, dateTimeUtc: String): Boolean {
-        // TODO: Implement using ExifInterface for Android
-        return false
-    }
-
     override fun combineVideoWithOverlay(videoPath: String, overlayPath: String, outputPath: String): Boolean {
-        // TODO: Implement using MediaMuxer or an FFmpeg library for Android
+        // Not yet implemented for Android (Phase 4)
         return false
     }
 }

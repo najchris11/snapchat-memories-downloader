@@ -158,15 +158,20 @@ class ZipExtractEngine {
         }
     }
 
-    private fun moveIntoPlace(tmpFile: File, destFile: File): String {
-        // java.io.File.renameTo's behavior on existing files varies by platform (overwrites on
-        // most Unix, fails on Windows). We check destFile.exists() before renaming to stay
-        // consistent with our "skipped" reporting, though a race is still possible.
+    // java.io.File.renameTo's behavior on existing files varies by platform (overwrites on
+    // most Unix, fails on Windows), so the exists()-check-then-rename below isn't atomic on
+    // its own — two workers can both pass the check before either renames. Serializing with
+    // this lock closes that window; a plain synchronized block (rather than
+    // java.nio.file.Files.move's ATOMIC_MOVE) keeps this portable to Android API < 26, which
+    // lacks NIO.2 file APIs without desugaring.
+    private val moveLock = Any()
+
+    private fun moveIntoPlace(tmpFile: File, destFile: File): String = synchronized(moveLock) {
         if (destFile.exists()) {
             tmpFile.delete()
-            return "skipped"
+            return@synchronized "skipped"
         }
-        return if (tmpFile.renameTo(destFile)) {
+        if (tmpFile.renameTo(destFile)) {
             "ok"
         } else {
             // If rename failed, it might be because another worker just moved it into place

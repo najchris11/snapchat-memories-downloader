@@ -24,6 +24,8 @@ __pycache__/
 
 # ── App data (user files, not source) ────────────────────────────────────────
 snapchat_memories/
+demo-library/
+.thumbnails/
 downloaded_files.json
 download_errors.json
 metadata.json

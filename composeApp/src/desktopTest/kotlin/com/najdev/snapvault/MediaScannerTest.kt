@@ -1,6 +1,9 @@
 package com.najdev.snapvault
 
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.attribute.FileTime
+import java.time.Instant
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -62,5 +65,41 @@ class MediaScannerTest {
         val items = scanMediaFiles(dir.absolutePath)
 
         assertTrue(items.isEmpty())
+    }
+
+    @Test
+    fun scanUsesSnapVaultCaptureDateInsteadOfFilesystemModifiedDate() {
+        val oldCapture = File(dir, "2021-02-03_memory-a.png").apply { writeBytes(byteArrayOf(1)) }
+        val newCapture = File(dir, "2024-11-28_memory-b.png").apply { writeBytes(byteArrayOf(1)) }
+        // Simulates copying/restoring a library: mtime no longer reflects capture order.
+        Files.setLastModifiedTime(oldCapture.toPath(), FileTime.from(Instant.parse("2026-01-01T00:00:00Z")))
+        Files.setLastModifiedTime(newCapture.toPath(), FileTime.from(Instant.parse("2001-01-01T00:00:00Z")))
+
+        val items = scanMediaFiles(dir.absolutePath)
+
+        assertEquals(listOf("2024-11-28_memory-b", "2021-02-03_memory-a"), items.map { it.title })
+        assertEquals("NOV 28, 2024", items.first().date)
+        assertEquals("FEB 03, 2021", items.last().date)
+    }
+
+    @Test
+    fun scanFallsBackToFilesystemDateForNonSnapVaultNames() {
+        File(dir, "holiday.png").writeBytes(byteArrayOf(1))
+
+        val item = scanMediaFiles(dir.absolutePath).single()
+
+        assertTrue(item.date.matches(Regex("[A-Z]{3} \\d{2}, \\d{4}")))
+    }
+
+    @Test
+    fun scanSortsFilenameAndFilesystemDatesOnTheSameTimeline() {
+        File(dir, "2024-06-01_memory.png").writeBytes(byteArrayOf(1))
+        val ordinaryFile = File(dir, "ordinary.png").apply { writeBytes(byteArrayOf(1)) }
+        Files.setLastModifiedTime(ordinaryFile.toPath(), FileTime.from(Instant.parse("2023-01-01T00:00:00Z")))
+
+        assertEquals(
+            listOf("2024-06-01_memory", "ordinary"),
+            scanMediaFiles(dir.absolutePath).map { it.title }
+        )
     }
 }

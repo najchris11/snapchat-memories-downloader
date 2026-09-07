@@ -9,6 +9,8 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import org.jetbrains.skia.Image as SkiaImage
 import java.io.File
+import java.time.LocalDate
+import java.time.ZoneOffset
 import java.text.SimpleDateFormat
 import java.util.*
 import java.awt.Image
@@ -30,12 +32,20 @@ actual fun scanMediaFiles(folderPath: String): List<LibraryItem> {
     val videoExtensions = SupportedMediaExtensions.VIDEO
     return (folder.listFiles() ?: return emptyList())
         .filter { it.isFile && it.extension.lowercase() in mediaExtensions }
-        .sortedByDescending { it.lastModified() }
+        // Snapchat/SnapVault exports deliberately put the capture *date* in every file name.
+        // A filesystem timestamp is only when the file was copied, restored, or extracted, so
+        // it is not a reliable proxy for when the memory was captured. Keep it as a fallback
+        // for user-supplied media that does not follow the export naming convention.
+        .sortedWith(
+            compareByDescending<File> { captureDateFromFileName(it.name)?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli() ?: it.lastModified() }
+                .thenByDescending { it.lastModified() }
+                .thenBy { it.name }
+        )
         .map { file ->
             val meta = index[file.name]
             LibraryItem(
                 id = file.absolutePath,
-                date = formatFileDate(file.lastModified()),
+                date = formatCaptureDate(file.name) ?: formatFileDate(file.lastModified()),
                 title = file.nameWithoutExtension,
                 type = if (file.extension.lowercase() in videoExtensions) "video" else "photo",
                 duration = null,
@@ -139,3 +149,18 @@ private fun formatFileDate(millis: Long): String =
         .apply { timeZone = TimeZone.getDefault() }
         .format(Date(millis))
         .uppercase()
+
+private val SNAPVAULT_FILE_DATE = Regex("""^(\d{4})-(\d{2})-(\d{2})_""")
+
+/** Returns the date encoded by SnapVault's `YYYY-MM-DD_<id>` output format, when valid. */
+private fun captureDateFromFileName(name: String): LocalDate? {
+    val match = SNAPVAULT_FILE_DATE.find(name) ?: return null
+    val (year, month, day) = match.destructured
+    return runCatching { LocalDate.of(year.toInt(), month.toInt(), day.toInt()) }.getOrNull()
+}
+
+private fun formatCaptureDate(name: String): String? = captureDateFromFileName(name)?.let { date ->
+    // Format the parsed calendar date directly. Converting midnight UTC to a local Date would
+    // make west-of-UTC users see the previous day.
+    "${date.month.name.take(3)} ${date.dayOfMonth.toString().padStart(2, '0')}, ${date.year}"
+}

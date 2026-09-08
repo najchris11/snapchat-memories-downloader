@@ -34,28 +34,49 @@ actual fun scanMediaFiles(folderPath: String): List<LibraryItem> {
             val metadata = fs.metadata(path)
             metadata.isRegularFile && path.name.substringAfterLast('.', "").lowercase() in mediaExtensions
         }
-        .sortedWith(
-            compareByDescending<okio.Path> { path ->
-                captureDateFromFileName(path.name)?.sortableKey ?: fs.metadata(path).lastModifiedAtMillis ?: 0L
-            }.thenByDescending { path -> fs.metadata(path).lastModifiedAtMillis ?: 0L }
-                .thenBy { path -> path.name }
-        )
+        // Computed once per file (not inside the comparator) so a stat + regex/parse isn't
+        // repeated on every comparison. The day-truncated key gives filename-dated and
+        // mtime-fallback files a common scale — comparing raw millis would let an arbitrary
+        // fallback file's full-precision timestamp always outrank a dated memory captured
+        // earlier the same day. Within a shared day, a dated file still outranks a fallback
+        // file outright (provenance beats a foreign mtime), and mtime only breaks ties among
+        // files of the same provenance.
         .map { path ->
-            val meta = index[path.name]
             val metadata = fs.metadata(path)
-            val ext = path.name.substringAfterLast('.', "").lowercase()
+            val captureDate = captureDateFromFileName(path.name)
+            val lastModifiedMillis = metadata.lastModifiedAtMillis ?: 0L
+            val dayKeyMillis = captureDate?.sortableKey ?: lastModifiedMillis.floorDiv(MILLIS_PER_DAY) * MILLIS_PER_DAY
+            ScannedPath(path, captureDate, dayKeyMillis, lastModifiedMillis, metadata.size ?: 0L)
+        }
+        .sortedWith(
+            compareByDescending<ScannedPath> { it.dayKeyMillis }
+                .thenByDescending { it.captureDate != null }
+                .thenByDescending { it.lastModifiedMillis }
+                .thenBy { it.path.name }
+        )
+        .map { scanned ->
+            val meta = index[scanned.path.name]
+            val ext = scanned.path.name.substringAfterLast('.', "").lowercase()
             LibraryItem(
-                id = path.toString(),
-                date = formatCaptureDate(path.name) ?: formatFileDate(metadata.lastModifiedAtMillis),
-                title = path.name.substringBeforeLast('.'),
+                id = scanned.path.toString(),
+                date = scanned.captureDate?.let { formatCaptureDate(it) } ?: formatFileDate(scanned.lastModifiedMillis),
+                title = scanned.path.name.substringBeforeLast('.'),
                 type = if (ext in videoExtensions) "video" else "photo",
                 duration = null,
                 hasGps = meta?.hasGps ?: false,
                 hasOverlay = meta?.hasOverlay ?: false,
-                fileSizeBytes = metadata.size ?: 0L
+                fileSizeBytes = scanned.size
             )
         }
 }
+
+private data class ScannedPath(
+    val path: okio.Path,
+    val captureDate: CaptureDate?,
+    val dayKeyMillis: Long,
+    val lastModifiedMillis: Long,
+    val size: Long,
+)
 
 // Video/GIF thumbnails aren't implemented on iOS yet (would need AVAssetImageGenerator);
 // ImageIO-backed decoding below only covers still images.
@@ -132,9 +153,9 @@ private fun captureDateFromFileName(name: String): CaptureDate? {
     return CaptureDate(year, month, day)
 }
 
-private fun formatCaptureDate(name: String): String? = captureDateFromFileName(name)?.let { date ->
+private fun formatCaptureDate(date: CaptureDate): String {
     val month = listOf("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC")[date.month - 1]
-    "$month ${date.day.toString().padStart(2, '0')}, ${date.year}"
+    return "$month ${date.day.toString().padStart(2, '0')}, ${date.year}"
 }
 
 private fun daysInMonth(year: Int, month: Int): Int = when (month) {

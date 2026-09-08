@@ -102,4 +102,23 @@ class MediaScannerTest {
             scanMediaFiles(dir.absolutePath).map { it.title }
         )
     }
+
+    // Regression for the code-review finding on PR #29: the primary sort key mixed a
+    // day-truncated (midnight UTC) instant for filename-dated files with a raw, full-precision
+    // lastModified() instant for undated fallback files. An undated file's real timestamp is
+    // almost always later-in-day than a dated file's forced midnight, so it always sorted above
+    // a memory captured/added the same day, regardless of actual recency.
+    @Test
+    fun scanDoesNotLetAnUndatedFileOutrankASameDayDatedMemory() {
+        val dated = File(dir, "2024-06-01_memory.png").apply { writeBytes(byteArrayOf(1)) }
+        Files.setLastModifiedTime(dated.toPath(), FileTime.from(Instant.parse("2024-06-01T00:00:00Z")))
+        // Same UTC calendar day as the dated memory, but later in the day — this must not
+        // outrank the dated memory just because its raw instant is numerically larger.
+        val undated = File(dir, "added-later.png").apply { writeBytes(byteArrayOf(1)) }
+        Files.setLastModifiedTime(undated.toPath(), FileTime.from(Instant.parse("2024-06-01T18:00:00Z")))
+
+        val items = scanMediaFiles(dir.absolutePath)
+
+        assertEquals(listOf("2024-06-01_memory", "added-later"), items.map { it.title })
+    }
 }

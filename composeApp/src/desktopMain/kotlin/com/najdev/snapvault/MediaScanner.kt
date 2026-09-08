@@ -36,25 +36,50 @@ actual fun scanMediaFiles(folderPath: String): List<LibraryItem> {
         // A filesystem timestamp is only when the file was copied, restored, or extracted, so
         // it is not a reliable proxy for when the memory was captured. Keep it as a fallback
         // for user-supplied media that does not follow the export naming convention.
-        .sortedWith(
-            compareByDescending<File> { captureDateFromFileName(it.name)?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli() ?: it.lastModified() }
-                .thenByDescending { it.lastModified() }
-                .thenBy { it.name }
-        )
+        //
+        // Computed once per file (not inside the comparator) so a stat + regex/parse isn't
+        // repeated on every comparison. The day-truncated key gives filename-dated and
+        // mtime-fallback files a common scale — comparing raw millis would let an arbitrary
+        // fallback file's full-precision timestamp always outrank a dated memory captured
+        // earlier the same day. Within a shared day, a dated file still outranks a fallback
+        // file outright (provenance beats a foreign mtime), and mtime only breaks ties among
+        // files of the same provenance.
         .map { file ->
-            val meta = index[file.name]
+            val captureDate = captureDateFromFileName(file.name)
+            val lastModifiedMillis = file.lastModified()
+            val dayKeyMillis = captureDate?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli()
+                ?: Math.floorDiv(lastModifiedMillis, MILLIS_PER_DAY) * MILLIS_PER_DAY
+            ScannedFile(file, captureDate, dayKeyMillis, lastModifiedMillis)
+        }
+        .sortedWith(
+            compareByDescending<ScannedFile> { it.dayKeyMillis }
+                .thenByDescending { it.captureDate != null }
+                .thenByDescending { it.lastModifiedMillis }
+                .thenBy { it.file.name }
+        )
+        .map { scanned ->
+            val meta = index[scanned.file.name]
             LibraryItem(
-                id = file.absolutePath,
-                date = formatCaptureDate(file.name) ?: formatFileDate(file.lastModified()),
-                title = file.nameWithoutExtension,
-                type = if (file.extension.lowercase() in videoExtensions) "video" else "photo",
+                id = scanned.file.absolutePath,
+                date = scanned.captureDate?.let { formatCaptureDate(it) } ?: formatFileDate(scanned.lastModifiedMillis),
+                title = scanned.file.nameWithoutExtension,
+                type = if (scanned.file.extension.lowercase() in videoExtensions) "video" else "photo",
                 duration = null,
                 hasGps = meta?.hasGps ?: false,
                 hasOverlay = meta?.hasOverlay ?: false,
-                fileSizeBytes = file.length()
+                fileSizeBytes = scanned.file.length()
             )
         }
 }
+
+private const val MILLIS_PER_DAY = 86_400_000L
+
+private data class ScannedFile(
+    val file: File,
+    val captureDate: LocalDate?,
+    val dayKeyMillis: Long,
+    val lastModifiedMillis: Long,
+)
 
 actual fun loadThumbnail(path: String): ImageBitmap? {
     val file = File(path)
@@ -159,8 +184,7 @@ private fun captureDateFromFileName(name: String): LocalDate? {
     return runCatching { LocalDate.of(year.toInt(), month.toInt(), day.toInt()) }.getOrNull()
 }
 
-private fun formatCaptureDate(name: String): String? = captureDateFromFileName(name)?.let { date ->
-    // Format the parsed calendar date directly. Converting midnight UTC to a local Date would
-    // make west-of-UTC users see the previous day.
+// Format the parsed calendar date directly. Converting midnight UTC to a local Date would
+// make west-of-UTC users see the previous day.
+private fun formatCaptureDate(date: LocalDate): String =
     "${date.month.name.take(3)} ${date.dayOfMonth.toString().padStart(2, '0')}, ${date.year}"
-}

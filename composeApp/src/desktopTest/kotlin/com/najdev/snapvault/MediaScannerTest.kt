@@ -83,6 +83,16 @@ class MediaScannerTest {
     }
 
     @Test
+    fun scanUsesCaptureDateFromLegacyPipelineFilename() {
+        val downloaded = File(dir, "2024-11-28_153000_memory-id.jpg").apply { writeBytes(byteArrayOf(1)) }
+        Files.setLastModifiedTime(downloaded.toPath(), FileTime.from(Instant.parse("2001-01-01T00:00:00Z")))
+
+        val item = scanMediaFiles(dir.absolutePath).single()
+
+        assertEquals("NOV 28, 2024", item.date)
+    }
+
+    @Test
     fun scanFallsBackToFilesystemDateForNonSnapVaultNames() {
         File(dir, "holiday.png").writeBytes(byteArrayOf(1))
 

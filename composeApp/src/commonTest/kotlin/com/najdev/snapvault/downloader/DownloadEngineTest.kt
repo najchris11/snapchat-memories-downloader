@@ -23,21 +23,21 @@ class DownloadEngineTest {
     @Test
     fun testDateParsing_isoWithTime() {
         val downloader = DownloadEngine(engine(), FakeFileSystem())
-        assertEquals("20231012_153000", downloader.parseDateToFilenamePrefix("2023-10-12 15:30:00 UTC"))
-        assertEquals("20231012_153000", downloader.parseDateToFilenamePrefix("2023-10-12 15:30:00"))
+        assertEquals("2023-10-12_153000", downloader.parseDateToFilenamePrefix("2023-10-12 15:30:00 UTC"))
+        assertEquals("2023-10-12_153000", downloader.parseDateToFilenamePrefix("2023-10-12 15:30:00"))
     }
 
     @Test
     fun testDateParsing_isoDateOnly() {
         val downloader = DownloadEngine(engine(), FakeFileSystem())
-        assertEquals("20231012_000000", downloader.parseDateToFilenamePrefix("2023-10-12"))
+        assertEquals("2023-10-12_000000", downloader.parseDateToFilenamePrefix("2023-10-12"))
     }
 
     @Test
     fun testDateParsing_europeanFormat() {
         val downloader = DownloadEngine(engine(), FakeFileSystem())
-        assertEquals("20231012_153000", downloader.parseDateToFilenamePrefix("12.10.2023 15:30:00"))
-        assertEquals("20231012_000000", downloader.parseDateToFilenamePrefix("12.10.2023"))
+        assertEquals("2023-10-12_153000", downloader.parseDateToFilenamePrefix("12.10.2023 15:30:00"))
+        assertEquals("2023-10-12_000000", downloader.parseDateToFilenamePrefix("12.10.2023"))
     }
 
     @Test
@@ -80,7 +80,7 @@ class DownloadEngineTest {
             isGet = true,
             dateStr = "2023-10-12 15:30:00 UTC"
         )
-        assertEquals("20231012_153000_abc-123.jpg", downloader.buildFilename(item, null))
+        assertEquals("2023-10-12_153000_abc-123.jpg", downloader.buildFilename(item, null))
     }
 
     @Test
@@ -120,7 +120,7 @@ class DownloadEngineTest {
     }
 
     @Test
-    fun testResumeDetects_jpegWithPrefix() {
+    fun testResumeDetects_jpegWithLegacyCompactPrefix() = runTest {
         val fs = FakeFileSystem()
         val outDir = "/output".toPath()
         fs.createDirectories(outDir)
@@ -133,16 +133,10 @@ class DownloadEngineTest {
             isGet = true,
             dateStr = "2023-10-12 15:30:00 UTC"
         )
-        val prefix = downloader.parseDateToFilenamePrefix(item.dateStr)
-        val existing = fs.list(outDir).find { f ->
-            val name = f.name
-            prefix != null && (
-                name == "${prefix}_${item.id}.mp4" || name == "${prefix}_${item.id}.jpg" ||
-                name == "${prefix}_${item.id}.jpeg" || name == "${prefix}_${item.id}.png" ||
-                name == "${prefix}_${item.id}.zip"
-            )
-        }
-        assertNotNull(existing, "Prefixed .jpeg file should be found for resume detection")
+        val result = downloader.downloadFile(item, outDir.toString())
+
+        assertEquals("skipped", result.status)
+        assertTrue(result.item.downloadedPath!!.endsWith("20231012_153000_abc-123.jpeg"))
     }
 
     // ── Atomic writes (B5) ──────────────────────────────────────────────────
@@ -166,9 +160,9 @@ class DownloadEngineTest {
         assertEquals("downloaded", result.status)
         assertTrue(result.item.isDownloaded)
         val outFiles = fs.list("/output".toPath()).map { it.name }
-        assertTrue("20231012_153000_abc-123.jpg" in outFiles, "final file must exist, got: $outFiles")
+        assertTrue("2023-10-12_153000_abc-123.jpg" in outFiles, "final file must exist, got: $outFiles")
         assertTrue(outFiles.none { it.endsWith(".part") }, "no temp file may remain, got: $outFiles")
-        assertEquals("file-bytes", fs.read("/output/20231012_153000_abc-123.jpg".toPath()) { readUtf8() })
+        assertEquals("file-bytes", fs.read("/output/2023-10-12_153000_abc-123.jpg".toPath()) { readUtf8() })
     }
 
     @Test

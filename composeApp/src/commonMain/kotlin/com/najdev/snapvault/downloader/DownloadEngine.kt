@@ -39,7 +39,10 @@ class DownloadEngine(
             val h = match1.groupValues[4].takeIf { it.isNotEmpty() } ?: "00"
             val min = match1.groupValues[5].takeIf { it.isNotEmpty() } ?: "00"
             val s = match1.groupValues[6].takeIf { it.isNotEmpty() } ?: "00"
-            return "$y$m$d" + "_$h$min$s"
+            // Keep the calendar date at the start of the filename in the same
+            // YYYY-MM-DD_ form used by ZIP imports. Library can then display and
+            // sort direct-download exports by capture date without relying on mtime.
+            return "$y-$m-$d" + "_$h$min$s"
         }
         
         // Format 2: DD.MM.YYYY HH:MM:SS or DD.MM.YYYY
@@ -52,7 +55,7 @@ class DownloadEngine(
             val h = match2.groupValues[4].takeIf { it.isNotEmpty() } ?: "00"
             val min = match2.groupValues[5].takeIf { it.isNotEmpty() } ?: "00"
             val s = match2.groupValues[6].takeIf { it.isNotEmpty() } ?: "00"
-            return "$y$m$d" + "_$h$min$s"
+            return "$y-$m-$d" + "_$h$min$s"
         }
         
         return null
@@ -107,7 +110,12 @@ class DownloadEngine(
         val names = existingNames ?: fileSystem.list(outputFolderPath).map { it.name }.toSet()
         val prefix = parseDateToFilenamePrefix(item.dateStr)
         val existingName = resumableExtensions.map { "${item.id}.$it" }.firstOrNull { it in names }
-            ?: prefix?.let { p -> resumableExtensions.map { "${p}_${item.id}.$it" }.firstOrNull { it in names } }
+            ?: prefix?.let { p ->
+                val prefixes = listOf(p, p.replace("-", "")) // recognize exports from before the rename
+                prefixes.firstNotNullOfOrNull { candidate ->
+                    resumableExtensions.map { "${candidate}_${item.id}.$it" }.firstOrNull { it in names }
+                }
+            }
 
         if (existingName != null) {
             val updated = item.copy(

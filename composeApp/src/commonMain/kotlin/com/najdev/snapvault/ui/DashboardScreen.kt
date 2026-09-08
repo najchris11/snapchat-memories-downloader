@@ -107,7 +107,7 @@ fun DashboardScreen(
                             color = SnapVaultColors.warning
                         )
                         Text(
-                            "Date metadata write and video overlay combining are not yet implemented on Android. ZIP extraction and GPS tagging for images work.",
+                            "Video overlay combining is not yet implemented on Android. ZIP extraction and date/GPS tagging for images work.",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )

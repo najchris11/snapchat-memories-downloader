@@ -9,6 +9,8 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import org.jetbrains.skia.Image as SkiaImage
 import java.io.File
+import java.time.LocalDate
+import java.time.ZoneOffset
 import java.text.SimpleDateFormat
 import java.util.*
 import java.awt.Image
@@ -30,21 +32,54 @@ actual fun scanMediaFiles(folderPath: String): List<LibraryItem> {
     val videoExtensions = SupportedMediaExtensions.VIDEO
     return (folder.listFiles() ?: return emptyList())
         .filter { it.isFile && it.extension.lowercase() in mediaExtensions }
-        .sortedByDescending { it.lastModified() }
+        // Snapchat/SnapVault exports deliberately put the capture *date* in every file name.
+        // A filesystem timestamp is only when the file was copied, restored, or extracted, so
+        // it is not a reliable proxy for when the memory was captured. Keep it as a fallback
+        // for user-supplied media that does not follow the export naming convention.
+        //
+        // Computed once per file (not inside the comparator) so a stat + regex/parse isn't
+        // repeated on every comparison. The day-truncated key gives filename-dated and
+        // mtime-fallback files a common scale — comparing raw millis would let an arbitrary
+        // fallback file's full-precision timestamp always outrank a dated memory captured
+        // earlier the same day. Within a shared day, a dated file still outranks a fallback
+        // file outright (provenance beats a foreign mtime), and mtime only breaks ties among
+        // files of the same provenance.
         .map { file ->
-            val meta = index[file.name]
+            val captureDate = captureDateFromFileName(file.name)
+            val lastModifiedMillis = file.lastModified()
+            val dayKeyMillis = captureDate?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli()
+                ?: Math.floorDiv(lastModifiedMillis, MILLIS_PER_DAY) * MILLIS_PER_DAY
+            ScannedFile(file, captureDate, dayKeyMillis, lastModifiedMillis)
+        }
+        .sortedWith(
+            compareByDescending<ScannedFile> { it.dayKeyMillis }
+                .thenByDescending { it.captureDate != null }
+                .thenByDescending { it.lastModifiedMillis }
+                .thenBy { it.file.name }
+        )
+        .map { scanned ->
+            val meta = index[scanned.file.name]
             LibraryItem(
-                id = file.absolutePath,
-                date = formatFileDate(file.lastModified()),
-                title = file.nameWithoutExtension,
-                type = if (file.extension.lowercase() in videoExtensions) "video" else "photo",
+                id = scanned.file.absolutePath,
+                date = scanned.captureDate?.let { formatCaptureDate(it) } ?: formatFileDate(scanned.lastModifiedMillis),
+                title = scanned.file.nameWithoutExtension,
+                type = if (scanned.file.extension.lowercase() in videoExtensions) "video" else "photo",
                 duration = null,
                 hasGps = meta?.hasGps ?: false,
                 hasOverlay = meta?.hasOverlay ?: false,
-                fileSizeBytes = file.length()
+                fileSizeBytes = scanned.file.length()
             )
         }
 }
+
+private const val MILLIS_PER_DAY = 86_400_000L
+
+private data class ScannedFile(
+    val file: File,
+    val captureDate: LocalDate?,
+    val dayKeyMillis: Long,
+    val lastModifiedMillis: Long,
+)
 
 actual fun loadThumbnail(path: String): ImageBitmap? {
     val file = File(path)
@@ -139,3 +174,17 @@ private fun formatFileDate(millis: Long): String =
         .apply { timeZone = TimeZone.getDefault() }
         .format(Date(millis))
         .uppercase()
+
+private val SNAPVAULT_FILE_DATE = Regex("""^(\d{4})-(\d{2})-(\d{2})_""")
+
+/** Returns the date encoded by SnapVault's `YYYY-MM-DD_<id>` output format, when valid. */
+private fun captureDateFromFileName(name: String): LocalDate? {
+    val match = SNAPVAULT_FILE_DATE.find(name) ?: return null
+    val (year, month, day) = match.destructured
+    return runCatching { LocalDate.of(year.toInt(), month.toInt(), day.toInt()) }.getOrNull()
+}
+
+// Format the parsed calendar date directly. Converting midnight UTC to a local Date would
+// make west-of-UTC users see the previous day.
+private fun formatCaptureDate(date: LocalDate): String =
+    "${date.month.name.take(3)} ${date.dayOfMonth.toString().padStart(2, '0')}, ${date.year}"

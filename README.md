@@ -49,11 +49,21 @@ Requires JDK 21.
 # Run in development (implies debug mode: import capped at 2,500 items)
 ./gradlew :composeApp:run
 
-# Build a native installer for the current OS (release/ProGuard variant)
+# Build a native installer for the current OS (release variant)
 ./gradlew packageReleaseDistributionForCurrentOS
 ```
 
 Debug mode is opt-in everywhere else via `-PisDebug=true`. Third-party license notices for the bundled tools ship inside the app (`THIRD_PARTY_LICENSES.md`).
+
+## Demo Library
+
+To demo the Library without personal memories, run the synthetic-library generator from a source checkout:
+
+```bash
+bash scripts/create-demo-library.sh
+```
+
+It creates `demo-library/` with eight abstract, non-personal images, realistic SnapVault-style names/dates, and GPS/overlay flags. In SnapVault, choose that folder as the output folder. The generator refuses to write into a non-empty destination; pass a different empty folder as its first argument if needed.
 
 > **ExifTool isn't bundled in a source checkout.** The "bundled on Linux" note above is true for *release* installers — `scripts/prepare-runtime-linux.sh` packages it fresh during the release workflow, and the packaged zip is gitignored — but a plain `git clone` has nothing under `composeApp/src/desktopMain/resources/bin/linux-x64/`, so `./gradlew :composeApp:run` from source will silently have no ExifTool (date/GPS tagging becomes a no-op). Either run `bash scripts/prepare-runtime-linux.sh` once yourself, or install ExifTool with your package manager / into `~/.snapvault/bin/` (the second location the app already probes, no root needed) before running from source.
 

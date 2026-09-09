@@ -40,8 +40,6 @@ import androidx.compose.ui.window.DialogProperties
 import com.najdev.snapvault.ioDispatcher
 import com.najdev.snapvault.loadThumbnail
 import com.najdev.snapvault.scanMediaFiles
-import com.najdev.snapvault.ui.theme.ElectricPurple
-import com.najdev.snapvault.ui.theme.InfoBlue
 import com.najdev.snapvault.ui.theme.SnapVaultColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

@@ -9,25 +9,37 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
+// Palette constants are private on purpose: they are single-theme values, and reaching for
+// one directly from a screen produces a colour that does not adapt when the theme changes.
+// Screens go through MaterialTheme.colorScheme, SnapVaultColors, or LogColors instead.
+
 // ── Dark palette ─────────────────────────────────────────────────────────────
-val SlateDark = Color(0xFF081425)
-val SlateDim = Color(0xFF081425)
-val SurfaceContainer = Color(0xFF152031)
-val SurfaceContainerHigh = Color(0xFF1F2A3C)
-val SurfaceContainerHighest = Color(0xFF2A3548)
-val SurfaceContainerLow = Color(0xFF111C2D)
-val SurfaceContainerLowest = Color(0xFF040E1F)
+private val SlateDark = Color(0xFF081425)
+private val SurfaceContainer = Color(0xFF152031)
+private val SurfaceContainerHigh = Color(0xFF1F2A3C)
+private val SurfaceContainerHighest = Color(0xFF2A3548)
+private val SurfaceContainerLow = Color(0xFF111C2D)
+private val SurfaceContainerLowest = Color(0xFF040E1F)
 
-val PrimaryPurple = Color(0xFFD0BCFF)
-val PrimaryContainer = Color(0xFFA078FF)
-val SecondaryBlue = Color(0xFFBEC6E0)
-val TertiaryCyan = Color(0xFF7BD0FF)
-val InfoBlue = Color(0xFF38BDF8)
-val ElectricPurple = Color(0xFF8B5CF6)
+private val PrimaryPurple = Color(0xFFD0BCFF)
+private val PrimaryContainer = Color(0xFFA078FF)
+private val SecondaryBlue = Color(0xFFBEC6E0)
+private val TertiaryCyan = Color(0xFF7BD0FF)
 
-val OnBackground = Color(0xFFD8E3FB)
-val OnSurfaceVariant = Color(0xFFCBC3D7)
-val Outline = Color(0xFF958EA0)
+private val OnBackground = Color(0xFFD8E3FB)
+private val OnSurfaceVariant = Color(0xFFCBC3D7)
+private val Outline = Color(0xFF958EA0)
+
+// Accents that exist in both themes. Declared once and referenced by both the colour
+// schemes and SnapVaultColors, rather than the hex being retyped in each place.
+private val ElectricPurpleDark = Color(0xFF8B5CF6)
+private val ElectricPurpleLight = Color(0xFF6D3BD7)
+private val SuccessDark = Color(0xFF4ADE80)
+private val SuccessLight = Color(0xFF15803D)
+private val WarningDark = Color(0xFFFBBF24)
+private val WarningLight = Color(0xFFB45309)
+private val InfoDark = Color(0xFF38BDF8)
+private val InfoLight = Color(0xFF0369A1)
 
 val SnapVaultColorScheme: ColorScheme = darkColorScheme(
     primary = PrimaryPurple,
@@ -57,7 +69,7 @@ val SnapVaultColorScheme: ColorScheme = darkColorScheme(
 
 // ── Light palette ─────────────────────────────────────────────────────────────
 val SnapVaultLightColorScheme: ColorScheme = lightColorScheme(
-    primary = Color(0xFF6D3BD7),
+    primary = ElectricPurpleLight,
     onPrimary = Color(0xFFFFFFFF),
     primaryContainer = Color(0xFFEDE0FF),
     onPrimaryContainer = Color(0xFF21005D),
@@ -84,26 +96,49 @@ val SnapVaultLightColorScheme: ColorScheme = lightColorScheme(
 
 val LocalThemeIsDark = staticCompositionLocalOf { true }
 
+/**
+ * Semantic roles Material 3 does not provide. Each resolves against the active theme.
+ *
+ * There is deliberately no `error` here — [MaterialTheme.colorScheme.error] is the one
+ * error colour, and having a second produced two different reds for the same meaning.
+ */
 object SnapVaultColors {
     val electricPurple: Color
         @Composable
-        get() = if (LocalThemeIsDark.current) Color(0xFF8B5CF6) else Color(0xFF6D3BD7)
+        get() = if (LocalThemeIsDark.current) ElectricPurpleDark else ElectricPurpleLight
 
     val success: Color
         @Composable
-        get() = if (LocalThemeIsDark.current) Color(0xFF4ADE80) else Color(0xFF15803D)
+        get() = if (LocalThemeIsDark.current) SuccessDark else SuccessLight
 
     val warning: Color
         @Composable
-        get() = if (LocalThemeIsDark.current) Color(0xFFFBBF24) else Color(0xFFB45309)
+        get() = if (LocalThemeIsDark.current) WarningDark else WarningLight
 
     val info: Color
         @Composable
-        get() = if (LocalThemeIsDark.current) Color(0xFF38BDF8) else Color(0xFF0369A1)
+        get() = if (LocalThemeIsDark.current) InfoDark else InfoLight
+}
 
-    val error: Color
-        @Composable
-        get() = if (LocalThemeIsDark.current) Color(0xFFF87171) else Color(0xFFB91C1C)
+/**
+ * The pipeline log renders as a terminal in both themes — a dark ground with a light
+ * foreground — so these are fixed rather than theme-derived.
+ *
+ * This is why they cannot come from [SnapVaultColors]: the panel used to be a translucent
+ * `Color.Black` while its text used `onSurface`, which in the light theme is near-black, so
+ * the log was dark text on a dark grey panel. Making the ground reliably dark means every
+ * colour drawn on it has to be a dark-ground colour too, in both themes — a light-theme
+ * `success` green (#15803D) on this surface would be just as unreadable as the text was.
+ */
+object LogColors {
+    val surface = Color(0xFF0A1220)
+    val onSurface = Color(0xFFDCE3F2)
+    val prompt = ElectricPurpleDark
+    val success = SuccessDark
+    val warning = WarningDark
+    val info = InfoDark
+    val error = Color(0xFFF87171)
+    val muted = Color(0xFF9AA8C4)
 }
 
 @Composable

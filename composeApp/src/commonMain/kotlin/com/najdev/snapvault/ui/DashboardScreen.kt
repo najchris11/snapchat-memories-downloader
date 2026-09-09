@@ -23,7 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
@@ -36,10 +35,7 @@ import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.ImportMode
 import com.najdev.snapvault.ZipSourceMode
 import com.najdev.snapvault.isAndroidBuild
-import com.najdev.snapvault.ui.theme.ElectricPurple
-import com.najdev.snapvault.ui.theme.InfoBlue
-import com.najdev.snapvault.ui.theme.SecondaryBlue
-import com.najdev.snapvault.ui.theme.TertiaryCyan
+import com.najdev.snapvault.ui.theme.LogColors
 import com.najdev.snapvault.ui.theme.SnapVaultColors
 import com.najdev.snapvault.viewmodel.DashboardViewModel
 import kotlinx.coroutines.launch
@@ -523,7 +519,7 @@ fun DashboardScreen(
                 AnimatedVisibility(visible = logsExpanded) {
                     Surface(
                         modifier = Modifier.fillMaxWidth().height(200.dp).padding(top = 8.dp),
-                        color = Color.Black.copy(alpha = 0.45f),
+                        color = LogColors.surface,
                         shape = RoundedCornerShape(8.dp),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                     ) {
@@ -537,8 +533,8 @@ fun DashboardScreen(
                                 if (viewModel.isRunning) {
                                     item {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text("$ ", color = ElectricPurple, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-                                            Text("running_pipeline", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                                            Text("$ ", color = LogColors.prompt, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                                            Text("running_pipeline", color = LogColors.onSurface, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
                                             BlinkingCursor()
                                         }
                                     }
@@ -760,19 +756,19 @@ fun TerminalLogLine(log: String) {
             Text(
                 text = "[$tag]",
                 color = when (tag) {
-                    "SUCCESS", "DL", "DEDUPE" -> SnapVaultColors.success
-                    "ERROR" -> SnapVaultColors.error
-                    "WARN" -> SnapVaultColors.warning
-                    "META" -> SnapVaultColors.info
-                    "SKIP" -> SecondaryBlue.copy(alpha = 0.85f)
-                    else -> SnapVaultColors.info
+                    "SUCCESS", "DL", "DEDUPE" -> LogColors.success
+                    "ERROR" -> LogColors.error
+                    "WARN" -> LogColors.warning
+                    "META" -> LogColors.info
+                    "SKIP" -> LogColors.muted
+                    else -> LogColors.info
                 },
                 fontFamily = FontFamily.Monospace,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold
             )
         }
-        Text(text = content, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+        Text(text = content, color = LogColors.onSurface, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
     }
 }
 

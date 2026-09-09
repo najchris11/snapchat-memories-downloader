@@ -63,6 +63,10 @@ class DashboardViewModel(
     // extraction/metadata/combine/dedupe failure — set only on the terminal success path.
     var hasWarnings by mutableStateOf(false)
         private set
+    // How many failures that run reported, published alongside hasWarnings so the Dashboard
+    // can say how much failed rather than only that something did.
+    var failureCount by mutableStateOf(0)
+        private set
     // True during a sub-phase that has real work in flight but no per-item signal to report
     // (the post-combine date-fallback batch, dedupe scanning) — the UI shows an animated
     // indeterminate ring instead of a progress value that would otherwise sit at a
@@ -125,6 +129,7 @@ class DashboardViewModel(
         speedText = "SPEED: --"
         etaText = "ETA: --"
         hasWarnings = false
+        failureCount = 0
         indeterminate = false
         pipelineFailureCount = 0
 
@@ -157,6 +162,7 @@ class DashboardViewModel(
                 etaText = "ETA: --"
                 if (pipelineFailureCount > 0) {
                     hasWarnings = true
+                    failureCount = pipelineFailureCount
                     progressText = "Completed with warnings"
                     log("[WARN] Sync complete — $pipelineFailureCount failure(s) occurred, see warnings above.")
                 } else {

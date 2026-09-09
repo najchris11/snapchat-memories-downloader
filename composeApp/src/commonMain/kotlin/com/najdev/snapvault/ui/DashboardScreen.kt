@@ -89,36 +89,12 @@ fun DashboardScreen(
             ) {
                 // Android preview banner
                 if (isAndroidBuild) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(SnapVaultColors.warning.copy(alpha = 0.12f))
-                            .border(1.dp, SnapVaultColors.warning.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Icon(
-                            Icons.Outlined.Info,
-                            contentDescription = null,
-                            tint = SnapVaultColors.warning,
-                            modifier = Modifier.size(15.dp).padding(top = 1.dp)
-                        )
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(
-                                "Android Preview",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = SnapVaultColors.warning
-                            )
-                            Text(
-                                "Video overlay combining is not yet implemented on Android. ZIP extraction and date/GPS tagging for images work.",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                            )
-                        }
-                    }
+                    InlineBanner(
+                        icon = Icons.Outlined.Info,
+                        accent = SnapVaultColors.warning,
+                        title = stringResource(Res.string.banner_android_preview_title),
+                        body = stringResource(Res.string.banner_android_preview_body),
+                    )
                 }
 
                 // Source & Destination card
@@ -446,6 +422,21 @@ fun DashboardScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                // A run can finish having reported failures. Without this the only signal is
+                // step 4's circle turning amber, which reads as a slightly different success.
+                AnimatedVisibility(visible = viewModel.hasWarnings) {
+                    Box(modifier = Modifier.padding(top = 12.dp)) {
+                        InlineBanner(
+                            icon = Icons.Outlined.WarningAmber,
+                            accent = SnapVaultColors.warning,
+                            title = stringResource(Res.string.warn_run_failures_title, viewModel.failureCount),
+                            body = stringResource(Res.string.warn_run_failures_body),
+                            actionLabel = stringResource(Res.string.btn_view_log),
+                            onAction = { logsExpanded = true },
+                        )
+                    }
+                }
+
                 Spacer(Modifier.height(10.dp))
 
                 Row(
@@ -562,6 +553,60 @@ fun DashboardScreen(
 }
 
 // ── Shared sub-components ────────────────────────────────────────────────────
+
+/**
+ * Tinted advisory strip used for every inline Dashboard notice — the Android feature-gap
+ * banner, a missing-dependency warning, and a finished run that reported failures — so all
+ * three read as the same kind of message rather than three bespoke layouts.
+ */
+@Composable
+fun InlineBanner(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    accent: Color,
+    title: String,
+    body: String? = null,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(accent.copy(alpha = 0.12f))
+            .border(1.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = accent,
+            modifier = Modifier.size(15.dp).padding(top = 1.dp)
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(title, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = accent)
+            if (body != null) {
+                Text(
+                    body,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        if (actionLabel != null && onAction != null) {
+            TextButton(
+                onClick = onAction,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Text(actionLabel, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = accent)
+            }
+        }
+    }
+}
 
 @Composable
 private fun MetricChip(text: String) {

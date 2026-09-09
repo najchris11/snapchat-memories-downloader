@@ -182,6 +182,7 @@ class DashboardViewModelTest {
         val viewModel = newViewModel(
             combineResults = listOf(
                 CombineResult(uuid = "deadbeef-0001", outputPath = "", status = "error: boom"),
+                CombineResult(uuid = "deadbeef-0003", outputPath = "", status = "error: boom"),
             ),
         )
 
@@ -196,6 +197,9 @@ class DashboardViewModelTest {
         awaitCompletion(viewModel)
 
         assertTrue(viewModel.hasWarnings)
+        // The Dashboard banner reports the count, not just that something failed, so the
+        // number has to survive to the terminal state and not stay stuck at 0.
+        assertEquals(2, viewModel.failureCount)
         assertEquals("Completed with warnings", viewModel.progressText)
         assertEquals(4, viewModel.currentStep)
         assertTrue(
@@ -225,6 +229,7 @@ class DashboardViewModelTest {
         awaitCompletion(viewModel)
 
         assertFalse(viewModel.hasWarnings)
+        assertEquals(0, viewModel.failureCount)
         assertEquals("Pipeline Complete", viewModel.progressText)
         assertEquals(4, viewModel.currentStep)
         assertEquals("[SUCCESS] Sync complete!", viewModel.logs.last())

@@ -42,6 +42,13 @@
     <string name="btn_start_sync">Start Download</string>
     <string name="btn_stop">Stop</string>
     <string name="status_idle">Ready to download</string>
+    <string name="btn_view_log">View log</string>
+
+    <!-- Dashboard banners -->
+    <string name="banner_android_preview_title">Android Preview</string>
+    <string name="banner_android_preview_body">Video overlay combining is not yet implemented on Android. ZIP extraction and date/GPS tagging for images work.</string>
+    <string name="warn_run_failures_title">%d step(s) failed</string>
+    <string name="warn_run_failures_body">Some files were not processed. The log lists what failed and why.</string>
 
     <!-- Library Screen -->
     <string name="library_title">Library</string>

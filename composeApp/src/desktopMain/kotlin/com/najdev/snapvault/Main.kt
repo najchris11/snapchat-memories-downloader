@@ -11,8 +11,10 @@ import com.najdev.snapvault.downloader.DesktopZipPipelineRunner
 import com.najdev.snapvault.metadata.DesktopMediaProcessor
 import okio.FileSystem
 import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.stringResource
 import snapchat_memories_downloader.composeapp.generated.resources.Res
 import snapchat_memories_downloader.composeapp.generated.resources.ic_launcher
+import snapchat_memories_downloader.composeapp.generated.resources.window_title
 
 fun main() {
     System.setProperty("apple.awt.application.appearance", "system")
@@ -27,6 +29,9 @@ fun main() {
         Window(
             onCloseRequest = ::exitApplication,
             state = windowState,
+            // Undecorated, so this never shows as a titlebar — but the taskbar entry, the
+            // alt-tab card and the window manager all read it.
+            title = stringResource(Res.string.window_title),
             undecorated = true,
             transparent = false,
             icon = painterResource(Res.drawable.ic_launcher)

@@ -82,6 +82,8 @@ fun PhoneRoot(
                 Screen.Dashboard -> DashboardScreen(
                     viewModel = dashboardViewModel,
                     onNavigateToSettings = { currentScreen = Screen.Settings },
+                    hasExifTool = hasExifTool,
+                    hasFFmpeg = hasFFmpeg,
                 )
                 Screen.Library -> LibraryScreen(
                     downloadFolder = dashboardViewModel.downloadFolder,

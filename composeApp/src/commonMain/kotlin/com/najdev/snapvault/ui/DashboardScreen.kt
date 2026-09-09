@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.ImportMode
 import com.najdev.snapvault.ZipSourceMode
+import com.najdev.snapvault.binaryInstallHint
 import com.najdev.snapvault.isAndroidBuild
 import com.najdev.snapvault.ui.theme.LogColors
 import com.najdev.snapvault.ui.theme.SnapVaultColors
@@ -46,6 +47,8 @@ import snapchat_memories_downloader.composeapp.generated.resources.*
 fun DashboardScreen(
     viewModel: DashboardViewModel,
     onNavigateToSettings: () -> Unit,
+    hasExifTool: Boolean = true,
+    hasFFmpeg: Boolean = true,
 ) {
     // These are local UI preferences, not pipeline state
     var runDownload by remember { mutableStateOf(true) }
@@ -90,6 +93,26 @@ fun DashboardScreen(
                         accent = SnapVaultColors.warning,
                         title = stringResource(Res.string.banner_android_preview_title),
                         body = stringResource(Res.string.banner_android_preview_body),
+                    )
+                }
+
+                // A missing binary means a pipeline step silently does nothing, and the only
+                // place that said so — along with the install instructions — was Settings,
+                // which the Dashboard had no route to. Gated on binaryInstallHint() being
+                // non-empty, the same condition Settings uses, so this stays off on Android
+                // and iOS where neither tool applies and the banner above covers the gap.
+                val missingDeps = buildList {
+                    if (!hasExifTool) add(stringResource(Res.string.banner_deps_exiftool))
+                    if (!hasFFmpeg) add(stringResource(Res.string.banner_deps_ffmpeg))
+                }
+                if (missingDeps.isNotEmpty() && binaryInstallHint().isNotEmpty()) {
+                    InlineBanner(
+                        icon = Icons.Outlined.ErrorOutline,
+                        accent = SnapVaultColors.warning,
+                        title = stringResource(Res.string.banner_deps_title),
+                        body = missingDeps.joinToString(" "),
+                        actionLabel = stringResource(Res.string.btn_open_settings),
+                        onAction = onNavigateToSettings,
                     )
                 }
 

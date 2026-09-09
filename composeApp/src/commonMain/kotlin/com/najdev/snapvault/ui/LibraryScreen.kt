@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.najdev.snapvault.getCachedThumbnail
 import com.najdev.snapvault.ioDispatcher
 import com.najdev.snapvault.loadThumbnail
 import com.najdev.snapvault.scanMediaFiles
@@ -336,7 +337,9 @@ private fun InspectorItemDetail(
                 .fillMaxWidth()
                 .aspectRatio(1f)
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .clickable(enabled = !isVideo) { onPreview() },
+                // Was enabled = !isVideo, because the preview dialog could not show a video.
+                // It can now, so videos open from here too.
+                .clickable { onPreview() },
             contentAlignment = Alignment.Center
         ) {
             if (thumbnail != null) {
@@ -346,7 +349,6 @@ private fun InspectorItemDetail(
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
-                // Hover hint for photos
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -354,8 +356,10 @@ private fun InspectorItemDetail(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.Outlined.ZoomIn,
-                        contentDescription = "Open preview",
+                        if (isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.ZoomIn,
+                        contentDescription = stringResource(
+                            if (isVideo) Res.string.lib_play_video else Res.string.lib_open_preview
+                        ),
                         tint = Color.White.copy(alpha = 0.8f),
                         modifier = Modifier.size(32.dp)
                     )
@@ -445,23 +449,33 @@ private fun InspectorItemDetail(
                 }
             }
 
-            if (!isVideo) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                Surface(
-                    onClick = onPreview,
-                    shape = RoundedCornerShape(8.dp),
-                    color = SnapVaultColors.electricPurple.copy(alpha = 0.1f),
-                    border = BorderStroke(1.dp, SnapVaultColors.electricPurple.copy(alpha = 0.25f)),
-                    modifier = Modifier.fillMaxWidth()
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+            Surface(
+                onClick = onPreview,
+                shape = RoundedCornerShape(8.dp),
+                color = SnapVaultColors.electricPurple.copy(alpha = 0.1f),
+                border = BorderStroke(1.dp, SnapVaultColors.electricPurple.copy(alpha = 0.25f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Outlined.ZoomIn, null, tint = SnapVaultColors.electricPurple, modifier = Modifier.size(15.dp))
-                        Text("Open Preview", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = SnapVaultColors.electricPurple)
-                    }
+                    Icon(
+                        if (isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.ZoomIn,
+                        null,
+                        tint = SnapVaultColors.electricPurple,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Text(
+                        stringResource(
+                            if (isVideo) Res.string.lib_play_video else Res.string.lib_open_preview
+                        ),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SnapVaultColors.electricPurple
+                    )
                 }
             }
         }
@@ -612,7 +626,8 @@ fun MetadataRow(
 fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
     val isVideo = item.type == "video"
     val thumbnail by produceState<ImageBitmap?>(null, item.id) {
-        value = withContext(Dispatchers.Default) { loadThumbnail(item.id) }
+        // Videos are rendered by VideoPlayer, which loads its own (cached) frame.
+        value = if (isVideo) null else withContext(Dispatchers.Default) { getCachedThumbnail(item.id) }
     }
 
     Dialog(
@@ -641,28 +656,28 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
                             .background(Color.Black),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (thumbnail != null) {
-                            Image(
+                        when {
+                            // VideoPlayer draws its own cached frame and play affordance, and
+                            // hands the file to the system player on click. It has been
+                            // implemented on every platform since the Library was written and
+                            // was never called — this spot used to read "Video preview not
+                            // available" instead.
+                            isVideo -> VideoPlayer(
+                                videoPath = item.id,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                            thumbnail != null -> Image(
                                 bitmap = thumbnail!!,
                                 contentDescription = item.title,
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Fit
                             )
-                        } else {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Icon(
-                                    if (isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.Image,
-                                    null,
-                                    tint = Color.White.copy(alpha = 0.25f),
-                                    modifier = Modifier.size(72.dp)
-                                )
-                                if (isVideo) {
-                                    Text("Video preview not available", fontSize = 13.sp, color = Color.White.copy(alpha = 0.4f))
-                                }
-                            }
+                            else -> Icon(
+                                Icons.Outlined.Image,
+                                contentDescription = null,
+                                tint = Color.White.copy(alpha = 0.25f),
+                                modifier = Modifier.size(72.dp)
+                            )
                         }
 
                         // Close button

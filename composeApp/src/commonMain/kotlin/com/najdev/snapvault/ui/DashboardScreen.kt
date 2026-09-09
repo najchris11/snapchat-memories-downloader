@@ -57,9 +57,12 @@ fun DashboardScreen(
     var experimentalMetadataMatching by remember { mutableStateOf(true) }
     var runCombine by remember { mutableStateOf(true) }
     var runDedupe by remember { mutableStateOf(true) }
-    var dryRun by remember { mutableStateOf(false) }
+    // Dedupe deletes files, so the destructive path is an explicit opt-out rather than an
+    // unseen default: preview is on, and the options card starts expanded so every enabled
+    // step is visible before Start.
+    var dryRun by remember { mutableStateOf(true) }
     var logsExpanded by remember { mutableStateOf(false) }
-    var pipelineExpanded by remember { mutableStateOf(false) }
+    var pipelineExpanded by remember { mutableStateOf(true) }
     var logsCopied by remember { mutableStateOf(false) }
 
     @Suppress("DEPRECATION")
@@ -77,245 +80,247 @@ fun DashboardScreen(
         horizontalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         // ── Left column: controls (40%) ──────────────────────────────────────
-        Column(
-            modifier = Modifier.weight(0.4f).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Android preview banner
-            if (isAndroidBuild) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(SnapVaultColors.warning.copy(alpha = 0.12f))
-                        .border(1.dp, SnapVaultColors.warning.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Icon(
-                        Icons.Outlined.Info,
-                        contentDescription = null,
-                        tint = SnapVaultColors.warning,
-                        modifier = Modifier.size(15.dp).padding(top = 1.dp)
-                    )
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(
-                            "Android Preview",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SnapVaultColors.warning
+        // The cards scroll; the action row below stays pinned, so Start stays
+        // reachable however tall the cards get.
+        Column(modifier = Modifier.weight(0.4f)) {
+            Column(
+                modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Android preview banner
+                if (isAndroidBuild) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(SnapVaultColors.warning.copy(alpha = 0.12f))
+                            .border(1.dp, SnapVaultColors.warning.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Icon(
+                            Icons.Outlined.Info,
+                            contentDescription = null,
+                            tint = SnapVaultColors.warning,
+                            modifier = Modifier.size(15.dp).padding(top = 1.dp)
                         )
-                        Text(
-                            "Video overlay combining is not yet implemented on Android. ZIP extraction and date/GPS tagging for images work.",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                "Android Preview",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SnapVaultColors.warning
+                            )
+                            Text(
+                                "Video overlay combining is not yet implemented on Android. ZIP extraction and date/GPS tagging for images work.",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
                     }
                 }
-            }
 
-            // Source & Destination card
-            ControlCard {
-                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    SectionLabel(
-                        icon = Icons.Outlined.FolderOpen,
-                        text = stringResource(Res.string.dash_source_title)
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        ModeToggleButton(
-                            label = "Legacy (HTML/JSON)",
-                            selected = viewModel.importMode == ImportMode.Legacy,
-                            onClick = { viewModel.changeImportMode(ImportMode.Legacy) },
-                            modifier = Modifier.weight(1f),
-                            enabled = !viewModel.isRunning
+                // Source & Destination card
+                ControlCard {
+                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        SectionLabel(
+                            icon = Icons.Outlined.FolderOpen,
+                            text = stringResource(Res.string.dash_source_title)
                         )
-                        ModeToggleButton(
-                            label = "ZIP Import",
-                            selected = viewModel.importMode == ImportMode.Zip,
-                            onClick = { viewModel.changeImportMode(ImportMode.Zip) },
-                            modifier = Modifier.weight(1f),
-                            enabled = !viewModel.isRunning
-                        )
-                    }
 
-                    if (viewModel.importMode == ImportMode.Zip) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
+                            // ZIP first: it's the recommended path and the only mode that reads the
+                            // raw export archives directly.
                             ModeToggleButton(
-                                label = "ZIP Folder",
-                                selected = viewModel.zipSourceMode == ZipSourceMode.Folder,
-                                onClick = { viewModel.changeZipSourceMode(ZipSourceMode.Folder) },
+                                label = stringResource(Res.string.opt_mode_zip),
+                                selected = viewModel.importMode == ImportMode.Zip,
+                                onClick = { viewModel.changeImportMode(ImportMode.Zip) },
                                 modifier = Modifier.weight(1f),
                                 enabled = !viewModel.isRunning
                             )
                             ModeToggleButton(
-                                label = "Pick Files",
-                                selected = viewModel.zipSourceMode == ZipSourceMode.MultipleFiles,
-                                onClick = { viewModel.changeZipSourceMode(ZipSourceMode.MultipleFiles) },
+                                label = stringResource(Res.string.opt_mode_legacy),
+                                selected = viewModel.importMode == ImportMode.Legacy,
+                                onClick = { viewModel.changeImportMode(ImportMode.Legacy) },
                                 modifier = Modifier.weight(1f),
                                 enabled = !viewModel.isRunning
                             )
                         }
 
-                        if (viewModel.zipSourceMode == ZipSourceMode.Folder) {
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("ZIP Export Folder", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                FilePickerBox(
-                                    icon = Icons.Outlined.FolderZip,
-                                    label = viewModel.zipFolder ?: "Select folder containing mydata~*.zip files",
-                                    onClick = viewModel::pickZipFolder,
-                                    isSelected = viewModel.zipFolder != null,
+                        if (viewModel.importMode == ImportMode.Zip) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                ModeToggleButton(
+                                    label = "ZIP Folder",
+                                    selected = viewModel.zipSourceMode == ZipSourceMode.Folder,
+                                    onClick = { viewModel.changeZipSourceMode(ZipSourceMode.Folder) },
+                                    modifier = Modifier.weight(1f),
                                     enabled = !viewModel.isRunning
                                 )
+                                ModeToggleButton(
+                                    label = "Pick Files",
+                                    selected = viewModel.zipSourceMode == ZipSourceMode.MultipleFiles,
+                                    onClick = { viewModel.changeZipSourceMode(ZipSourceMode.MultipleFiles) },
+                                    modifier = Modifier.weight(1f),
+                                    enabled = !viewModel.isRunning
+                                )
+                            }
+
+                            if (viewModel.zipSourceMode == ZipSourceMode.Folder) {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("ZIP Export Folder", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    FilePickerBox(
+                                        icon = Icons.Outlined.FolderZip,
+                                        label = viewModel.zipFolder ?: "Select folder containing mydata~*.zip files",
+                                        onClick = viewModel::pickZipFolder,
+                                        isSelected = viewModel.zipFolder != null,
+                                        enabled = !viewModel.isRunning
+                                    )
+                                }
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text("ZIP Files", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        if (viewModel.selectedZipFiles.isNotEmpty()) {
+                                            Text(
+                                                "Clear",
+                                                fontSize = 11.sp,
+                                                color = SnapVaultColors.electricPurple.copy(alpha = if (viewModel.isRunning) 0.5f else 1f),
+                                                fontWeight = FontWeight.SemiBold,
+                                                modifier = Modifier.clickable(enabled = !viewModel.isRunning) {
+                                                    viewModel.changeZipSourceMode(ZipSourceMode.MultipleFiles)
+                                                }
+                                            )
+                                        }
+                                    }
+                                    FilePickerBox(
+                                        icon = Icons.Outlined.FolderZip,
+                                        label = when (viewModel.selectedZipFiles.size) {
+                                            0 -> "Select mydata~*.zip files…"
+                                            1 -> viewModel.selectedZipFiles[0].substringAfterLast('/').substringAfterLast('\\')
+                                            else -> "${viewModel.selectedZipFiles.size} ZIP files selected"
+                                        },
+                                        onClick = viewModel::pickMultipleZips,
+                                        isSelected = viewModel.selectedZipFiles.isNotEmpty(),
+                                        enabled = !viewModel.isRunning
+                                    )
+                                    if (viewModel.selectedZipFiles.size > 1) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+                                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                                        ) {
+                                            viewModel.selectedZipFiles.take(4).forEach { path ->
+                                                Text(
+                                                    path.substringAfterLast('/').substringAfterLast('\\'),
+                                                    fontSize = 10.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                            if (viewModel.selectedZipFiles.size > 4) {
+                                                Text(
+                                                    "+ ${viewModel.selectedZipFiles.size - 4} more",
+                                                    fontSize = 10.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("ZIP Files", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    if (viewModel.selectedZipFiles.isNotEmpty()) {
-                                        Text(
-                                            "Clear",
-                                            fontSize = 11.sp,
-                                            color = SnapVaultColors.electricPurple.copy(alpha = if (viewModel.isRunning) 0.5f else 1f),
-                                            fontWeight = FontWeight.SemiBold,
-                                            modifier = Modifier.clickable(enabled = !viewModel.isRunning) {
-                                                viewModel.changeZipSourceMode(ZipSourceMode.MultipleFiles)
-                                            }
-                                        )
-                                    }
-                                }
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    stringResource(Res.string.dash_history_label),
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                                 FilePickerBox(
-                                    icon = Icons.Outlined.FolderZip,
-                                    label = when (viewModel.selectedZipFiles.size) {
-                                        0 -> "Select mydata~*.zip files…"
-                                        1 -> viewModel.selectedZipFiles[0].substringAfterLast('/').substringAfterLast('\\')
-                                        else -> "${viewModel.selectedZipFiles.size} ZIP files selected"
-                                    },
-                                    onClick = viewModel::pickMultipleZips,
-                                    isSelected = viewModel.selectedZipFiles.isNotEmpty(),
+                                    icon = Icons.Outlined.FileOpen,
+                                    label = viewModel.htmlFile ?: stringResource(Res.string.dash_history_placeholder),
+                                    onClick = viewModel::pickHtmlFile,
+                                    isSelected = viewModel.htmlFile != null,
                                     enabled = !viewModel.isRunning
                                 )
-                                if (viewModel.selectedZipFiles.size > 1) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-                                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                                    ) {
-                                        viewModel.selectedZipFiles.take(4).forEach { path ->
-                                            Text(
-                                                path.substringAfterLast('/').substringAfterLast('\\'),
-                                                fontSize = 10.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
-                                        if (viewModel.selectedZipFiles.size > 4) {
-                                            Text(
-                                                "+ ${viewModel.selectedZipFiles.size - 4} more",
-                                                fontSize = 10.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                            )
-                                        }
-                                    }
-                                }
                             }
                         }
-                    } else {
+
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
-                                stringResource(Res.string.dash_history_label),
+                                stringResource(Res.string.dash_output_label),
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             FilePickerBox(
-                                icon = Icons.Outlined.FileOpen,
-                                label = viewModel.htmlFile ?: stringResource(Res.string.dash_history_placeholder),
-                                onClick = viewModel::pickHtmlFile,
-                                isSelected = viewModel.htmlFile != null,
+                                icon = Icons.Outlined.FolderOpen,
+                                label = viewModel.downloadFolder ?: stringResource(Res.string.dash_output_placeholder),
+                                onClick = viewModel::pickOutputFolder,
+                                isSelected = viewModel.downloadFolder != null,
                                 enabled = !viewModel.isRunning
                             )
                         }
                     }
-
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            stringResource(Res.string.dash_output_label),
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        FilePickerBox(
-                            icon = Icons.Outlined.FolderOpen,
-                            label = viewModel.downloadFolder ?: stringResource(Res.string.dash_output_placeholder),
-                            onClick = viewModel::pickOutputFolder,
-                            isSelected = viewModel.downloadFolder != null,
-                            enabled = !viewModel.isRunning
-                        )
-                    }
                 }
-            }
 
-            // Pipeline options card
-            ControlCard {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth()
-                            .clip(RoundedCornerShape(6.dp))
-                            .clickable { pipelineExpanded = !pipelineExpanded },
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        SectionLabel(
-                            icon = Icons.Outlined.AccountTree,
-                            text = stringResource(Res.string.dash_pipeline_title)
-                        )
-                        Icon(
-                            if (pipelineExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                    AnimatedVisibility(visible = pipelineExpanded) {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            if (viewModel.importMode == ImportMode.Legacy) {
-                                PipelineItem(Icons.Outlined.CloudDownload, stringResource(Res.string.opt_download_memories), runDownload) { runDownload = it }
-                            }
-                            val isZipMode = viewModel.importMode != ImportMode.Legacy
-                            PipelineItem(
-                                icon = if (isZipMode) Icons.Outlined.CalendarMonth else Icons.Outlined.GpsFixed,
-                                label = if (isZipMode) stringResource(Res.string.opt_write_date_metadata) else stringResource(Res.string.opt_inject_gps),
-                                checked = runMetadata,
-                                onCheckedChange = { runMetadata = it }
+                // Pipeline options card
+                ControlCard {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { pipelineExpanded = !pipelineExpanded },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            SectionLabel(
+                                icon = Icons.Outlined.AccountTree,
+                                text = stringResource(Res.string.dash_pipeline_title)
                             )
-                            AnimatedVisibility(visible = isZipMode && runMetadata) {
-                                Box(modifier = Modifier.padding(start = 26.dp)) {
+                            Icon(
+                                if (pipelineExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        AnimatedVisibility(visible = pipelineExpanded) {
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                if (viewModel.importMode == ImportMode.Legacy) {
+                                    PipelineItem(Icons.Outlined.CloudDownload, stringResource(Res.string.opt_download_memories), runDownload) { runDownload = it }
+                                }
+                                val isZipMode = viewModel.importMode != ImportMode.Legacy
+                                PipelineItem(
+                                    icon = if (isZipMode) Icons.Outlined.CalendarMonth else Icons.Outlined.GpsFixed,
+                                    label = if (isZipMode) stringResource(Res.string.opt_write_date_metadata) else stringResource(Res.string.opt_inject_gps),
+                                    checked = runMetadata,
+                                    onCheckedChange = { runMetadata = it }
+                                )
+                                AnimatedVisibility(visible = isZipMode && runMetadata) {
                                     PipelineItem(
                                         Icons.Outlined.Info,
-                                        "Precise time + GPS matching (experimental, can be turned off)",
+                                        stringResource(Res.string.opt_precise_matching),
                                         experimentalMetadataMatching
                                     ) { experimentalMetadataMatching = it }
                                 }
-                            }
-                            PipelineItem(Icons.Outlined.Layers, stringResource(Res.string.opt_combine_overlays), runCombine) { runCombine = it }
-                            PipelineItem(Icons.Outlined.AutoDelete, stringResource(Res.string.opt_clean_duplicates), runDedupe) { runDedupe = it }
-                            // Dedupe deletes files — give it a preview mode.
-                            AnimatedVisibility(visible = runDedupe) {
-                                Box(modifier = Modifier.padding(start = 26.dp)) {
+                                PipelineItem(Icons.Outlined.Layers, stringResource(Res.string.opt_combine_overlays), runCombine) { runCombine = it }
+                                PipelineItem(Icons.Outlined.AutoDelete, stringResource(Res.string.opt_clean_duplicates), runDedupe) { runDedupe = it }
+                                // Dedupe deletes files — give it a preview mode.
+                                AnimatedVisibility(visible = runDedupe) {
                                     PipelineItem(
                                         Icons.Outlined.Visibility,
                                         stringResource(Res.string.opt_dedupe_dry_run),

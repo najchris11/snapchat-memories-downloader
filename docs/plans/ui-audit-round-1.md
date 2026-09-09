@@ -45,9 +45,11 @@ Also in this block, since it is the same three lines:
   dropping the experimental caveat: the matcher was verified at 99.7 % on a real 10,151-memory
   export, correctly omitting GPS on all 198 timestamp collisions rather than guessing. The toggle
   stays, so users can still turn it off. The README's experimental note needs the same edit.
-- `experimentalMetadataMatching` stays `true` when the user switches to Legacy mode; the row just
-  hides. Harmless today because `startSync` only consults it on the ZIP path, but the retained
-  state is invisible. Reset it when the import mode changes.
+- ~~`experimentalMetadataMatching` stays `true` when the user switches to Legacy mode; reset it when
+  the import mode changes.~~ **Dropped after checking the ViewModel.** The flag is consumed only
+  inside `runZipPipeline`, so it cannot affect a Legacy run, and it is never surfaced in Legacy mode.
+  Resetting it would discard a deliberate "off" choice whenever the user toggled modes and came
+  back — strictly worse than the harmless retention. No change.
 
 Deliberately **not** removing the toggle or the `experimentalMetadataMatching` parameter from
 `startSync` / the ViewModel — this is a wording change only.

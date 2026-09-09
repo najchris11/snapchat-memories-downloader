@@ -25,10 +25,13 @@
     <string name="dash_output_label">Output Folder</string>
     <string name="dash_output_placeholder">Select destination folder</string>
     <string name="browse_btn">Browse</string>
+    <string name="opt_mode_zip">ZIP Import</string>
+    <string name="opt_mode_legacy">Legacy (HTML/JSON)</string>
     <string name="dash_pipeline_title">Pipeline Options</string>
     <string name="opt_download_memories">Download Memories</string>
     <string name="opt_inject_gps">Write Metadata (GPS + Date)</string>
     <string name="opt_write_date_metadata">Write Date Metadata</string>
+    <string name="opt_precise_matching">Precise time + GPS matching</string>
     <string name="opt_combine_overlays">Merge Video Overlays</string>
     <string name="opt_clean_duplicates">Clean Duplicate Files</string>
     <string name="opt_dedupe_dry_run">Preview only (dry run — nothing deleted)</string>

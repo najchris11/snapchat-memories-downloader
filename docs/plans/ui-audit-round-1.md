@@ -1,10 +1,15 @@
 # UI Audit — Round 1
 
-Fixes for 11 of the 38 findings in the UI audit, on branch `fix/ui-audit-round-1` off `develop`.
+Fixes for 13 findings on branch `fix/ui-audit-round-1` off `develop`: 11 of the 38 in the UI audit,
+plus two found while working (items 12 and 13).
 
 Scope: the sub-option alignment bug, the import-mode reorder, the three blockers, and the quick wins.
 Deferred to a later round: the Typography migration (T1/T2, 86 `fontSize` literals), the bulk string
 extraction (S1), and the remaining cleanup items.
+
+Testing policy for this work and everything after it is in `AGENTS.md` / `CLAUDE.md`: a behavioural
+change lands with a test that fails without it, and the test is verified to fail by deliberately
+reintroducing the bug.
 
 Ordered so each item is independently testable and the risky one (N3) lands last.
 
@@ -275,6 +280,74 @@ preview dialog.
 
 ---
 
+## 12. Thumbnail cache was wired to nothing
+
+**Severity:** Fix · **Files:** `LibraryScreen.kt`
+
+`ThumbnailCache` is a 150-entry LRU in `MediaScanner.kt`, reached through
+`getCachedThumbnail()`. Its only caller was the `VideoPlayer` that was never invoked (item 10),
+so the cache had never run in the app at all. `MediaCard`, `InspectorItemDetail` and
+`MediaPreviewDialog` each called `loadThumbnail()` directly — meaning every grid tile re-read
+and re-decoded its thumbnail from disk on each recomposition, with no in-memory reuse across a
+10,000-item library.
+
+All three now go through `getCachedThumbnail()`. They also move from `Dispatchers.Default` to
+`ioDispatcher`: `loadThumbnail` shells out to ffmpeg for video frames and runs ImageIO decodes
+for stills, which are blocking calls that do not belong on the CPU-bound pool.
+
+**Tests:** `ThumbnailCacheTest` — six cases covering store/hit/miss, replace-in-place, clear,
+eviction at capacity, and the LRU property specifically (a read must move an entry to newest,
+or the cache degrades into FIFO and evicts tiles the user is actively looking at). None of
+this behaviour had ever executed before, let alone been tested.
+
+---
+
+## 13. `IS_DEBUG` flips on the Gradle task name
+
+**Severity:** Fix · **Files:** `composeApp/build.gradle.kts`
+
+Surfaced by a crash while running the app:
+
+```
+java.lang.NoClassDefFoundError: com/najdev/snapvault/DraggableAreaKt$DraggableArea$2$1$1
+  at com.najdev.snapvault.DraggableAreaKt$DraggableArea$2$1.invoke(DraggableArea.kt:31)
+```
+
+A synthetic lambda class was missing from `build/classes` while its enclosing class was
+present — the loaded outer class came from a different compilation than its inner classes.
+That is stale incremental-compilation output, not a source defect: `DraggableArea.kt` is
+untouched by this branch, and all three class files are present and consistent now.
+
+**Not reproducible on demand.** Six alternating `isDebug` flips did not drop the class, so
+the mechanism below is a contributing factor, not a proven proximate cause. Recorded honestly
+rather than asserted.
+
+What *is* verified is the design problem:
+
+```kotlin
+val isDebugBuild: Boolean =
+    (project.findProperty("isDebug") as? String)?.toBoolean()
+        ?: gradle.startParameter.taskNames.any { it == "run" || it.endsWith(":run") }
+```
+
+`IS_DEBUG` is generated into `AppBuildConfig.kt`, a **commonMain source file**, as a
+`const val` — so it is inlined at every use site, and changing it invalidates every file that
+reads it. Because the value is derived from *which Gradle task you invoked*,
+`:composeApp:run` produces `IS_DEBUG = true` while `compileKotlinDesktop` and `desktopTest`
+produce `false`. Alternating between running the app and running tests therefore rewrites a
+commonMain source and forces a broad recompile every single time — which is exactly the
+condition under which this class of staleness appears.
+
+**Immediate remedy:** `./gradlew clean`, then run.
+
+**Fix:** make `IS_DEBUG` a plain `val` rather than a `const val`, so a change recompiles only
+`AppBuildConfig.kt` instead of every consumer. Optionally drop the task-name inference and
+require `-PisDebug=true` explicitly, so `run` and `test` stop producing different builds.
+Worth doing regardless of whether it was the proximate cause of this crash: the 2,500-item
+debug import cap silently turning on because of how a task was named is its own hazard.
+
+---
+
 ## Not in this round
 
 Tracked in the audit, deliberately deferred:
@@ -289,6 +362,6 @@ Tracked in the audit, deliberately deferred:
 
 ## Sequencing
 
-Items 1 → 10 are independent and can land as separate commits in any order. Item 3 requires item 4.
-Item 11 lands last. Run `./gradlew :composeApp:compileKotlinDesktop` and the existing desktop test
+Items 1 → 10 plus 12 and 13 are independent and can land as separate commits in any order. Item 3
+requires item 4. Item 11 lands last. Run `./gradlew :composeApp:compileKotlinDesktop` and the existing desktop test
 suite after each; no UI tests exist yet, so verification is the manual check listed per item.

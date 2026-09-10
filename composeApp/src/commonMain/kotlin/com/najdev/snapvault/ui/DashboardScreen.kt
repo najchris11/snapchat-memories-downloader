@@ -43,6 +43,20 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import snapchat_memories_downloader.composeapp.generated.resources.*
 
+// Pipeline option defaults, named rather than inlined so they can be asserted. The N1
+// blocker was a combination of three of these — a destructive step enabled, its preview
+// off, and the whole card collapsed — and nothing would have caught a silent flip back.
+internal const val DEFAULT_RUN_DOWNLOAD = true
+internal const val DEFAULT_RUN_METADATA = true
+internal const val DEFAULT_PRECISE_MATCHING = true
+internal const val DEFAULT_RUN_COMBINE = true
+internal const val DEFAULT_RUN_DEDUPE = true
+
+// Deletion is an explicit opt-out: preview on, and the card open so the enabled steps are
+// visible before Start is pressed.
+internal const val DEFAULT_DRY_RUN = true
+internal const val DEFAULT_PIPELINE_EXPANDED = true
+
 @Composable
 fun DashboardScreen(
     viewModel: DashboardViewModel,
@@ -51,17 +65,14 @@ fun DashboardScreen(
     hasFFmpeg: Boolean = true,
 ) {
     // These are local UI preferences, not pipeline state
-    var runDownload by remember { mutableStateOf(true) }
-    var runMetadata by remember { mutableStateOf(true) }
-    var experimentalMetadataMatching by remember { mutableStateOf(true) }
-    var runCombine by remember { mutableStateOf(true) }
-    var runDedupe by remember { mutableStateOf(true) }
-    // Dedupe deletes files, so the destructive path is an explicit opt-out rather than an
-    // unseen default: preview is on, and the options card starts expanded so every enabled
-    // step is visible before Start.
-    var dryRun by remember { mutableStateOf(true) }
+    var runDownload by remember { mutableStateOf(DEFAULT_RUN_DOWNLOAD) }
+    var runMetadata by remember { mutableStateOf(DEFAULT_RUN_METADATA) }
+    var experimentalMetadataMatching by remember { mutableStateOf(DEFAULT_PRECISE_MATCHING) }
+    var runCombine by remember { mutableStateOf(DEFAULT_RUN_COMBINE) }
+    var runDedupe by remember { mutableStateOf(DEFAULT_RUN_DEDUPE) }
+    var dryRun by remember { mutableStateOf(DEFAULT_DRY_RUN) }
     var logsExpanded by remember { mutableStateOf(false) }
-    var pipelineExpanded by remember { mutableStateOf(true) }
+    var pipelineExpanded by remember { mutableStateOf(DEFAULT_PIPELINE_EXPANDED) }
     var logsCopied by remember { mutableStateOf(false) }
 
     @Suppress("DEPRECATION")

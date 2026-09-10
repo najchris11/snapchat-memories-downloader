@@ -39,10 +39,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.najdev.snapvault.getCachedThumbnail
 import com.najdev.snapvault.ioDispatcher
-import com.najdev.snapvault.loadThumbnail
 import com.najdev.snapvault.scanMediaFiles
 import com.najdev.snapvault.ui.theme.SnapVaultColors
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 import snapchat_memories_downloader.composeapp.generated.resources.*
@@ -325,7 +323,7 @@ private fun InspectorItemDetail(
 ) {
     val isVideo = item.type == "video"
     val thumbnail by produceState<ImageBitmap?>(null, item.id) {
-        value = withContext(Dispatchers.Default) { loadThumbnail(item.id) }
+        value = withContext(ioDispatcher) { getCachedThumbnail(item.id) }
     }
 
     Column(
@@ -627,7 +625,7 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
     val isVideo = item.type == "video"
     val thumbnail by produceState<ImageBitmap?>(null, item.id) {
         // Videos are rendered by VideoPlayer, which loads its own (cached) frame.
-        value = if (isVideo) null else withContext(Dispatchers.Default) { getCachedThumbnail(item.id) }
+        value = if (isVideo) null else withContext(ioDispatcher) { getCachedThumbnail(item.id) }
     }
 
     Dialog(
@@ -755,7 +753,7 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
 fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit = {}) {
     val isVideo = item.type == "video"
     val thumbnail by produceState<ImageBitmap?>(null, item.id) {
-        value = withContext(Dispatchers.Default) { loadThumbnail(item.id) }
+        value = withContext(ioDispatcher) { getCachedThumbnail(item.id) }
     }
 
     Card(

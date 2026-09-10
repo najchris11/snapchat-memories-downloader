@@ -58,6 +58,9 @@ internal const val DEFAULT_RUN_DEDUPE = true
 internal const val DEFAULT_DRY_RUN = true
 internal const val DEFAULT_PIPELINE_EXPANDED = true
 
+internal fun usesCompactDashboardLayout(windowSize: WindowSize): Boolean =
+    windowSize != WindowSize.Expanded
+
 // Option state lives in one holder rather than seven loose `var`s, so the controls, the
 // action row and the status panel can be separate composables that the two layouts compose
 // in a different order.
@@ -81,10 +84,9 @@ fun DashboardScreen(
 ) {
     val options = remember { PipelineOptions() }
 
-    if (windowSize == WindowSize.Compact) {
-        // One scrolling column. The side-by-side layout below hands the status panel
-        // 0.6 x (width - 72dp), well short of the ~270dp the four-circle stepper needs, so
-        // it clipped on every phone-width window.
+    if (usesCompactDashboardLayout(windowSize)) {
+        // One scrolling column. Compact cannot fit the two panels, and Medium retains the
+        // 220dp sidebar, leaving too little content width for the four-circle stepper.
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
             Column(
                 modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),

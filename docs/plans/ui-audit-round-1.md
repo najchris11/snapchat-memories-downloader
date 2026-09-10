@@ -281,6 +281,11 @@ and that the empty state offers a folder picker at every width. Verified by reve
 `showInspector` to `true`: exactly `compactDropsTheInspectorPanel` and
 `mediumDropsTheInspectorPanelToo` fail, and no others.
 
+Follow-up audit found that Dashboard still selected its two-column layout at Medium even though the
+plan called for the compact progress treatment there. `DashboardScreenTest.mediumUsesTheStackedDashboardLayout`
+now pins Medium to the stacked layout; it was observed failing against the original Compact-only
+condition before that condition was fixed.
+
 Two things fell out of the restructure that are worth recording:
 
 - `DashboardScreen` had to be split into `DashboardControls`, `DashboardActions` and

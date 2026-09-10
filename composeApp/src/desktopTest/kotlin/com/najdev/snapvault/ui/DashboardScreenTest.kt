@@ -10,9 +10,11 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.v2.runComposeUiTest
+import com.najdev.snapvault.WindowSize
 import com.najdev.snapvault.ui.theme.SnapVaultColors
 import com.najdev.snapvault.ui.theme.SnapVaultTheme
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 // The UI layer had no test coverage before this round, so every layout and state-default
@@ -20,6 +22,16 @@ import kotlin.test.assertTrue
 // destructive default, and a failure state that used to be invisible.
 @OptIn(ExperimentalTestApi::class)
 class DashboardScreenTest {
+
+    // Regression for N3. Medium keeps the 220dp sidebar, leaving too little room for the
+    // Dashboard's two-column layout and four-circle stepper. The original responsive change
+    // stacked only Compact, despite the audit requiring the compact status layout at Medium.
+    @Test
+    fun mediumUsesTheStackedDashboardLayout() {
+        assertTrue(usesCompactDashboardLayout(WindowSize.Compact))
+        assertTrue(usesCompactDashboardLayout(WindowSize.Medium))
+        assertFalse(usesCompactDashboardLayout(WindowSize.Expanded))
+    }
 
     // Regression for N1. pipelineExpanded defaulted false while runDedupe was true and
     // dryRun false, so pressing Start Download could delete files the user had never been

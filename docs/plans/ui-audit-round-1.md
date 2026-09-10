@@ -369,6 +369,13 @@ debug import cap silently turning on because of how a task was named is its own 
 
 ---
 
+## Rounds 2 and 3
+
+Everything else from the audit is planned in `ui-audit-round-2.md` (the design system:
+typography, contrast, one accent, real controls, semantics, keyboard, detekt) and
+`ui-audit-round-3.md` (strings and localisation, information architecture, and the three
+feature builds — sort, reveal-in-file-manager, favourites).
+
 ## Not in this round
 
 Tracked in the audit, deliberately deferred:

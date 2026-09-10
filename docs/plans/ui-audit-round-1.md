@@ -261,9 +261,9 @@ desktop screens, which are built from fixed widths and horizontal splits with no
 - `WindowSize.Medium` is computed and discarded — `App.kt:86` only branches on `== Compact`, so
   600–840 dp gets the full desktop layout including both fixed panels.
 
-**Fix:** thread an explicit `compact: Boolean` into both screens — `PhoneRoot` passes `true`, `App`'s
-expanded branch passes `false`. Explicit beats a `CompositionLocal` here: two call sites, and it
-stays visible in the signature.
+**Fix:** thread `windowSize: WindowSize` into both screens rather than a `compact: Boolean` — the
+boolean cannot express Medium, which needs the sidebar but not a second fixed panel. Explicit
+parameter beats a `CompositionLocal` here: two call sites, and it stays visible in the signature.
 
 - `LibraryScreen(compact = true)`: drop the inspector column entirely; tapping a card opens the
   existing `MediaPreviewDialog`, which already carries the same metadata. Make the stat-chip row
@@ -274,9 +274,25 @@ stays visible in the signature.
 - Decide `Medium` deliberately rather than falling through: sidebar plus Library grid, no inspector
   column. One extra branch in `App.kt`.
 
-**Verify:** resize from 1280 dp down to 380 dp — no horizontal overflow, no clipped stepper, Library
-grid always shows at least two columns, and the inspector's information stays reachable via the
-preview dialog.
+**Tests:** `WindowSizeClassTest` pins the bucket boundaries (599/600 and 839/840) and asserts
+Medium is distinct from both neighbours, so it cannot silently collapse into Expanded again.
+`LibraryScreenTest` asserts the inspector is present at Expanded and absent at Medium and Compact,
+and that the empty state offers a folder picker at every width. Verified by reverting
+`showInspector` to `true`: exactly `compactDropsTheInspectorPanel` and
+`mediumDropsTheInspectorPanelToo` fail, and no others.
+
+Two things fell out of the restructure that are worth recording:
+
+- `DashboardScreen` had to be split into `DashboardControls`, `DashboardActions` and
+  `DashboardStatus`, because the two layouts compose the same three pieces in a different order.
+  Option state moved into a `PipelineOptions` holder rather than passing seven `var`s down.
+- The status panel contained two `Spacer(Modifier.weight(1f))`. A weight spacer needs a bounded
+  height, and in the compact layout that panel sits inside a `verticalScroll` where height is
+  infinite — so both are now conditional. This would have been a runtime failure, not a cosmetic
+  one.
+
+**Verify by eye:** resize from 1280 dp down to 380 dp — no horizontal overflow, no clipped stepper,
+Library grid always at least two columns.
 
 ---
 

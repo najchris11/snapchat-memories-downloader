@@ -38,6 +38,7 @@
     <string name="dash_step_syncing">Downloading</string>
     <string name="dash_step_processing">Processing</string>
     <string name="dash_step_complete">Complete</string>
+    <string name="dash_step_progress">Step %1$d of %2$d · %3$s</string>
     <string name="btn_start_sync">Start Download</string>
     <string name="btn_stop">Stop</string>
     <string name="status_idle">Ready to download</string>

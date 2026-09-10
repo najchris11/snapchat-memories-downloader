@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.LayoutOverride
 import com.najdev.snapvault.Screen
 import com.najdev.snapvault.ThemeMode
+import com.najdev.snapvault.WindowSize
 import com.najdev.snapvault.ui.theme.SnapVaultColors
 import com.najdev.snapvault.viewmodel.DashboardViewModel
 
@@ -84,10 +85,12 @@ fun PhoneRoot(
                     onNavigateToSettings = { currentScreen = Screen.Settings },
                     hasExifTool = hasExifTool,
                     hasFFmpeg = hasFFmpeg,
+                    windowSize = WindowSize.Compact,
                 )
                 Screen.Library -> LibraryScreen(
                     downloadFolder = dashboardViewModel.downloadFolder,
                     onOpenFolder = dashboardViewModel::pickOutputFolder,
+                    windowSize = WindowSize.Compact,
                 )
                 Screen.Settings -> SettingsScreen(
                     hasExifTool = hasExifTool,

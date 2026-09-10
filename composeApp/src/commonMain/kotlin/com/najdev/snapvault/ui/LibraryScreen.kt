@@ -9,6 +9,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -37,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.najdev.snapvault.WindowSize
 import com.najdev.snapvault.getCachedThumbnail
 import com.najdev.snapvault.ioDispatcher
 import com.najdev.snapvault.scanMediaFiles
@@ -60,8 +62,16 @@ data class LibraryItem(
 @Composable
 fun LibraryScreen(
     downloadFolder: String?,
-    onOpenFolder: () -> Unit
+    onOpenFolder: () -> Unit,
+    windowSize: WindowSize = WindowSize.Expanded,
 ) {
+    // The inspector is a hard 280dp sibling column. Alongside a 160dp-minimum adaptive grid
+    // and 24dp padding it left roughly 72dp for the grid on a 400dp window — less than half
+    // of one cell — so it is Expanded-only. Everything it shows for a selected item is also
+    // in MediaPreviewDialog, which a tap already opens.
+    val showInspector = windowSize == WindowSize.Expanded
+    val compact = windowSize == WindowSize.Compact
+
     var refreshKey by remember { mutableStateOf(0) }
     // Off the UI thread: scanning stats every file in the folder, which visibly hitches
     // composition for large libraries.
@@ -93,7 +103,7 @@ fun LibraryScreen(
     Row(modifier = Modifier.fillMaxSize()) {
         // ── Main content ─────────────────────────────────────────────────────
         Column(
-            modifier = Modifier.weight(1f).fillMaxHeight().padding(24.dp),
+            modifier = Modifier.weight(1f).fillMaxHeight().padding(if (compact) 16.dp else 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Stats row
@@ -102,7 +112,12 @@ fun LibraryScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Scrolls rather than overflowing: four chips need more width than a phone
+                // has, and the row sits next to the refresh button.
+                Row(
+                    modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     StatChip(
                         icon = Icons.Outlined.PhotoLibrary,
                         label = "${items.size} Memories",
@@ -123,6 +138,15 @@ fun LibraryScreen(
                         label = "${items.count { it.hasGps }} with GPS",
                         tint = SnapVaultColors.success
                     )
+                    // Total size otherwise only appears in the inspector, so without this it
+                    // would simply vanish on narrower windows.
+                    if (!showInspector && items.isNotEmpty()) {
+                        StatChip(
+                            icon = Icons.Outlined.Storage,
+                            label = formatBytes(items.sumOf { it.fileSizeBytes }),
+                            tint = SnapVaultColors.electricPurple
+                        )
+                    }
                 }
                 if (downloadFolder != null) {
                     Box(
@@ -262,7 +286,7 @@ fun LibraryScreen(
                 }
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 160.dp),
+                    columns = GridCells.Adaptive(minSize = if (compact) 130.dp else 160.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     modifier = Modifier.weight(1f)
@@ -288,27 +312,29 @@ fun LibraryScreen(
             )
         }
 
-        // ── Inspector panel ──────────────────────────────────────────────────
-        Surface(
-            modifier = Modifier.width(280.dp).fillMaxHeight(),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            shape = RoundedCornerShape(0.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            AnimatedContent(
-                targetState = selectedItem,
-                transitionSpec = { fadeIn() togetherWith fadeOut() },
-                label = "inspector"
-            ) { selected ->
-                if (selected != null) {
-                    InspectorItemDetail(
-                        item = selected,
-                        onPreview = { showPreview = true },
-                        onClearSelection = { selectedItem = null }
-                    )
-                } else {
-                    InspectorGlobalStats(items = items)
+        // ── Inspector panel (Expanded only) ──────────────────────────────────
+        if (showInspector) {
+            Surface(
+                modifier = Modifier.width(280.dp).fillMaxHeight(),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                shape = RoundedCornerShape(0.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                AnimatedContent(
+                    targetState = selectedItem,
+                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    label = "inspector"
+                ) { selected ->
+                    if (selected != null) {
+                        InspectorItemDetail(
+                            item = selected,
+                            onPreview = { showPreview = true },
+                            onClearSelection = { selectedItem = null }
+                        )
+                    } else {
+                        InspectorGlobalStats(items = items)
+                    }
                 }
             }
         }

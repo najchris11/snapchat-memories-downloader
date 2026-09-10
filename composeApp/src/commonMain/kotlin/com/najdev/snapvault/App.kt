@@ -83,7 +83,11 @@ fun App(
                 )
 
                 BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                    if (getActiveWindowSize(maxWidth, layoutOverride) == WindowSize.Compact) {
+                    // Medium is a real bucket, not a synonym for Expanded: it keeps the
+                    // sidebar but the screens drop their fixed-width secondary panels, since
+                    // 600–840dp cannot afford a 220dp sidebar and a 280dp inspector at once.
+                    val windowSize = getActiveWindowSize(maxWidth, layoutOverride)
+                    if (windowSize == WindowSize.Compact) {
                         PhoneRoot(
                             dashboardViewModel = dashboardViewModel,
                             hasExifTool = hasExifTool,
@@ -110,10 +114,12 @@ fun App(
                                         onNavigateToSettings = { currentScreen = Screen.Settings },
                                         hasExifTool = hasExifTool,
                                         hasFFmpeg = hasFFmpeg,
+                                        windowSize = windowSize,
                                     )
                                     Screen.Library -> LibraryScreen(
                                         downloadFolder = dashboardViewModel.downloadFolder,
                                         onOpenFolder = dashboardViewModel::pickOutputFolder,
+                                        windowSize = windowSize,
                                     )
                                     Screen.Settings -> SettingsScreen(
                                         hasExifTool = hasExifTool,

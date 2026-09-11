@@ -39,6 +39,15 @@
     <string name="dash_step_processing">Processing</string>
     <string name="dash_step_complete">Complete</string>
     <string name="dash_step_progress">Step %1$d of %2$d · %3$s</string>
+    <!-- Spoken state of one step. The four-circle stepper conveys this with fill and border
+         only, so it is the state description rather than visible text; the compact stepper
+         carries the same sentence so the two layouts cannot drift apart. -->
+    <string name="dash_step_state">Step %1$d of %2$d, %3$s</string>
+    <string name="dash_step_state_pending">not started</string>
+    <string name="dash_step_state_active">in progress</string>
+    <string name="dash_step_state_complete">complete</string>
+    <string name="dash_step_state_warnings">complete with warnings</string>
+    <string name="dash_progress_ring">Overall progress</string>
     <string name="btn_start_sync">Start Download</string>
     <string name="btn_stop">Stop</string>
     <string name="status_idle">Ready to download</string>

@@ -25,6 +25,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
@@ -62,6 +65,10 @@ internal const val DEFAULT_PIPELINE_EXPANDED = true
 
 internal fun usesCompactDashboardLayout(windowSize: WindowSize): Boolean =
     windowSize != WindowSize.Expanded
+
+// Both steppers count to this. It was a literal 4 in the compact layout and four hand-written
+// call sites in the expanded one, which is how they were free to disagree.
+internal const val DASHBOARD_STEP_COUNT = 4
 
 // Option state lives in one holder rather than seven loose `var`s, so the controls, the
 // action row and the status panel can be separate composables that the two layouts compose
@@ -489,34 +496,10 @@ private fun DashboardStatus(
     if (compact) Spacer(Modifier.height(20.dp)) else Spacer(Modifier.weight(1f))
 
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-        Box(modifier = Modifier.size(110.dp), contentAlignment = Alignment.Center) {
-            if (viewModel.indeterminate) {
-                // Real work is happening but has no per-item signal to report
-                // (post-combine date fallback, dedupe scanning) — an animated
-                // indeterminate ring, not a percentage that would otherwise sit
-                // at a misleadingly precise 0%.
-                CircularProgressIndicator(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    strokeWidth = 9.dp
-                )
-            } else {
-                CircularProgressIndicator(
-                    progress = { viewModel.progress.coerceIn(0f, 1f) },
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    strokeWidth = 9.dp
-                )
-                Text(
-                    "${(viewModel.progress * 100).toInt()}%",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-        }
+        PipelineProgressRing(
+            progress = viewModel.progress,
+            indeterminate = viewModel.indeterminate,
+        )
     }
 
     Spacer(Modifier.height(14.dp))
@@ -887,6 +870,70 @@ fun TerminalLogLine(log: String) {
     }
 }
 
+/**
+ * The overall-progress ring, extracted from the status panel so its semantics can be
+ * asserted. Material's indicators publish a [androidx.compose.ui.semantics.ProgressBarRangeInfo]
+ * of their own; what they cannot supply is what the bar is measuring, so the label is set here.
+ */
+@Composable
+internal fun PipelineProgressRing(
+    progress: Float,
+    indeterminate: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val label = stringResource(Res.string.dash_progress_ring)
+    Box(modifier = modifier.size(110.dp), contentAlignment = Alignment.Center) {
+        if (indeterminate) {
+            // Real work is happening but has no per-item signal to report (post-combine date
+            // fallback, dedupe scanning) — an animated indeterminate ring, not a percentage
+            // that would otherwise sit at a misleadingly precise 0%.
+            CircularProgressIndicator(
+                modifier = Modifier.fillMaxSize().semantics { contentDescription = label },
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                strokeWidth = 9.dp
+            )
+        } else {
+            CircularProgressIndicator(
+                progress = { progress.coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxSize().semantics { contentDescription = label },
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                strokeWidth = 9.dp
+            )
+            Text(
+                "${(progress * 100).toInt()}%",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+/**
+ * The sentence a screen reader gets for one step — "Step 2 of 4, in progress".
+ *
+ * Shared by both steppers so they cannot describe the same state differently. The expanded
+ * stepper draws this state as fill and border and nothing else, which is why it needs a state
+ * description at all.
+ */
+@Composable
+internal fun stepStateDescription(
+    step: Int,
+    active: Boolean,
+    complete: Boolean,
+    warning: Boolean = false,
+): String {
+    val status = when {
+        complete && warning -> stringResource(Res.string.dash_step_state_warnings)
+        complete -> stringResource(Res.string.dash_step_state_complete)
+        active -> stringResource(Res.string.dash_step_state_active)
+        else -> stringResource(Res.string.dash_step_state_pending)
+    }
+    return stringResource(Res.string.dash_step_state, step, DASHBOARD_STEP_COUNT, status)
+}
+
 @Composable
 fun StepItem(
     step: Int,
@@ -896,6 +943,7 @@ fun StepItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     warning: Boolean = false,
 ) {
+    val state = stepStateDescription(step, active, complete, warning)
     // A run can reach the terminal step while reporting failures (BUG-15/BUG-01-class
     // issues) — that must not render identically to a clean success.
     val accentColor = if (complete && warning) SnapVaultColors.warning else MaterialTheme.colorScheme.primary
@@ -903,6 +951,9 @@ fun StepItem(
     // the amber warning state and only marginal on the violet.
     val onAccentColor = if (complete && warning) SnapVaultColors.onWarning else MaterialTheme.colorScheme.onPrimary
     Column(
+        // Merged so the circle and the label read as one item rather than a shape followed
+        // by a word — the number, icon and fill carry no text of their own.
+        modifier = Modifier.semantics(mergeDescendants = true) { stateDescription = state },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
@@ -935,7 +986,7 @@ fun StepItem(
  * reported failures — as text plus dots, in a row that cannot squash.
  */
 @Composable
-private fun CompactStepper(currentStep: Int, hasWarnings: Boolean) {
+internal fun CompactStepper(currentStep: Int, hasWarnings: Boolean) {
     val labels = listOf(
         stringResource(Res.string.dash_step_setup),
         stringResource(Res.string.dash_step_syncing),
@@ -949,8 +1000,19 @@ private fun CompactStepper(currentStep: Int, hasWarnings: Boolean) {
         MaterialTheme.colorScheme.primary
     }
 
+    // Same state, same sentence as the expanded stepper — the dots are decoration and carry
+    // no semantics of their own.
+    val state = stepStateDescription(
+        step = index + 1,
+        active = currentStep == index,
+        complete = currentStep > index,
+        warning = hasWarnings,
+    )
+
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) { stateDescription = state },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -970,7 +1032,7 @@ private fun CompactStepper(currentStep: Int, hasWarnings: Boolean) {
             }
         }
         Text(
-            text = stringResource(Res.string.dash_step_progress, index + 1, labels.size, labels[index]),
+            text = stringResource(Res.string.dash_step_progress, index + 1, DASHBOARD_STEP_COUNT, labels[index]),
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface

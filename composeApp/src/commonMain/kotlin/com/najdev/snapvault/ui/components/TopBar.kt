@@ -123,7 +123,7 @@ private fun DebugBadge() {
             .background(SnapVaultColors.warning.copy(alpha = 0.15f))
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
-        Text("DEBUG", style = MaterialTheme.typography.labelSmall, color = SnapVaultColors.warning, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+        Text(stringResource(Res.string.badge_debug), style = MaterialTheme.typography.labelSmall, color = SnapVaultColors.warning, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
     }
 }
 

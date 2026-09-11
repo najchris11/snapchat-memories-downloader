@@ -152,6 +152,11 @@ fun LibraryScreen(
     // or past the end. Dropping it is the only honest answer.
     LaunchedEffect(filteredItems) { selectedIndex = LIBRARY_NO_SELECTION }
 
+    // Counted once rather than rescanned inside each chip's label.
+    val photoCount = items.count { it.type == "photo" }
+    val videoCount = items.count { it.type == "video" }
+    val gpsCount = items.count { it.hasGps }
+
     Row(modifier = Modifier.fillMaxSize().focusSearchOnSlash(searchFocus) { searchFocused }) {
         // ── Main content ─────────────────────────────────────────────────────
         Column(
@@ -172,22 +177,22 @@ fun LibraryScreen(
                 ) {
                     StatChip(
                         icon = Icons.Outlined.PhotoLibrary,
-                        label = "${items.size} Memories",
+                        label = pluralStringResource(Res.plurals.lib_memory_count, items.size, items.size),
                         tint = MaterialTheme.colorScheme.primary
                     )
                     StatChip(
                         icon = Icons.Outlined.Image,
-                        label = "${items.count { it.type == "photo" }} Photos",
+                        label = photoCount.let { pluralStringResource(Res.plurals.lib_photo_count, it, it) },
                         tint = MaterialTheme.colorScheme.primary
                     )
                     StatChip(
                         icon = Icons.Outlined.Videocam,
-                        label = "${items.count { it.type == "video" }} Videos",
+                        label = videoCount.let { pluralStringResource(Res.plurals.lib_video_count, it, it) },
                         tint = SnapVaultColors.info
                     )
                     StatChip(
                         icon = Icons.Outlined.GpsFixed,
-                        label = "${items.count { it.hasGps }} with GPS",
+                        label = gpsCount.let { pluralStringResource(Res.plurals.lib_gps_chip_count, it, it) },
                         tint = SnapVaultColors.success
                     )
                     // Total size otherwise only appears in the inspector, so without this it
@@ -278,7 +283,7 @@ fun LibraryScreen(
                         if (downloadFolder == null) {
                             TextButton(onClick = onOpenFolder) {
                                 Text(
-                                    "Select Download Folder",
+                                    stringResource(Res.string.lib_select_folder),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.SemiBold
@@ -399,7 +404,7 @@ private fun InspectorItemDetail(
             ) {
                 Icon(
                     Icons.Default.Close,
-                    "Clear selection",
+                    stringResource(Res.string.lib_clear_selection),
                     tint = MediaColors.onMedia,
                     modifier = Modifier.size(16.dp)
                 )
@@ -449,22 +454,22 @@ private fun InspectorItemDetail(
             // Metadata rows
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 InspectorDetailRow(
-                    label = "SIZE",
-                    value = if (item.fileSizeBytes > 0) formatBytes(item.fileSizeBytes) else "—",
+                    label = stringResource(Res.string.lib_detail_size),
+                    value = if (item.fileSizeBytes > 0) formatBytes(item.fileSizeBytes) else EMPTY_STAT,
                     valueColor = MaterialTheme.colorScheme.primary
                 )
                 InspectorDetailRow(
-                    label = "GPS",
-                    value = if (item.hasGps) "Tagged" else "No data",
+                    label = stringResource(Res.string.lib_detail_gps),
+                    value = stringResource(if (item.hasGps) Res.string.lib_gps_tagged else Res.string.lib_gps_none),
                     valueColor = if (item.hasGps) SnapVaultColors.success else MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 InspectorDetailRow(
-                    label = "OVERLAY",
-                    value = if (item.hasOverlay) "Combined" else "None",
+                    label = stringResource(Res.string.lib_detail_overlay),
+                    value = stringResource(if (item.hasOverlay) Res.string.lib_overlay_combined else Res.string.lib_overlay_none),
                     valueColor = if (item.hasOverlay) SnapVaultColors.info else MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 item.duration?.let {
-                    InspectorDetailRow(label = "DURATION", value = it, valueColor = MaterialTheme.colorScheme.onSurface)
+                    InspectorDetailRow(label = stringResource(Res.string.lib_detail_duration), value = it, valueColor = MaterialTheme.colorScheme.onSurface)
                 }
             }
 
@@ -773,7 +778,7 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(Icons.Outlined.GpsFixed, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(11.dp))
-                                    Text("GPS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                    Text(stringResource(Res.string.lib_detail_gps), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                                 }
                             }
                             if (item.hasOverlay) {
@@ -786,7 +791,7 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(Icons.Outlined.Layers, null, tint = SnapVaultColors.info, modifier = Modifier.size(11.dp))
-                                    Text("OVERLAY", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = SnapVaultColors.info)
+                                    Text(stringResource(Res.string.lib_detail_overlay), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = SnapVaultColors.info)
                                 }
                             }
                         }
@@ -926,7 +931,7 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                         fontFamily = FontFamily.Monospace
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        if (item.hasGps) Icon(Icons.Outlined.GpsFixed, "GPS", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(11.dp))
+                        if (item.hasGps) Icon(Icons.Outlined.GpsFixed, stringResource(Res.string.lib_detail_gps), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(11.dp))
                         if (item.hasOverlay) Icon(Icons.Outlined.Layers, "Overlay", tint = SnapVaultColors.info, modifier = Modifier.size(11.dp))
                     }
                 }

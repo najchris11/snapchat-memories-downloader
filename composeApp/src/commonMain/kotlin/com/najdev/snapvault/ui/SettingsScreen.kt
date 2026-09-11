@@ -58,7 +58,7 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onBackground
             )
             Text(
-                text = "Manage system dependencies and utility preferences.",
+                text = stringResource(Res.string.set_subtitle),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -87,7 +87,7 @@ fun SettingsScreen(
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                         Text(stringResource(Res.string.set_theme_label), style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            "Choose between light, dark, or system default theme.",
+                            stringResource(Res.string.set_theme_description),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -100,11 +100,7 @@ fun SettingsScreen(
                     ) {
                         ThemeMode.values().forEach { mode ->
                             val active = themeMode == mode
-                            val label = when (mode) {
-                                ThemeMode.SYSTEM -> "System"
-                                ThemeMode.LIGHT -> "Light"
-                                ThemeMode.DARK -> "Dark"
-                            }
+                            val label = mode.label()
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(5.dp))
@@ -143,9 +139,9 @@ fun SettingsScreen(
                         modifier = Modifier.size(16.dp)
                     )
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        Text("Layout", style = MaterialTheme.typography.bodyMedium)
+                        Text(stringResource(Res.string.set_layout_label), style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            "Auto switches by window width; Compact forces the phone layout.",
+                            stringResource(Res.string.set_layout_description),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -172,7 +168,7 @@ fun SettingsScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = option.name,
+                                    text = option.label(),
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
                                     color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
@@ -199,14 +195,14 @@ fun SettingsScreen(
                 ) {
                     DependencyItem(
                         name = "ExifTool",
-                        description = "GPS metadata injection",
+                        description = stringResource(Res.string.set_dep_exiftool_description),
                         status = if (hasExifTool) DependencyStatus.READY else DependencyStatus.MISSING,
                         icon = Icons.Outlined.GpsFixed,
                         modifier = Modifier.weight(1f)
                     )
                     DependencyItem(
                         name = "FFmpeg",
-                        description = "Video overlay processing",
+                        description = stringResource(Res.string.set_dep_ffmpeg_description),
                         status = if (hasFFmpeg) DependencyStatus.READY else DependencyStatus.MISSING,
                         icon = Icons.Outlined.Videocam,
                         modifier = Modifier.weight(1f)
@@ -298,9 +294,9 @@ fun SettingsScreen(
                         modifier = Modifier.size(16.dp)
                     )
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        Text("Output Path", style = MaterialTheme.typography.bodyMedium)
+                        Text(stringResource(Res.string.set_output_path_label), style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            downloadFolder ?: "Not set",
+                            downloadFolder ?: stringResource(Res.string.set_output_path_unset),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -311,7 +307,7 @@ fun SettingsScreen(
                         onClick = onEditOutputPath,
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        Text("Edit", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(Res.string.set_output_path_edit), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -332,7 +328,7 @@ fun SettingsScreen(
                 modifier = Modifier.size(13.dp)
             )
             Text(
-                "SnapVault ${AppBuildConfig.VERSION} — GPL-3.0 License",
+                stringResource(Res.string.set_licence_footer, AppBuildConfig.VERSION),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

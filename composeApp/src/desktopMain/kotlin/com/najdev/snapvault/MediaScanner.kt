@@ -11,6 +11,7 @@ import org.jetbrains.skia.Image as SkiaImage
 import java.io.File
 import java.time.LocalDate
 import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import java.text.SimpleDateFormat
 import java.util.*
 import java.awt.Image
@@ -169,11 +170,15 @@ actual fun loadFullImage(path: String): ImageBitmap? {
     }.getOrNull()
 }
 
-private fun formatFileDate(millis: Long): String =
-    SimpleDateFormat("MMM dd, yyyy", Locale.US)
+// Both date paths follow the user's locale. They used to reach English by two different
+// routes — this one pinned Locale.US outright, and formatCaptureDate below took the first
+// three letters of a Java enum constant — so every date in the Library was English whatever
+// the system language was.
+private fun formatFileDate(millis: Long, locale: Locale = Locale.getDefault()): String =
+    SimpleDateFormat(DISPLAY_DATE_PATTERN, locale)
         .apply { timeZone = TimeZone.getDefault() }
         .format(Date(millis))
-        .uppercase()
+        .uppercase(locale)
 
 private val SNAPVAULT_FILE_DATE = Regex("""^(\d{4})-(\d{2})-(\d{2})_""")
 
@@ -184,7 +189,10 @@ private fun captureDateFromFileName(name: String): LocalDate? {
     return runCatching { LocalDate.of(year.toInt(), month.toInt(), day.toInt()) }.getOrNull()
 }
 
+private const val DISPLAY_DATE_PATTERN = "MMM dd, yyyy"
+
 // Format the parsed calendar date directly. Converting midnight UTC to a local Date would
-// make west-of-UTC users see the previous day.
-private fun formatCaptureDate(date: LocalDate): String =
-    "${date.month.name.take(3)} ${date.dayOfMonth.toString().padStart(2, '0')}, ${date.year}"
+// make west-of-UTC users see the previous day — so this stays on LocalDate and only the
+// month name comes from the locale.
+private fun formatCaptureDate(date: LocalDate, locale: Locale = Locale.getDefault()): String =
+    date.format(DateTimeFormatter.ofPattern(DISPLAY_DATE_PATTERN, locale)).uppercase(locale)

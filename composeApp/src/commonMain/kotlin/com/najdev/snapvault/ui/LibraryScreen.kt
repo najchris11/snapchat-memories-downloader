@@ -9,6 +9,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.horizontalScroll
@@ -17,7 +18,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -28,6 +30,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Color
@@ -87,8 +97,14 @@ fun LibraryScreen(
 
     var selectedFilter by remember { mutableStateOf("All") }
     var searchQuery by remember { mutableStateOf("") }
-    var selectedItem by remember { mutableStateOf<LibraryItem?>(null) }
+    // An index rather than the item itself: the keyboard moves the selection by position,
+    // and "the item after this one" is not a question a LibraryItem can answer.
+    var selectedIndex by remember { mutableStateOf(LIBRARY_NO_SELECTION) }
     var showPreview by remember { mutableStateOf(false) }
+
+    val gridFocus = remember { FocusRequester() }
+    val searchFocus = remember { FocusRequester() }
+    var searchFocused by remember { mutableStateOf(false) }
 
     val filteredItems = remember(items, selectedFilter, searchQuery) {
         items
@@ -103,8 +119,13 @@ fun LibraryScreen(
                 searchQuery.isBlank() || item.title.contains(searchQuery, ignoreCase = true)
             }
     }
+    val selectedItem = filteredItems.getOrNull(selectedIndex)
 
-    Row(modifier = Modifier.fillMaxSize()) {
+    // Filtering re-indexes everything, so a held index would point at a different memory —
+    // or past the end. Dropping it is the only honest answer.
+    LaunchedEffect(filteredItems) { selectedIndex = LIBRARY_NO_SELECTION }
+
+    Row(modifier = Modifier.fillMaxSize().focusSearchOnSlash(searchFocus) { searchFocused }) {
         // ── Main content ─────────────────────────────────────────────────────
         Column(
             modifier = Modifier.weight(1f).fillMaxHeight().padding(if (compact) 16.dp else 24.dp),
@@ -182,6 +203,8 @@ fun LibraryScreen(
                     LibrarySearchField(
                         query = searchQuery,
                         onQueryChange = { searchQuery = it },
+                        focusRequester = searchFocus,
+                        onFocusChanged = { searchFocused = it },
                         modifier = Modifier.width(200.dp),
                     )
                 }
@@ -198,6 +221,8 @@ fun LibraryScreen(
                     LibrarySearchField(
                         query = searchQuery,
                         onQueryChange = { searchQuery = it },
+                        focusRequester = searchFocus,
+                        onFocusChanged = { searchFocused = it },
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -236,23 +261,15 @@ fun LibraryScreen(
                     }
                 }
             } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = if (compact) 130.dp else 160.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    items(filteredItems) { item ->
-                        MediaCard(
-                            item = item,
-                            selected = item == selectedItem,
-                            onClick = {
-                                selectedItem = item
-                                showPreview = true
-                            }
-                        )
-                    }
-                }
+                LibraryGrid(
+                    items = filteredItems,
+                    selectedIndex = selectedIndex,
+                    onSelect = { selectedIndex = it },
+                    onOpen = { selectedIndex = it; showPreview = true },
+                    compact = compact,
+                    focusRequester = gridFocus,
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
 
@@ -281,7 +298,7 @@ fun LibraryScreen(
                         InspectorItemDetail(
                             item = selected,
                             onPreview = { showPreview = true },
-                            onClearSelection = { selectedItem = null }
+                            onClearSelection = { selectedIndex = LIBRARY_NO_SELECTION }
                         )
                     } else {
                         InspectorGlobalStats(items = items)
@@ -605,12 +622,34 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
         value = if (isVideo) null else withContext(ioDispatcher) { getCachedThumbnail(item.id) }
     }
 
+    // The dialog covers the whole window, so Escape has to work: without it the only exits
+    // are a click on the scrim or on the close button in the corner.
+    //
+    // The scrim takes focus on open, and that is load-bearing rather than tidiness: key
+    // events are routed along the focus path, so with nothing in the dialog focused the
+    // handler below never fires at all. Removing the focusable was tried; the test caught it.
+    val dismissFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { dismissFocus.requestFocus() }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Box(
-            modifier = Modifier.fillMaxSize().background(MediaColors.scrimDialog).clickable { onDismiss() },
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MediaColors.scrimDialog)
+                .clickable { onDismiss() }
+                .focusRequester(dismissFocus)
+                .focusable()
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
+                        onDismiss()
+                        true
+                    } else {
+                        false
+                    }
+                },
             contentAlignment = Alignment.Center
         ) {
             Surface(
@@ -870,6 +909,72 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
     }
 }
 
+/**
+ * The media grid, extracted so its keyboard handling has somewhere to live — and somewhere to
+ * be tested, which inline in [LibraryScreen] it did not, since reaching it needed a real
+ * folder on disk.
+ */
+@Composable
+internal fun LibraryGrid(
+    items: List<LibraryItem>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    onOpen: (Int) -> Unit,
+    compact: Boolean,
+    focusRequester: FocusRequester,
+    modifier: Modifier = Modifier,
+) {
+    val gridState = rememberLazyGridState()
+
+    // The grid is Adaptive, so the column count only exists after layout. Items on one row
+    // share a y offset, and counting them is the only way to ask what it came out as.
+    val columns by remember(gridState) {
+        derivedStateOf {
+            val visible = gridState.layoutInfo.visibleItemsInfo
+            val topRow = visible.firstOrNull()?.offset?.y ?: return@derivedStateOf 1
+            visible.count { it.offset.y == topRow }.coerceAtLeast(1)
+        }
+    }
+
+    // Walking the selection past the visible rows has to bring it back on screen, or the
+    // keyboard moves something the user cannot see.
+    LaunchedEffect(selectedIndex) {
+        if (selectedIndex >= 0 && gridState.layoutInfo.visibleItemsInfo.none { it.index == selectedIndex }) {
+            gridState.animateScrollToItem(selectedIndex)
+        }
+    }
+
+    LazyVerticalGrid(
+        state = gridState,
+        columns = GridCells.Adaptive(minSize = if (compact) 130.dp else 160.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = modifier
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val target = libraryGridTarget(event.key, selectedIndex, items.size, columns)
+                when {
+                    target != null -> { onSelect(target); true }
+                    selectedIndex >= 0 && (event.key == Key.Enter || event.key == Key.Spacebar) -> {
+                        onOpen(selectedIndex)
+                        true
+                    }
+                    else -> false
+                }
+            }
+    ) {
+        itemsIndexed(items) { index, item ->
+            MediaCard(
+                item = item,
+                selected = index == selectedIndex,
+                onClick = { onOpen(index) },
+            )
+        }
+    }
+}
+
 @Composable
 private fun LibraryFilterTabs(
     selected: String,
@@ -918,6 +1023,8 @@ private fun LibraryFilterTabs(
 private fun LibrarySearchField(
     query: String,
     onQueryChange: (String) -> Unit,
+    focusRequester: FocusRequester,
+    onFocusChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -938,7 +1045,10 @@ private fun LibrarySearchField(
         BasicTextField(
             value = query,
             onValueChange = onQueryChange,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .focusRequester(focusRequester)
+                .onFocusChanged { onFocusChanged(it.isFocused) },
             singleLine = true,
             // BasicTextField takes a whole TextStyle rather than a style + overrides, so
             // the role is merged rather than substituted.

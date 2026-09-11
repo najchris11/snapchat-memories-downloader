@@ -3,11 +3,14 @@ package com.najdev.snapvault.ui.theme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.sp
 
 // Palette constants are private on purpose: they are single-theme values, and reaching for
 // one directly from a screen produces a colour that does not adapt when the theme changes.
@@ -188,11 +191,48 @@ object MediaColors {
     val onMediaMuted = Color(0x40FFFFFF)
 }
 
+/**
+ * The type scale.
+ *
+ * Before this existed, `MaterialTheme` was constructed without a `typography` argument, so
+ * the app ran on Material defaults it never used: 87 hardcoded `fontSize` literals against
+ * three references to `MaterialTheme.typography`. Nothing could be scaled from one place,
+ * and sizes drifted between screens that meant to match.
+ *
+ * Two deliberate decisions are baked in here.
+ *
+ * **The floor is 11sp.** The old scale bottomed out at 8sp, with 9sp at six more sites and
+ * 10sp carrying section labels, inspector rows and stepper labels. Those are below what is
+ * reliably legible, in desktop software with the room to be larger. 8, 9 and 10 all fold
+ * into [Typography.labelSmall].
+ *
+ * **Line height is explicit.** This is the part that changes vertical rhythm. A bare
+ * `Text(fontSize = 10.sp)` inherits `LocalTextStyle`, which was Material's default
+ * `bodyLarge` — so every small label in the app was laid out with a **24sp** line height it
+ * never asked for. Setting it per role at roughly 1.35x makes rows and chips measurably
+ * tighter. That is the intended correction rather than a side effect, but it is a visible
+ * change on every screen.
+ *
+ * Weight is deliberately not set on any role: it varies within a size (11sp appears plain,
+ * SemiBold and Bold), so call sites keep their own `fontWeight` and the two stay orthogonal.
+ */
+val SnapVaultTypography = Typography(
+    headlineSmall = TextStyle(fontSize = 22.sp, lineHeight = 28.sp),
+    titleLarge = TextStyle(fontSize = 18.sp, lineHeight = 24.sp),
+    titleMedium = TextStyle(fontSize = 15.sp, lineHeight = 20.sp),
+    titleSmall = TextStyle(fontSize = 14.sp, lineHeight = 19.sp),
+    bodyMedium = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+    bodySmall = TextStyle(fontSize = 12.sp, lineHeight = 16.sp),
+    labelMedium = TextStyle(fontSize = 12.sp, lineHeight = 16.sp),
+    labelSmall = TextStyle(fontSize = 11.sp, lineHeight = 15.sp),
+)
+
 @Composable
 fun SnapVaultTheme(darkMode: Boolean = true, content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalThemeIsDark provides darkMode) {
         MaterialTheme(
             colorScheme = if (darkMode) SnapVaultColorScheme else SnapVaultLightColorScheme,
+            typography = SnapVaultTypography,
             content = content
         )
     }

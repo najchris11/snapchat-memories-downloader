@@ -21,7 +21,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.getCachedThumbnail
 import com.najdev.snapvault.ui.theme.MediaColors
 import kotlinx.coroutines.Dispatchers
@@ -91,7 +90,6 @@ actual fun VideoPlayer(videoPath: String, modifier: Modifier) {
             Text(
                 text = if (isOpening) "Opening Video..." else "Click to Play Video",
                 color = MediaColors.onMedia,
-                fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.bodyMedium
             )

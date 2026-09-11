@@ -35,7 +35,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.najdev.snapvault.WindowSize
@@ -221,7 +220,7 @@ fun LibraryScreen(
                         )
                         Text(
                             stringResource(Res.string.lib_empty_state),
-                            fontSize = 13.sp,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                             modifier = Modifier.widthIn(max = 280.dp)
@@ -230,7 +229,7 @@ fun LibraryScreen(
                             TextButton(onClick = onOpenFolder) {
                                 Text(
                                     "Select Download Folder",
-                                    fontSize = 12.sp,
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.SemiBold
                                 )
@@ -375,7 +374,7 @@ private fun InspectorItemDetail(
             ) {
                 Text(
                     item.type.uppercase(),
-                    fontSize = 9.sp,
+                    style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = if (isVideo) SnapVaultColors.info else MaterialTheme.colorScheme.primary
                 )
@@ -390,14 +389,14 @@ private fun InspectorItemDetail(
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(
                     item.title,
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     item.date,
-                    fontSize = 10.sp,
+                    style = MaterialTheme.typography.labelSmall,
                     fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
@@ -450,7 +449,7 @@ private fun InspectorItemDetail(
                         stringResource(
                             if (isVideo) Res.string.lib_play_video else Res.string.lib_open_preview
                         ),
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -463,8 +462,8 @@ private fun InspectorItemDetail(
 @Composable
 private fun InspectorDetailRow(label: String, value: String, valueColor: Color) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
-        Text(value, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = valueColor)
+        Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+        Text(value, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = valueColor)
     }
 }
 
@@ -499,17 +498,17 @@ private fun InspectorGlobalStats(items: List<LibraryItem>) {
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 Icon(Icons.Outlined.Storage, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), modifier = Modifier.size(11.dp))
-                Text(stringResource(Res.string.lib_storage_label), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f))
+                Text(stringResource(Res.string.lib_storage_label), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f))
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
                     if (items.isEmpty()) "—" else "${items.size} file${if (items.size == 1) "" else "s"}",
-                    fontSize = 10.sp,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
                 Text(
                     if (items.isEmpty()) "—" else formatBytes(totalBytes),
-                    fontSize = 10.sp,
+                    style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -519,7 +518,7 @@ private fun InspectorGlobalStats(items: List<LibraryItem>) {
                 val videoCount = items.count { it.type == "video" }
                 Text(
                     "$photoCount photo${if (photoCount == 1) "" else "s"} · $videoCount video${if (videoCount == 1) "" else "s"}",
-                    fontSize = 10.sp,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
             }
@@ -533,7 +532,7 @@ private fun InspectorGlobalStats(items: List<LibraryItem>) {
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 Icon(Icons.Outlined.Tag, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), modifier = Modifier.size(11.dp))
-                Text(stringResource(Res.string.lib_metadata_label), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f))
+                Text(stringResource(Res.string.lib_metadata_label), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f))
             }
             MetadataRow(
                 icon = Icons.Outlined.GpsFixed,
@@ -568,7 +567,7 @@ fun StatChip(
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Icon(icon, null, tint = tint, modifier = Modifier.size(13.dp))
-        Text(label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = tint)
+        Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = tint)
     }
 }
 
@@ -593,8 +592,8 @@ fun MetadataRow(
             Icon(icon, null, tint = iconTint, modifier = Modifier.size(15.dp))
         }
         Column {
-            Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+            Text(title, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
         }
     }
 }
@@ -685,15 +684,15 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(item.title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(item.date, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                            Text(item.title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(item.date, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
                         }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             if (item.fileSizeBytes > 0) {
-                                Text(formatBytes(item.fileSizeBytes), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                Text(formatBytes(item.fileSizeBytes), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                             }
                             if (item.hasGps) {
                                 Row(
@@ -705,7 +704,7 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(Icons.Outlined.GpsFixed, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(11.dp))
-                                    Text("GPS", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                    Text("GPS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                                 }
                             }
                             if (item.hasOverlay) {
@@ -718,7 +717,7 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(Icons.Outlined.Layers, null, tint = SnapVaultColors.info, modifier = Modifier.size(11.dp))
-                                    Text("OVERLAY", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = SnapVaultColors.info)
+                                    Text("OVERLAY", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = SnapVaultColors.info)
                                 }
                             }
                         }
@@ -798,7 +797,7 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                 ) {
                     Text(
                         text = item.type.uppercase(),
-                        fontSize = 8.sp,
+                        style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = if (isVideo) SnapVaultColors.info else MaterialTheme.colorScheme.primary
                     )
@@ -816,7 +815,7 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                     ) {
                         Text(
                             item.duration,
-                            fontSize = 9.sp,
+                            style = MaterialTheme.typography.labelSmall,
                             fontFamily = FontFamily.Monospace,
                             color = MediaColors.onMedia
                         )
@@ -849,7 +848,7 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                 ) {
                     Text(
                         item.date,
-                        fontSize = 9.sp,
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         fontFamily = FontFamily.Monospace
                     )
@@ -860,7 +859,7 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                 }
                 Text(
                     item.title,
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -900,7 +899,7 @@ private fun LibraryFilterTabs(
             ) {
                 Text(
                     text = label,
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
                 )
@@ -935,16 +934,17 @@ private fun LibrarySearchField(
             onValueChange = onQueryChange,
             modifier = Modifier.weight(1f),
             singleLine = true,
-            textStyle = LocalTextStyle.current.copy(
+            // BasicTextField takes a whole TextStyle rather than a style + overrides, so
+            // the role is merged rather than substituted.
+            textStyle = MaterialTheme.typography.bodySmall.copy(
                 color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 12.sp
             ),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             decorationBox = { inner ->
                 if (query.isEmpty()) {
                     Text(
                         stringResource(Res.string.lib_search_placeholder),
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
                 }

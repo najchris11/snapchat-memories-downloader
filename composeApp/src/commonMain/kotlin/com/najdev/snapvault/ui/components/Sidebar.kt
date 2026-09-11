@@ -23,7 +23,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.Screen
 import com.najdev.snapvault.ui.theme.SnapVaultColors
 import org.jetbrains.compose.resources.stringResource
@@ -101,7 +100,7 @@ private fun StatusChip(isRunning: Boolean, currentStep: Int) {
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Box(Modifier.size(6.dp).clip(RoundedCornerShape(100)).background(statusColor))
-        Text(text = statusLabel, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = statusColor)
+        Text(text = statusLabel, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = statusColor)
         Spacer(Modifier.weight(1f))
         if (isRunning) {
             CircularProgressIndicator(
@@ -159,7 +158,7 @@ fun SidebarNavItem(
             )
             Text(
                 text = label,
-                fontSize = 13.sp,
+                style = MaterialTheme.typography.bodyMedium,
                 fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                 color = contentColor
             )

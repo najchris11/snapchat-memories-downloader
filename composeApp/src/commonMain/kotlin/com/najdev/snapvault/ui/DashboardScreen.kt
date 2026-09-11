@@ -217,7 +217,7 @@ private fun DashboardControls(
 
                 if (viewModel.zipSourceMode == ZipSourceMode.Folder) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("ZIP Export Folder", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("ZIP Export Folder", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         FilePickerBox(
                             icon = Icons.Outlined.FolderZip,
                             label = viewModel.zipFolder ?: "Select folder containing mydata~*.zip files",
@@ -233,11 +233,11 @@ private fun DashboardControls(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("ZIP Files", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("ZIP Files", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (viewModel.selectedZipFiles.isNotEmpty()) {
                                 Text(
                                     "Clear",
-                                    fontSize = 11.sp,
+                                    style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.primary.copy(alpha = if (viewModel.isRunning) 0.5f else 1f),
                                     fontWeight = FontWeight.SemiBold,
                                     modifier = Modifier.clickable(enabled = !viewModel.isRunning) {
@@ -269,7 +269,7 @@ private fun DashboardControls(
                                 viewModel.selectedZipFiles.take(4).forEach { path ->
                                     Text(
                                         path.substringAfterLast('/').substringAfterLast('\\'),
-                                        fontSize = 10.sp,
+                                        style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
@@ -278,7 +278,7 @@ private fun DashboardControls(
                                 if (viewModel.selectedZipFiles.size > 4) {
                                     Text(
                                         "+ ${viewModel.selectedZipFiles.size - 4} more",
-                                        fontSize = 10.sp,
+                                        style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                     )
                                 }
@@ -290,7 +290,7 @@ private fun DashboardControls(
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
                         stringResource(Res.string.dash_history_label),
-                        fontSize = 11.sp,
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     FilePickerBox(
@@ -306,7 +306,7 @@ private fun DashboardControls(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     stringResource(Res.string.dash_output_label),
-                    fontSize = 11.sp,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 FilePickerBox(
@@ -407,7 +407,7 @@ private fun DashboardActions(
         ) {
             Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text(stringResource(Res.string.btn_start_sync), fontWeight = FontWeight.Black, fontSize = 15.sp)
+            Text(stringResource(Res.string.btn_start_sync), fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleMedium)
         }
 
         Surface(
@@ -507,7 +507,7 @@ private fun DashboardStatus(
                 )
                 Text(
                     "${(viewModel.progress * 100).toInt()}%",
-                    fontSize = 22.sp,
+                    style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -519,7 +519,7 @@ private fun DashboardStatus(
 
     Text(
         viewModel.progressText.ifEmpty { stringResource(Res.string.status_idle) },
-        fontSize = 13.sp,
+        style = MaterialTheme.typography.bodyMedium,
         fontWeight = FontWeight.SemiBold,
         textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth()
@@ -578,11 +578,11 @@ private fun DashboardStatus(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                 modifier = Modifier.size(14.dp)
             )
-            Text("View Logs", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+            Text("View Logs", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
             if (viewModel.logs.isNotEmpty() && !logsExpanded) {
                 Text(
                     viewModel.logs.last(),
-                    fontSize = 10.sp,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -610,7 +610,7 @@ private fun DashboardStatus(
                 contentAlignment = Alignment.Center
             ) {
                 if (logsCopied) {
-                    Text("Copied!", fontSize = 10.sp, color = SnapVaultColors.success, fontWeight = FontWeight.SemiBold)
+                    Text("Copied!", style = MaterialTheme.typography.labelSmall, color = SnapVaultColors.success, fontWeight = FontWeight.SemiBold)
                 } else {
                     Icon(
                         Icons.Outlined.ContentCopy,
@@ -640,8 +640,8 @@ private fun DashboardStatus(
                     if (viewModel.isRunning) {
                         item {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("$ ", color = LogColors.prompt, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-                                Text("running_pipeline", color = LogColors.onSurface, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                                Text("$ ", color = LogColors.prompt, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                                Text("running_pipeline", color = LogColors.onSurface, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
                                 BlinkingCursor()
                             }
                         }
@@ -690,11 +690,11 @@ fun InlineBanner(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Text(title, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = accent)
+            Text(title, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = accent)
             if (body != null) {
                 Text(
                     body,
-                    fontSize = 11.sp,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -704,7 +704,7 @@ fun InlineBanner(
                 onClick = onAction,
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
             ) {
-                Text(actionLabel, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = accent)
+                Text(actionLabel, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = accent)
             }
         }
     }
@@ -719,7 +719,7 @@ private fun MetricChip(text: String) {
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(4.dp))
             .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
-        Text(text, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
+        Text(text, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
     }
 }
 
@@ -730,7 +730,7 @@ fun SectionLabel(icon: androidx.compose.ui.graphics.vector.ImageVector, text: St
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(13.dp))
-        Text(text = text, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, letterSpacing = 0.8.sp)
+        Text(text = text, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, letterSpacing = 0.8.sp)
     }
 }
 
@@ -773,7 +773,7 @@ fun FilePickerBox(
         )
         Text(
             text = label,
-            fontSize = 12.sp,
+            style = MaterialTheme.typography.bodySmall,
             color = if (isSelected) {
                 MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f * contentAlpha)
             } else {
@@ -785,7 +785,7 @@ fun FilePickerBox(
         )
         Text(
             stringResource(Res.string.browse_btn),
-            fontSize = 10.sp,
+            style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.primary.copy(alpha = contentAlpha),
             fontWeight = FontWeight.Bold
         )
@@ -810,7 +810,7 @@ fun PipelineItem(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(icon, null, tint = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
-            Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
         }
         Switch(
             checked = checked,
@@ -870,11 +870,11 @@ fun TerminalLogLine(log: String) {
                     else -> LogColors.info
                 },
                 fontFamily = FontFamily.Monospace,
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold
             )
         }
-        Text(text = content, color = LogColors.onSurface, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+        Text(text = content, color = LogColors.onSurface, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.labelSmall)
     }
 }
 
@@ -908,12 +908,12 @@ fun StepItem(
             when {
                 complete -> Icon(Icons.Default.Check, null, tint = onAccentColor, modifier = Modifier.size(15.dp))
                 active -> Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(15.dp))
-                else -> Text(step.toString(), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                else -> Text(step.toString(), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
             }
         }
         Text(
             text = label,
-            fontSize = 10.sp,
+            style = MaterialTheme.typography.labelSmall,
             fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
             color = if (active || complete) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
         )
@@ -962,7 +962,7 @@ private fun CompactStepper(currentStep: Int, hasWarnings: Boolean) {
         }
         Text(
             text = stringResource(Res.string.dash_step_progress, index + 1, labels.size, labels[index]),
-            fontSize = 12.sp,
+            style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface
         )
@@ -994,7 +994,7 @@ private fun ModeToggleButton(
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
             Text(
                 text = label,
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 color = if (selected) {
                     MaterialTheme.colorScheme.primary.copy(alpha = contentAlpha)

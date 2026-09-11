@@ -58,7 +58,7 @@ fun SettingsScreen(
             )
             Text(
                 text = "Manage system dependencies and utility preferences.",
-                fontSize = 13.sp,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
             )
         }
@@ -84,10 +84,10 @@ fun SettingsScreen(
                         modifier = Modifier.size(16.dp)
                     )
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        Text(stringResource(Res.string.set_theme_label), fontSize = 13.sp)
+                        Text(stringResource(Res.string.set_theme_label), style = MaterialTheme.typography.bodyMedium)
                         Text(
                             "Choose between light, dark, or system default theme.",
-                            fontSize = 11.sp,
+                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
                     }
@@ -114,7 +114,7 @@ fun SettingsScreen(
                             ) {
                                 Text(
                                     text = label,
-                                    fontSize = 12.sp,
+                                    style = MaterialTheme.typography.bodySmall,
                                     fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
                                     color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                                 )
@@ -137,10 +137,10 @@ fun SettingsScreen(
                         modifier = Modifier.size(16.dp)
                     )
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        Text("Layout", fontSize = 13.sp)
+                        Text("Layout", style = MaterialTheme.typography.bodyMedium)
                         Text(
                             "Auto switches by window width; Compact forces the phone layout.",
-                            fontSize = 11.sp,
+                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
                     }
@@ -162,7 +162,7 @@ fun SettingsScreen(
                             ) {
                                 Text(
                                     text = option.name,
-                                    fontSize = 12.sp,
+                                    style = MaterialTheme.typography.bodySmall,
                                     fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
                                     color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                                 )
@@ -208,7 +208,7 @@ fun SettingsScreen(
                 ) {
                     Text(
                         text = stringResource(Res.string.set_deps_refresh),
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = SnapVaultColors.info,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.clickable { onVerifyDependencies() }.padding(vertical = 8.dp)
@@ -218,7 +218,7 @@ fun SettingsScreen(
                 if ((!hasExifTool || !hasFFmpeg) && hint.isNotEmpty()) {
                     Text(
                         hint,
-                        fontSize = 11.sp,
+                        style = MaterialTheme.typography.labelSmall,
                         lineHeight = 16.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
@@ -252,10 +252,10 @@ fun SettingsScreen(
                             modifier = Modifier.size(16.dp)
                         )
                         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                            Text(stringResource(Res.string.set_reset_index_label), fontSize = 13.sp)
+                            Text(stringResource(Res.string.set_reset_index_label), style = MaterialTheme.typography.bodyMedium)
                             Text(
                                 stringResource(Res.string.set_reset_index_desc),
-                                fontSize = 11.sp,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                             )
                         }
@@ -267,7 +267,7 @@ fun SettingsScreen(
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                     ) {
-                        Text(stringResource(Res.string.set_reset_index_btn), fontSize = 12.sp)
+                        Text(stringResource(Res.string.set_reset_index_btn), style = MaterialTheme.typography.bodySmall)
                     }
                 }
 
@@ -286,10 +286,10 @@ fun SettingsScreen(
                         modifier = Modifier.size(16.dp)
                     )
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        Text("Output Path", fontSize = 13.sp)
+                        Text("Output Path", style = MaterialTheme.typography.bodyMedium)
                         Text(
                             downloadFolder ?: "Not set",
-                            fontSize = 11.sp,
+                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -299,7 +299,7 @@ fun SettingsScreen(
                         onClick = onEditOutputPath,
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        Text("Edit", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                        Text("Edit", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -321,7 +321,7 @@ fun SettingsScreen(
             )
             Text(
                 "SnapVault ${AppBuildConfig.VERSION} — GPL-3.0 License",
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
         }
@@ -351,7 +351,7 @@ fun SettingsSectionLabel(
         horizontalArrangement = Arrangement.spacedBy(7.dp)
     ) {
         Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
-        Text(text, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
+        Text(text, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -372,8 +372,8 @@ fun SettingsRow(
             modifier = Modifier.size(16.dp)
         )
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(title, fontSize = 13.sp)
-            Text(description, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(description, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
         }
     }
 }
@@ -408,8 +408,8 @@ fun DependencyItem(
         }
 
         Column(modifier = Modifier.weight(1f)) {
-            Text(name, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-            Text(description, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+            Text(name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+            Text(description, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
         }
 
         Row(
@@ -424,7 +424,7 @@ fun DependencyItem(
             )
             Text(
                 if (isReady) stringResource(Res.string.set_dep_detected) else stringResource(Res.string.set_dep_missing),
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = statusColor
             )

@@ -1,0 +1,19 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>PrintStackTrace:AndroidMediaProcessor.kt$AndroidMediaProcessor$e</ID>
+    <ID>PrintStackTrace:MainActivity.kt$e</ID>
+    <ID>PrintStackTrace:MediaScanner.kt$e</ID>
+    <ID>PrintStackTrace:VideoPlayer.kt$e</ID>
+    <ID>SwallowedException:BinaryExtractor.kt$BinaryExtractor$e: Exception</ID>
+    <ID>SwallowedException:BinaryExtractor.kt$BinaryExtractor$e: IOException</ID>
+    <ID>SwallowedException:Deduplicator.kt$Deduplicator$e: Exception</ID>
+    <ID>SwallowedException:DesktopMediaProcessor.kt$DesktopMediaProcessor$e: Exception</ID>
+    <ID>SwallowedException:DesktopMediaProcessor.kt$DesktopMediaProcessor$e: IOException</ID>
+    <ID>SwallowedException:IosMediaProcessor.kt$IosMediaProcessor$e: Exception</ID>
+    <ID>SwallowedException:ThemePreferences.kt$e: Exception</ID>
+    <ID>SwallowedException:ZipReader.kt$e: Exception</ID>
+    <ID>TooGenericExceptionThrown:DownloadEngine.kt$DownloadEngine$throw Exception("HTTP Error status: ${response.status}")</ID>
+  </CurrentIssues>
+</SmellBaseline>

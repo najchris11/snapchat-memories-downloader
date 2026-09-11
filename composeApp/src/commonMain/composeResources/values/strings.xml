@@ -87,9 +87,32 @@
     <string name="lib_tool_privacy">Privacy</string>
     <string name="lib_tool_vault_link">Vault Link</string>
     <string name="lib_gps_verified">GPS Data Verified</string>
-    <string name="lib_gps_items">%d items updated</string>
     <string name="lib_overlay_detected">Overlay Detected</string>
-    <string name="lib_overlay_items">%d assets combined</string>
+
+    <!-- Counts in the Library inspector. Real plurals rather than an appended "s": most
+         languages do not form plurals that way, and several have more than the two forms
+         English needs. lib_gps_items and lib_overlay_items were written for this job, went
+         unused, and are folded in here. -->
+    <plurals name="lib_file_count">
+        <item quantity="one">%1$d file</item>
+        <item quantity="other">%1$d files</item>
+    </plurals>
+    <plurals name="lib_photo_count">
+        <item quantity="one">%1$d photo</item>
+        <item quantity="other">%1$d photos</item>
+    </plurals>
+    <plurals name="lib_video_count">
+        <item quantity="one">%1$d video</item>
+        <item quantity="other">%1$d videos</item>
+    </plurals>
+    <plurals name="lib_tagged_count">
+        <item quantity="one">%1$d item tagged</item>
+        <item quantity="other">%1$d items tagged</item>
+    </plurals>
+    <plurals name="lib_asset_count">
+        <item quantity="one">%1$d asset combined</item>
+        <item quantity="other">%1$d assets combined</item>
+    </plurals>
 
     <!-- Settings / Environment Screen -->
     <string name="settings_title">Settings</string>

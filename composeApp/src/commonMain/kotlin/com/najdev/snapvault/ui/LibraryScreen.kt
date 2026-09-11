@@ -58,8 +58,41 @@ import com.najdev.snapvault.scanMediaFiles
 import com.najdev.snapvault.ui.theme.MediaColors
 import com.najdev.snapvault.ui.theme.SnapVaultColors
 import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import snapchat_memories_downloader.composeapp.generated.resources.*
+
+/**
+ * Which media the Library is showing.
+ *
+ * This was a `String` holding "All", "Photos" or "Videos", with those literals driving the
+ * predicate, the tab list and the resource lookup independently — three copies of one fact,
+ * held together by nothing. [matches] is the predicate; [label] is what it is called on
+ * screen; neither can drift from the other now.
+ */
+enum class MediaFilter {
+    All,
+    Photos,
+    Videos;
+
+    fun matches(item: LibraryItem): Boolean = when (this) {
+        All -> true
+        Photos -> item.type == "photo"
+        Videos -> item.type == "video"
+    }
+}
+
+@Composable
+internal fun MediaFilter.label(): String = when (this) {
+    MediaFilter.All -> stringResource(Res.string.lib_filter_all)
+    MediaFilter.Photos -> stringResource(Res.string.lib_filter_photos)
+    MediaFilter.Videos -> stringResource(Res.string.lib_filter_videos)
+}
+
+// Typographic, not copy: an em dash standing in for a statistic that has no value yet, and
+// the separator between two counts on one line. Neither is translated text.
+private const val EMPTY_STAT = "—"
+private const val STAT_SEPARATOR = " · "
 
 data class LibraryItem(
     val id: String,
@@ -95,7 +128,7 @@ fun LibraryScreen(
         } else emptyList()
     }
 
-    var selectedFilter by remember { mutableStateOf("All") }
+    var selectedFilter by remember { mutableStateOf(MediaFilter.All) }
     var searchQuery by remember { mutableStateOf("") }
     // An index rather than the item itself: the keyboard moves the selection by position,
     // and "the item after this one" is not a question a LibraryItem can answer.
@@ -108,13 +141,7 @@ fun LibraryScreen(
 
     val filteredItems = remember(items, selectedFilter, searchQuery) {
         items
-            .filter { item ->
-                when (selectedFilter) {
-                    "Photos" -> item.type == "photo"
-                    "Videos" -> item.type == "video"
-                    else -> true
-                }
-            }
+            .filter(selectedFilter::matches)
             .filter { item ->
                 searchQuery.isBlank() || item.title.contains(searchQuery, ignoreCase = true)
             }
@@ -517,12 +544,12 @@ private fun InspectorGlobalStats(items: List<LibraryItem>) {
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
-                    if (items.isEmpty()) "—" else "${items.size} file${if (items.size == 1) "" else "s"}",
+                    if (items.isEmpty()) EMPTY_STAT else pluralStringResource(Res.plurals.lib_file_count, items.size, items.size),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    if (items.isEmpty()) "—" else formatBytes(totalBytes),
+                    if (items.isEmpty()) EMPTY_STAT else formatBytes(totalBytes),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -532,7 +559,9 @@ private fun InspectorGlobalStats(items: List<LibraryItem>) {
                 val photoCount = items.count { it.type == "photo" }
                 val videoCount = items.count { it.type == "video" }
                 Text(
-                    "$photoCount photo${if (photoCount == 1) "" else "s"} · $videoCount video${if (videoCount == 1) "" else "s"}",
+                    pluralStringResource(Res.plurals.lib_photo_count, photoCount, photoCount) +
+                        STAT_SEPARATOR +
+                        pluralStringResource(Res.plurals.lib_video_count, videoCount, videoCount),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -553,13 +582,13 @@ private fun InspectorGlobalStats(items: List<LibraryItem>) {
                 icon = Icons.Outlined.GpsFixed,
                 iconTint = MaterialTheme.colorScheme.primary,
                 title = stringResource(Res.string.lib_gps_verified),
-                subtitle = if (items.isEmpty()) "—" else "$gpsCount item${if (gpsCount == 1) "" else "s"} tagged"
+                subtitle = if (items.isEmpty()) EMPTY_STAT else pluralStringResource(Res.plurals.lib_tagged_count, gpsCount, gpsCount)
             )
             MetadataRow(
                 icon = Icons.Outlined.Layers,
                 iconTint = SnapVaultColors.info,
                 title = stringResource(Res.string.lib_overlay_detected),
-                subtitle = if (items.isEmpty()) "—" else "$overlayCount asset${if (overlayCount == 1) "" else "s"} combined"
+                subtitle = if (items.isEmpty()) EMPTY_STAT else pluralStringResource(Res.plurals.lib_asset_count, overlayCount, overlayCount)
             )
         }
 
@@ -981,8 +1010,8 @@ internal fun LibraryGrid(
 
 @Composable
 private fun LibraryFilterTabs(
-    selected: String,
-    onSelect: (String) -> Unit,
+    selected: MediaFilter,
+    onSelect: (MediaFilter) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -991,14 +1020,9 @@ private fun LibraryFilterTabs(
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
             .padding(3.dp)
     ) {
-        listOf("All", "Photos", "Videos").forEach { filter ->
+        MediaFilter.entries.forEach { filter ->
             val active = selected == filter
-            val label = when (filter) {
-                "All" -> stringResource(Res.string.lib_filter_all)
-                "Photos" -> stringResource(Res.string.lib_filter_photos)
-                "Videos" -> stringResource(Res.string.lib_filter_videos)
-                else -> filter
-            }
+            val label = filter.label()
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(5.dp))

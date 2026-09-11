@@ -19,8 +19,16 @@ fails without it, verified by deliberately reintroducing the bug.
 **Decided:** build the sort control (item 14), reveal-in-file-manager (item 15) and
 favourites (item 16). Delete the duration UI (item 12) rather than populating it.
 
-**Status:** 3a (items 1–6) landed on `fix/ui-audit-round-3a`. 146 tests, detekt clean, all
-three targets compiling. 3b and 3c still to do.
+**Status:** 3a (items 1–6) landed on `fix/ui-audit-round-3a`. 3b (items 7–13) landed on
+`fix/ui-audit-round-3b`. 157 tests, detekt clean, all three targets compiling. 3c still to do.
+
+3b's seven items were three defects wearing different clothes: **a destination drawn by two
+call sites that were free to disagree** (navigation state, the Library lock, the Settings
+icon), **UI that could never render** (the duration badge, TerminalDot, the unused
+`SettingsRow`), and **one state standing in for three** (the empty Library). Two corrections
+to the plan's own counts: `SettingsRow` was hand-rolled three times, not four, and the
+Library empty state's third case was a real bug rather than missing polish — a library full
+of photos, filtered to Videos, reported "No memories found".
 
 Two things 3a turned up that are worth knowing before touching resources again:
 

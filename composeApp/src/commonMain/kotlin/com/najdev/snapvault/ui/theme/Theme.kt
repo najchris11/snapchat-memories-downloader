@@ -150,6 +150,44 @@ object LogColors {
     val muted = Color(0xFF9AA8C4)
 }
 
+/**
+ * Colours for things drawn *on top of media* — letterboxing, hover washes, badge backings,
+ * the preview dimmer, and the text and icons sitting on them.
+ *
+ * Fixed in both themes on purpose, and named on purpose. These sit over a photograph, not
+ * over a theme surface, so following the theme would be wrong. Until now they were written
+ * as bare `Color.Black` / `Color.White`, which is indistinguishable from the two light-theme
+ * bugs round 1 fixed — so nobody reading or grepping the file could tell a deliberate
+ * media colour from a forgotten one. Naming the role is the whole point: a bare
+ * `Color.Black` in a UI file is now a defect by definition.
+ *
+ * Contrast is not asserted here the way [SnapVaultColors] pairs are. What sits behind a
+ * scrim is a user's photo, so the effective ratio is unknowable — the scrim levels are
+ * chosen to be heavy enough that [onMedia] stays legible over a bright image.
+ */
+object MediaColors {
+    /** Opaque ground behind letterboxed photos and video. */
+    val letterbox = Color(0xFF000000)
+
+    /** Light wash over a thumbnail, carrying a hover affordance. */
+    val scrimHover = Color(0x33000000)
+
+    /** The same wash while actively hovered. */
+    val scrimHoverStrong = Color(0x66000000)
+
+    /** Backing for a badge or gradient that has to stay readable over arbitrary media. */
+    val scrimBadge = Color(0x8C000000)
+
+    /** Full-screen dimmer behind the preview dialog. */
+    val scrimDialog = Color(0xE0000000)
+
+    /** Text and icons drawn on media or on any scrim above. */
+    val onMedia = Color(0xFFFFFFFF)
+
+    /** De-emphasised foreground on media — placeholder glyphs. */
+    val onMediaMuted = Color(0x40FFFFFF)
+}
+
 @Composable
 fun SnapVaultTheme(darkMode: Boolean = true, content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalThemeIsDark provides darkMode) {

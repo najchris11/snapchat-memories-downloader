@@ -42,6 +42,7 @@ import com.najdev.snapvault.WindowSize
 import com.najdev.snapvault.getCachedThumbnail
 import com.najdev.snapvault.ioDispatcher
 import com.najdev.snapvault.scanMediaFiles
+import com.najdev.snapvault.ui.theme.MediaColors
 import com.najdev.snapvault.ui.theme.SnapVaultColors
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
@@ -329,7 +330,7 @@ private fun InspectorItemDetail(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.2f)),
+                        .background(MediaColors.scrimHover),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -337,7 +338,7 @@ private fun InspectorItemDetail(
                         contentDescription = stringResource(
                             if (isVideo) Res.string.lib_play_video else Res.string.lib_open_preview
                         ),
-                        tint = Color.White.copy(alpha = 0.8f),
+                        tint = MediaColors.onMedia,
                         modifier = Modifier.size(32.dp)
                     )
                 }
@@ -358,7 +359,7 @@ private fun InspectorItemDetail(
                 Icon(
                     Icons.Default.Close,
                     "Clear selection",
-                    tint = Color.White,
+                    tint = MediaColors.onMedia,
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -612,7 +613,7 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Box(
-            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.88f)).clickable { onDismiss() },
+            modifier = Modifier.fillMaxSize().background(MediaColors.scrimDialog).clickable { onDismiss() },
             contentAlignment = Alignment.Center
         ) {
             Surface(
@@ -630,7 +631,7 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                            .background(Color.Black),
+                            .background(MediaColors.letterbox),
                         contentAlignment = Alignment.Center
                     ) {
                         when {
@@ -652,7 +653,7 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
                             else -> Icon(
                                 Icons.Outlined.Image,
                                 contentDescription = null,
-                                tint = Color.White.copy(alpha = 0.25f),
+                                tint = MediaColors.onMediaMuted,
                                 modifier = Modifier.size(72.dp)
                             )
                         }
@@ -666,10 +667,10 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
                                 Modifier
                                     .size(28.dp)
                                     .clip(RoundedCornerShape(100))
-                                    .background(Color.Black.copy(alpha = 0.5f)),
+                                    .background(MediaColors.scrimBadge),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Default.Close, "Close", tint = Color.White, modifier = Modifier.size(14.dp))
+                                Icon(Icons.Default.Close, "Close", tint = MediaColors.onMedia, modifier = Modifier.size(14.dp))
                             }
                         }
                     }
@@ -767,7 +768,7 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                         .fillMaxSize()
                         .background(
                             androidx.compose.ui.graphics.Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.5f))
+                                colors = listOf(Color.Transparent, MediaColors.scrimBadge)
                             )
                         )
                 )
@@ -810,14 +811,14 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                             .align(Alignment.BottomStart)
                             .padding(7.dp)
                             .clip(RoundedCornerShape(4.dp))
-                            .background(Color.Black.copy(alpha = 0.55f))
+                            .background(MediaColors.scrimBadge)
                             .padding(horizontal = 5.dp, vertical = 2.dp)
                     ) {
                         Text(
                             item.duration,
                             fontSize = 9.sp,
                             fontFamily = FontFamily.Monospace,
-                            color = Color.White
+                            color = MediaColors.onMedia
                         )
                     }
                 }

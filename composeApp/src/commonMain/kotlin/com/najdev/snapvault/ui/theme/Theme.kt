@@ -21,7 +21,6 @@ private val SurfaceContainerHighest = Color(0xFF2A3548)
 private val SurfaceContainerLow = Color(0xFF111C2D)
 private val SurfaceContainerLowest = Color(0xFF040E1F)
 
-private val PrimaryPurple = Color(0xFFD0BCFF)
 private val PrimaryContainer = Color(0xFFA078FF)
 private val SecondaryBlue = Color(0xFFBEC6E0)
 private val TertiaryCyan = Color(0xFF7BD0FF)
@@ -33,17 +32,24 @@ private val Outline = Color(0xFF958EA0)
 // Accents that exist in both themes. Declared once and referenced by both the colour
 // schemes and SnapVaultColors, rather than the hex being retyped in each place.
 private val ElectricPurpleDark = Color(0xFF8B5CF6)
+private val OnElectricPurple = Color(0xFF150030)
 private val ElectricPurpleLight = Color(0xFF6D3BD7)
 private val SuccessDark = Color(0xFF4ADE80)
 private val SuccessLight = Color(0xFF15803D)
 private val WarningDark = Color(0xFFFBBF24)
 private val WarningLight = Color(0xFFB45309)
+// The amber warning is bright in dark mode and brown in light, so what reads on it flips.
+private val OnWarningDark = Color(0xFF2B1A00)
+private val OnWarningLight = Color(0xFFFFFFFF)
 private val InfoDark = Color(0xFF38BDF8)
 private val InfoLight = Color(0xFF0369A1)
 
 val SnapVaultColorScheme: ColorScheme = darkColorScheme(
-    primary = PrimaryPurple,
-    onPrimary = Color(0xFF3C0091),
+    primary = ElectricPurpleDark,
+    // Dark, not white. #8B5CF6 sits at a tone where white text reaches only 4.23:1 —
+    // below AA — so the readable pairing on a filled violet surface is a near-black.
+    // ThemeContrastTest pins this.
+    onPrimary = OnElectricPurple,
     primaryContainer = PrimaryContainer,
     onPrimaryContainer = Color(0xFF340080),
     secondary = SecondaryBlue,
@@ -99,14 +105,12 @@ val LocalThemeIsDark = staticCompositionLocalOf { true }
 /**
  * Semantic roles Material 3 does not provide. Each resolves against the active theme.
  *
- * There is deliberately no `error` here — [MaterialTheme.colorScheme.error] is the one
- * error colour, and having a second produced two different reds for the same meaning.
+ * There is deliberately no `error` here — [MaterialTheme.colorScheme.error] is the one error
+ * colour, and having a second produced two different reds for the same meaning. There is no
+ * `electricPurple` either: the brand violet *is* [MaterialTheme.colorScheme.primary], so
+ * every Material default resolves to it instead of needing an override per call site.
  */
 object SnapVaultColors {
-    val electricPurple: Color
-        @Composable
-        get() = if (LocalThemeIsDark.current) ElectricPurpleDark else ElectricPurpleLight
-
     val success: Color
         @Composable
         get() = if (LocalThemeIsDark.current) SuccessDark else SuccessLight
@@ -114,6 +118,11 @@ object SnapVaultColors {
     val warning: Color
         @Composable
         get() = if (LocalThemeIsDark.current) WarningDark else WarningLight
+
+    /** Foreground for anything drawn *on* [warning] — a filled chip or step circle. */
+    val onWarning: Color
+        @Composable
+        get() = if (LocalThemeIsDark.current) OnWarningDark else OnWarningLight
 
     val info: Color
         @Composable

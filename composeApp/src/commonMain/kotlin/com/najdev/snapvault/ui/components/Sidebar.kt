@@ -85,7 +85,7 @@ private fun StatusChip(isRunning: Boolean, currentStep: Int) {
     }
     val statusColor by animateColorAsState(
         when {
-            isRunning -> SnapVaultColors.electricPurple
+            isRunning -> MaterialTheme.colorScheme.primary
             currentStep == 3 -> SnapVaultColors.success
             else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
         }
@@ -107,7 +107,7 @@ private fun StatusChip(isRunning: Boolean, currentStep: Int) {
             CircularProgressIndicator(
                 modifier = Modifier.size(12.dp),
                 strokeWidth = 1.5.dp,
-                color = SnapVaultColors.electricPurple
+                color = MaterialTheme.colorScheme.primary
             )
         }
     }
@@ -122,7 +122,7 @@ fun SidebarNavItem(
     enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
-    val bgColor by animateColorAsState(if (active && enabled) SnapVaultColors.electricPurple.copy(alpha = 0.12f) else Color.Transparent)
+    val bgColor by animateColorAsState(if (active && enabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent)
     val contentColor by animateColorAsState(
         when {
             !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
@@ -144,7 +144,7 @@ fun SidebarNavItem(
                 .width(3.dp)
                 .height(36.dp)
                 .clip(RoundedCornerShape(topEnd = 4.dp, bottomEnd = 4.dp))
-                .background(if (active) SnapVaultColors.electricPurple else Color.Transparent)
+                .background(if (active) MaterialTheme.colorScheme.primary else Color.Transparent)
         )
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -154,7 +154,7 @@ fun SidebarNavItem(
             Icon(
                 imageVector = if (active && enabled) iconActive else iconInactive,
                 contentDescription = null,
-                tint = if (active && enabled) SnapVaultColors.electricPurple else contentColor,
+                tint = if (active && enabled) MaterialTheme.colorScheme.primary else contentColor,
                 modifier = Modifier.size(18.dp)
             )
             Text(

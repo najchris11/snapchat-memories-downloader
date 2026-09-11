@@ -238,7 +238,7 @@ private fun DashboardControls(
                                 Text(
                                     "Clear",
                                     fontSize = 11.sp,
-                                    color = SnapVaultColors.electricPurple.copy(alpha = if (viewModel.isRunning) 0.5f else 1f),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = if (viewModel.isRunning) 0.5f else 1f),
                                     fontWeight = FontWeight.SemiBold,
                                     modifier = Modifier.clickable(enabled = !viewModel.isRunning) {
                                         viewModel.changeZipSourceMode(ZipSourceMode.MultipleFiles)
@@ -401,7 +401,9 @@ private fun DashboardActions(
             enabled = !viewModel.isRunning && canStart,
             modifier = Modifier.weight(1f).height(52.dp),
             shape = RoundedCornerShape(10.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = SnapVaultColors.electricPurple)
+            // No colour override: primary is the brand violet, so the default container is
+            // already right and contentColor resolves to onPrimary rather than to whatever
+            // LocalContentColor happens to be.
         ) {
             Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
@@ -491,7 +493,7 @@ private fun DashboardStatus(
                 // at a misleadingly precise 0%.
                 CircularProgressIndicator(
                     modifier = Modifier.fillMaxSize(),
-                    color = SnapVaultColors.electricPurple,
+                    color = MaterialTheme.colorScheme.primary,
                     trackColor = MaterialTheme.colorScheme.surfaceVariant,
                     strokeWidth = 9.dp
                 )
@@ -499,7 +501,7 @@ private fun DashboardStatus(
                 CircularProgressIndicator(
                     progress = { viewModel.progress.coerceIn(0f, 1f) },
                     modifier = Modifier.fillMaxSize(),
-                    color = SnapVaultColors.electricPurple,
+                    color = MaterialTheme.colorScheme.primary,
                     trackColor = MaterialTheme.colorScheme.surfaceVariant,
                     strokeWidth = 9.dp
                 )
@@ -784,7 +786,7 @@ fun FilePickerBox(
         Text(
             stringResource(Res.string.browse_btn),
             fontSize = 10.sp,
-            color = SnapVaultColors.electricPurple.copy(alpha = contentAlpha),
+            color = MaterialTheme.colorScheme.primary.copy(alpha = contentAlpha),
             fontWeight = FontWeight.Bold
         )
     }
@@ -807,15 +809,15 @@ fun PipelineItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(icon, null, tint = if (checked) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
+            Icon(icon, null, tint = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
             Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
         }
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = SnapVaultColors.electricPurple,
+                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                checkedTrackColor = MaterialTheme.colorScheme.primary,
                 uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
                 uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
             )
@@ -839,7 +841,7 @@ fun BlinkingCursor() {
         ),
         label = "blink"
     )
-    Box(Modifier.padding(start = 3.dp).width(7.dp).height(14.dp).alpha(alpha).background(SnapVaultColors.electricPurple))
+    Box(Modifier.padding(start = 3.dp).width(7.dp).height(14.dp).alpha(alpha).background(MaterialTheme.colorScheme.primary))
 }
 
 @Composable
@@ -887,7 +889,10 @@ fun StepItem(
 ) {
     // A run can reach the terminal step while reporting failures (BUG-15/BUG-01-class
     // issues) — that must not render identically to a clean success.
-    val accentColor = if (complete && warning) SnapVaultColors.warning else SnapVaultColors.electricPurple
+    val accentColor = if (complete && warning) SnapVaultColors.warning else MaterialTheme.colorScheme.primary
+    // The check sits on that fill, so its colour has to follow it: white was unreadable on
+    // the amber warning state and only marginal on the violet.
+    val onAccentColor = if (complete && warning) SnapVaultColors.onWarning else MaterialTheme.colorScheme.onPrimary
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(5.dp)
@@ -901,8 +906,8 @@ fun StepItem(
             contentAlignment = Alignment.Center
         ) {
             when {
-                complete -> Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(15.dp))
-                active -> Icon(icon, null, tint = SnapVaultColors.electricPurple, modifier = Modifier.size(15.dp))
+                complete -> Icon(Icons.Default.Check, null, tint = onAccentColor, modifier = Modifier.size(15.dp))
+                active -> Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(15.dp))
                 else -> Text(step.toString(), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
             }
         }
@@ -932,7 +937,7 @@ private fun CompactStepper(currentStep: Int, hasWarnings: Boolean) {
     val accent = if (currentStep >= labels.lastIndex && hasWarnings) {
         SnapVaultColors.warning
     } else {
-        SnapVaultColors.electricPurple
+        MaterialTheme.colorScheme.primary
     }
 
     Row(
@@ -966,7 +971,7 @@ private fun CompactStepper(currentStep: Int, hasWarnings: Boolean) {
 
 @Composable
 fun StepperDivider(filled: Boolean = false) {
-    Box(Modifier.width(36.dp).height(1.5.dp).background(if (filled) SnapVaultColors.electricPurple.copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant))
+    Box(Modifier.width(36.dp).height(1.5.dp).background(if (filled) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant))
 }
 
 @Composable
@@ -983,8 +988,8 @@ private fun ModeToggleButton(
         enabled = enabled,
         modifier = modifier.height(32.dp),
         shape = RoundedCornerShape(6.dp),
-        color = if (selected) SnapVaultColors.electricPurple.copy(alpha = 0.15f * contentAlpha) else MaterialTheme.colorScheme.surfaceContainerLowest,
-        border = BorderStroke(1.dp, if (selected) SnapVaultColors.electricPurple.copy(alpha = 0.5f * contentAlpha) else MaterialTheme.colorScheme.outlineVariant)
+        color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f * contentAlpha) else MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f * contentAlpha) else MaterialTheme.colorScheme.outlineVariant)
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
             Text(
@@ -992,7 +997,7 @@ private fun ModeToggleButton(
                 fontSize = 11.sp,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 color = if (selected) {
-                    SnapVaultColors.electricPurple.copy(alpha = contentAlpha)
+                    MaterialTheme.colorScheme.primary.copy(alpha = contentAlpha)
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f * contentAlpha)
                 }

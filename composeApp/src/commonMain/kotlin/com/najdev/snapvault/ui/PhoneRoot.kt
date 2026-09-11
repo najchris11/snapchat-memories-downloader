@@ -26,7 +26,6 @@ import com.najdev.snapvault.LayoutOverride
 import com.najdev.snapvault.Screen
 import com.najdev.snapvault.ThemeMode
 import com.najdev.snapvault.WindowSize
-import com.najdev.snapvault.ui.theme.SnapVaultColors
 import com.najdev.snapvault.viewmodel.DashboardViewModel
 
 // Compact-width root: replaces the desktop sidebar with a bottom NavigationBar.
@@ -128,9 +127,9 @@ private fun androidx.compose.foundation.layout.RowScope.PhoneNavItem(
             )
         },
         colors = NavigationBarItemDefaults.colors(
-            selectedIconColor = SnapVaultColors.electricPurple,
-            selectedTextColor = SnapVaultColors.electricPurple,
-            indicatorColor = SnapVaultColors.electricPurple.copy(alpha = 0.12f)
+            selectedIconColor = MaterialTheme.colorScheme.primary,
+            selectedTextColor = MaterialTheme.colorScheme.primary,
+            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
         )
     )
 }

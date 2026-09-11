@@ -24,7 +24,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.getCachedThumbnail
-import com.najdev.snapvault.ui.theme.SnapVaultColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
@@ -84,7 +83,7 @@ actual fun VideoPlayer(videoPath: String, modifier: Modifier) {
                 Icon(
                     imageVector = Icons.Default.PlayArrow,
                     contentDescription = "Play Video",
-                    tint = SnapVaultColors.electricPurple,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(36.dp)
                 )
             }

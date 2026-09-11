@@ -108,10 +108,10 @@ private fun VersionBadge(version: String) {
     Box(
         Modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(SnapVaultColors.electricPurple.copy(alpha = 0.15f))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
-        Text(version, fontSize = 10.sp, color = SnapVaultColors.electricPurple, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+        Text(version, fontSize = 10.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
     }
 }
 

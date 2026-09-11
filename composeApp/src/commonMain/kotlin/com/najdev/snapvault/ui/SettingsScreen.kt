@@ -107,7 +107,7 @@ fun SettingsScreen(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(5.dp))
-                                    .background(if (active) SnapVaultColors.electricPurple.copy(alpha = 0.15f) else Color.Transparent)
+                                    .background(if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent)
                                     .clickable { onThemeModeChange(mode) }
                                     .padding(horizontal = 12.dp, vertical = 6.dp),
                                 contentAlignment = Alignment.Center
@@ -116,7 +116,7 @@ fun SettingsScreen(
                                     text = label,
                                     fontSize = 12.sp,
                                     fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (active) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                                 )
                             }
                         }
@@ -155,7 +155,7 @@ fun SettingsScreen(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(5.dp))
-                                    .background(if (active) SnapVaultColors.electricPurple.copy(alpha = 0.15f) else Color.Transparent)
+                                    .background(if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent)
                                     .clickable { onLayoutOverrideChange(option) }
                                     .padding(horizontal = 12.dp, vertical = 6.dp),
                                 contentAlignment = Alignment.Center
@@ -164,7 +164,7 @@ fun SettingsScreen(
                                     text = option.name,
                                     fontSize = 12.sp,
                                     fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (active) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                                 )
                             }
                         }
@@ -299,7 +299,7 @@ fun SettingsScreen(
                         onClick = onEditOutputPath,
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        Text("Edit", fontSize = 12.sp, color = SnapVaultColors.electricPurple, fontWeight = FontWeight.SemiBold)
+                        Text("Edit", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -350,8 +350,8 @@ fun SettingsSectionLabel(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(7.dp)
     ) {
-        Icon(icon, null, tint = SnapVaultColors.electricPurple, modifier = Modifier.size(14.dp))
-        Text(text, fontWeight = FontWeight.Bold, color = SnapVaultColors.electricPurple, fontSize = 13.sp)
+        Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
+        Text(text, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
     }
 }
 
@@ -401,10 +401,10 @@ fun DependencyItem(
             modifier = Modifier
                 .size(36.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(SnapVaultColors.electricPurple.copy(alpha = 0.1f)),
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, null, tint = SnapVaultColors.electricPurple, modifier = Modifier.size(18.dp))
+            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
         }
 
         Column(modifier = Modifier.weight(1f)) {

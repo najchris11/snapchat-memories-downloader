@@ -166,88 +166,41 @@ fun LibraryScreen(
                 }
             }
 
-            // Filter + search bar + sorting controls
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            // Filter tabs plus search. Side by side these need about 384dp — roughly 184dp
+            // of tabs and a fixed 200dp field — which is more than Compact (~328dp) or the
+            // narrow end of Medium (~332dp, after the 220dp sidebar) can give, so the field
+            // clipped off-screen. Below Expanded they stack, and the field is flexible
+            // rather than fixed so it cannot overflow at any width.
+            if (showInspector) {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Type filter tabs
-                    Row(
-                        modifier = Modifier
-                            .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                            .padding(3.dp)
-                    ) {
-                        listOf("All", "Photos", "Videos").forEach { filter ->
-                            val active = selectedFilter == filter
-                            val label = when (filter) {
-                                "All" -> stringResource(Res.string.lib_filter_all)
-                                "Photos" -> stringResource(Res.string.lib_filter_photos)
-                                "Videos" -> stringResource(Res.string.lib_filter_videos)
-                                else -> filter
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(5.dp))
-                                    .background(if (active) SnapVaultColors.electricPurple.copy(alpha = 0.15f) else Color.Transparent)
-                                    .clickable { selectedFilter = filter }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = label,
-                                    fontSize = 12.sp,
-                                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = if (active) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
-                                )
-                            }
-                        }
-                    }
-
-                }
-
-                // Search field
-                Row(
-                    modifier = Modifier
-                        .width(200.dp)
-                        .height(32.dp)
-                        .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                        .padding(horizontal = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(
-                        Icons.Outlined.Search,
-                        null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        modifier = Modifier.size(13.dp)
+                    LibraryFilterTabs(
+                        selected = selectedFilter,
+                        onSelect = { selectedFilter = it },
                     )
-                    BasicTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        textStyle = LocalTextStyle.current.copy(
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 12.sp
-                        ),
-                        cursorBrush = SolidColor(SnapVaultColors.electricPurple),
-                        decorationBox = { inner ->
-                            if (searchQuery.isEmpty()) {
-                                Text(
-                                    stringResource(Res.string.lib_search_placeholder),
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                )
-                            }
-                            inner()
-                        }
+                    LibrarySearchField(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        modifier = Modifier.width(200.dp),
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    LibraryFilterTabs(
+                        selected = selectedFilter,
+                        onSelect = { selectedFilter = it },
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    )
+                    LibrarySearchField(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
@@ -913,6 +866,90 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun LibraryFilterTabs(
+    selected: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+            .padding(3.dp)
+    ) {
+        listOf("All", "Photos", "Videos").forEach { filter ->
+            val active = selected == filter
+            val label = when (filter) {
+                "All" -> stringResource(Res.string.lib_filter_all)
+                "Photos" -> stringResource(Res.string.lib_filter_photos)
+                "Videos" -> stringResource(Res.string.lib_filter_videos)
+                else -> filter
+            }
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(if (active) SnapVaultColors.electricPurple.copy(alpha = 0.15f) else Color.Transparent)
+                    .clickable { onSelect(filter) }
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = label,
+                    fontSize = 12.sp,
+                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (active) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibrarySearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .height(32.dp)
+            .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Icon(
+            Icons.Outlined.Search,
+            null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            modifier = Modifier.size(13.dp)
+        )
+        BasicTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            modifier = Modifier.weight(1f),
+            singleLine = true,
+            textStyle = LocalTextStyle.current.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 12.sp
+            ),
+            cursorBrush = SolidColor(SnapVaultColors.electricPurple),
+            decorationBox = { inner ->
+                if (query.isEmpty()) {
+                    Text(
+                        stringResource(Res.string.lib_search_placeholder),
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+                inner()
+            }
+        )
     }
 }
 

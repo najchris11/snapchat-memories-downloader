@@ -73,25 +73,11 @@ fun SettingsScreen(
                 )
 
                 // Theme mode selector
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                SettingsRow(
+                    icon = Icons.Outlined.DarkMode,
+                    title = stringResource(Res.string.set_theme_label),
+                    description = stringResource(Res.string.set_theme_description),
                 ) {
-                    Icon(
-                        Icons.Outlined.DarkMode,
-                        null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        Text(stringResource(Res.string.set_theme_label), style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            stringResource(Res.string.set_theme_description),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
                     Row(
                         modifier = Modifier
                             .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
@@ -127,25 +113,11 @@ fun SettingsScreen(
 
                 // Layout selector: force the phone (bottom-nav) or desktop (sidebar)
                 // layout, or let window width decide.
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                SettingsRow(
+                    icon = Icons.Outlined.Dashboard,
+                    title = stringResource(Res.string.set_layout_label),
+                    description = stringResource(Res.string.set_layout_description),
                 ) {
-                    Icon(
-                        Icons.Outlined.Dashboard,
-                        null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        Text(stringResource(Res.string.set_layout_label), style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            stringResource(Res.string.set_layout_description),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
                     Row(
                         modifier = Modifier
                             .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
@@ -282,27 +254,12 @@ fun SettingsScreen(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 // Output path
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                SettingsRow(
+                    icon = Icons.Outlined.FolderOpen,
+                    title = stringResource(Res.string.set_output_path_label),
+                    description = downloadFolder ?: stringResource(Res.string.set_output_path_unset),
+                    descriptionMaxLines = 1,
                 ) {
-                    Icon(
-                        Icons.Outlined.FolderOpen,
-                        null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        Text(stringResource(Res.string.set_output_path_label), style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            downloadFolder ?: stringResource(Res.string.set_output_path_unset),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
                     TextButton(
                         onClick = onEditOutputPath,
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
@@ -363,15 +320,27 @@ fun SettingsSectionLabel(
     }
 }
 
+/**
+ * A settings line: icon, title, explanatory line, and whatever control sits on the right.
+ *
+ * This existed and was called from nowhere while Settings hand-wrote the same layout three
+ * times. [trailing] is what it was missing — every real use has a control on the right, so
+ * without a slot for one it could not be adopted anywhere.
+ */
 @Composable
 fun SettingsRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
-    description: String
+    description: String,
+    modifier: Modifier = Modifier,
+    // The output path is a filesystem path in a fixed-width row, so it needs to truncate.
+    descriptionMaxLines: Int = Int.MAX_VALUE,
+    trailing: @Composable () -> Unit = {},
 ) {
     Row(
+        modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Icon(
             icon,
@@ -381,8 +350,15 @@ fun SettingsRow(
         )
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(title, style = MaterialTheme.typography.bodyMedium)
-            Text(description, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                description,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = descriptionMaxLines,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
+        trailing()
     }
 }
 

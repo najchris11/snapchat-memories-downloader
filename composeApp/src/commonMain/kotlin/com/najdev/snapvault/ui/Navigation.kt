@@ -1,6 +1,14 @@
 package com.najdev.snapvault.ui
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.vector.ImageVector
 import com.najdev.snapvault.LayoutOverride
 import com.najdev.snapvault.Screen
 import com.najdev.snapvault.ThemeMode
@@ -30,6 +38,28 @@ fun Screen.navLabel(): String = when (this) {
     Screen.Library -> stringResource(Res.string.nav_library)
     Screen.Settings -> stringResource(Res.string.nav_settings)
 }
+
+/**
+ * The icons for a destination, selected and not.
+ *
+ * Dashboard and Library happened to match across the two layouts; Settings did not — sliders
+ * in the sidebar, a gear in the bottom bar. Two call sites drawing one destination is how that
+ * happens, so there is one now. The gear wins: it is the near-universal settings glyph, and
+ * sliders read as "filters" beside a media library.
+ */
+val Screen.navIconActive: ImageVector
+    get() = when (this) {
+        Screen.Dashboard -> Icons.Filled.Dashboard
+        Screen.Library -> Icons.Filled.PhotoLibrary
+        Screen.Settings -> Icons.Filled.Settings
+    }
+
+val Screen.navIconInactive: ImageVector
+    get() = when (this) {
+        Screen.Dashboard -> Icons.Outlined.Dashboard
+        Screen.Library -> Icons.Outlined.PhotoLibrary
+        Screen.Settings -> Icons.Outlined.Settings
+    }
 
 /**
  * Theme and layout options are rendered to the user, so they need labels rather than enum

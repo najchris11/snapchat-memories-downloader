@@ -89,6 +89,12 @@ fun App(
                     val windowSize = getActiveWindowSize(maxWidth, layoutOverride)
                     if (windowSize == WindowSize.Compact) {
                         PhoneRoot(
+                            // One copy of "which screen am I on", owned here. Both roots
+                            // used to hold their own, so crossing the width boundary — or
+                            // switching the Layout setting, which lives *in* Settings —
+                            // silently dropped you back on Dashboard.
+                            currentScreen = currentScreen,
+                            onNavigate = { currentScreen = it },
                             dashboardViewModel = dashboardViewModel,
                             hasExifTool = hasExifTool,
                             hasFFmpeg = hasFFmpeg,

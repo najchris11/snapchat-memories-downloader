@@ -53,6 +53,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.najdev.snapvault.WindowSize
 import com.najdev.snapvault.getCachedThumbnail
+import com.najdev.snapvault.loadFullImage
 import com.najdev.snapvault.ioDispatcher
 import com.najdev.snapvault.scanMediaFiles
 import com.najdev.snapvault.ui.theme.MediaColors
@@ -94,12 +95,112 @@ internal fun MediaFilter.label(): String = when (this) {
 private const val EMPTY_STAT = "—"
 private const val STAT_SEPARATOR = " · "
 
+/**
+ * Why the Library grid has nothing to draw.
+ *
+ * These three shared one message and one (conditional) control, which made the third case
+ * read as data loss: filter a full library to Videos when it holds only photos and the screen
+ * said "No memories found".
+ */
+enum class LibraryEmptyReason { NoFolder, NoMedia, FilteredOut }
+
+/** Returns why the grid is empty, or `null` when it has something to show. */
+internal fun libraryEmptyReason(downloadFolder: String?, scanned: Int, filtered: Int): LibraryEmptyReason? = when {
+    filtered > 0 -> null
+    downloadFolder == null -> LibraryEmptyReason.NoFolder
+    scanned == 0 -> LibraryEmptyReason.NoMedia
+    else -> LibraryEmptyReason.FilteredOut
+}
+
+@Composable
+internal fun libraryEmptyMessage(reason: LibraryEmptyReason): String = when (reason) {
+    LibraryEmptyReason.NoFolder -> stringResource(Res.string.lib_empty_no_folder)
+    LibraryEmptyReason.NoMedia -> stringResource(Res.string.lib_empty_no_media)
+    LibraryEmptyReason.FilteredOut -> stringResource(Res.string.lib_empty_filtered)
+}
+
+/**
+ * The empty grid, with the way out of whichever situation caused it.
+ *
+ * Every case offers at least one control. The previous version offered one only when no
+ * folder had been chosen, so the most common way to arrive here — a folder that turned out to
+ * be wrong — was a dead end with no way to see, change or rescan the folder in question.
+ */
+@Composable
+internal fun LibraryEmptyState(
+    reason: LibraryEmptyReason,
+    downloadFolder: String?,
+    onOpenFolder: () -> Unit,
+    onRefresh: () -> Unit,
+    onClearFilters: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                Icons.Outlined.PhotoLibrary,
+                null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                modifier = Modifier.size(48.dp)
+            )
+            Text(
+                libraryEmptyMessage(reason),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 280.dp)
+            )
+            // Which folder is being scanned was invisible from here, so "no memories found"
+            // gave no way to tell a wrong folder from an empty one.
+            if (reason != LibraryEmptyReason.NoFolder && downloadFolder != null) {
+                Text(
+                    downloadFolder,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 280.dp)
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                when (reason) {
+                    LibraryEmptyReason.NoFolder -> EmptyStateAction(
+                        label = stringResource(Res.string.lib_select_folder),
+                        onClick = onOpenFolder,
+                    )
+                    LibraryEmptyReason.NoMedia -> {
+                        EmptyStateAction(stringResource(Res.string.lib_change_folder), onOpenFolder)
+                        EmptyStateAction(stringResource(Res.string.lib_refresh_action), onRefresh)
+                    }
+                    LibraryEmptyReason.FilteredOut ->
+                        EmptyStateAction(stringResource(Res.string.lib_clear_filters), onClearFilters)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyStateAction(label: String, onClick: () -> Unit) {
+    TextButton(onClick = onClick) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
 data class LibraryItem(
     val id: String,
     val date: String,
     val title: String,
     val type: String,
-    val duration: String?,
     val hasGps: Boolean,
     val hasOverlay: Boolean,
     val favorited: Boolean = false,
@@ -261,37 +362,16 @@ fun LibraryScreen(
             }
 
             // Grid or empty state
-            if (filteredItems.isEmpty()) {
-                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(
-                            Icons.Outlined.PhotoLibrary,
-                            null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                            modifier = Modifier.size(48.dp)
-                        )
-                        Text(
-                            stringResource(Res.string.lib_empty_state),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            modifier = Modifier.widthIn(max = 280.dp)
-                        )
-                        if (downloadFolder == null) {
-                            TextButton(onClick = onOpenFolder) {
-                                Text(
-                                    stringResource(Res.string.lib_select_folder),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        }
-                    }
-                }
+            val emptyReason = libraryEmptyReason(downloadFolder, items.size, filteredItems.size)
+            if (emptyReason != null) {
+                LibraryEmptyState(
+                    reason = emptyReason,
+                    downloadFolder = downloadFolder,
+                    onOpenFolder = onOpenFolder,
+                    onRefresh = { refreshKey++ },
+                    onClearFilters = { selectedFilter = MediaFilter.All; searchQuery = "" },
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
             } else {
                 LibraryGrid(
                     items = filteredItems,
@@ -468,9 +548,6 @@ private fun InspectorItemDetail(
                     value = stringResource(if (item.hasOverlay) Res.string.lib_overlay_combined else Res.string.lib_overlay_none),
                     valueColor = if (item.hasOverlay) SnapVaultColors.info else MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                item.duration?.let {
-                    InspectorDetailRow(label = stringResource(Res.string.lib_detail_duration), value = it, valueColor = MaterialTheme.colorScheme.onSurface)
-                }
             }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -649,12 +726,27 @@ fun MetadataRow(
 
 
 @Composable
-fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
+fun MediaPreviewDialog(
+    item: LibraryItem,
+    onDismiss: () -> Unit,
+    // Injected so the progressive load can be asserted without real files on disk. The
+    // default is the real loader, on the same dispatcher as the thumbnail path.
+    loadFull: suspend (String) -> ImageBitmap? = { path -> withContext(ioDispatcher) { loadFullImage(path) } },
+) {
     val isVideo = item.type == "video"
     val thumbnail by produceState<ImageBitmap?>(null, item.id) {
         // Videos are rendered by VideoPlayer, which loads its own (cached) frame.
         value = if (isVideo) null else withContext(ioDispatcher) { getCachedThumbnail(item.id) }
     }
+
+    // Progressive, not a straight swap: the cached thumbnail is already in memory and shows
+    // immediately, then this replaces it. loadFullImage was implemented on all four targets
+    // and called from nowhere, so every photo preview was the 320px-wide cached JPEG drawn
+    // into a surface up to 860x680 — a 2.7x upscale of a recompressed thumbnail.
+    val fullImage by produceState<ImageBitmap?>(null, item.id, isVideo) {
+        value = if (isVideo) null else loadFull(item.id)
+    }
+    val preview = fullImage ?: thumbnail
 
     // The dialog covers the whole window, so Escape has to work: without it the only exits
     // are a click on the scrim or on the close button in the corner.
@@ -717,8 +809,8 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
                                 videoPath = item.id,
                                 modifier = Modifier.fillMaxSize(),
                             )
-                            thumbnail != null -> Image(
-                                bitmap = thumbnail!!,
+                            preview != null -> Image(
+                                bitmap = preview,
                                 contentDescription = item.title,
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Fit
@@ -743,7 +835,7 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
                                     .background(MediaColors.scrimBadge),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Default.Close, "Close", tint = MediaColors.onMedia, modifier = Modifier.size(14.dp))
+                                Icon(Icons.Default.Close, stringResource(Res.string.lib_close_preview), tint = MediaColors.onMedia, modifier = Modifier.size(14.dp))
                             }
                         }
                     }
@@ -881,25 +973,6 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                     )
                 }
 
-                // Duration badge
-                if (item.duration != null) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(7.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(MediaColors.scrimBadge)
-                            .padding(horizontal = 5.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            item.duration,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontFamily = FontFamily.Monospace,
-                            color = MediaColors.onMedia
-                        )
-                    }
-                }
-
                 // Favorite badge
                 if (item.favorited) {
                     Box(
@@ -932,7 +1005,7 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (item.hasGps) Icon(Icons.Outlined.GpsFixed, stringResource(Res.string.lib_detail_gps), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(11.dp))
-                        if (item.hasOverlay) Icon(Icons.Outlined.Layers, "Overlay", tint = SnapVaultColors.info, modifier = Modifier.size(11.dp))
+                        if (item.hasOverlay) Icon(Icons.Outlined.Layers, stringResource(Res.string.lib_overlay_badge), tint = SnapVaultColors.info, modifier = Modifier.size(11.dp))
                     }
                 }
                 Text(

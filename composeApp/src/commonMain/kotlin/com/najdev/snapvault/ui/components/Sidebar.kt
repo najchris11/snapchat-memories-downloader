@@ -6,13 +6,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.outlined.Dashboard
-import androidx.compose.material.icons.outlined.PhotoLibrary
-import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -25,6 +18,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.najdev.snapvault.Screen
+import com.najdev.snapvault.ui.navIconActive
+import com.najdev.snapvault.ui.navIconInactive
 import com.najdev.snapvault.ui.navLabel
 import com.najdev.snapvault.ui.theme.SnapVaultColors
 import org.jetbrains.compose.resources.stringResource
@@ -46,30 +41,21 @@ fun AppSidebar(
         Column(
             modifier = Modifier.fillMaxSize().padding(16.dp)
         ) {
-            SidebarNavItem(
-                label = Screen.Dashboard.navLabel(),
-                iconActive = Icons.Filled.Dashboard,
-                iconInactive = Icons.Outlined.Dashboard,
-                active = currentScreen == Screen.Dashboard,
-                onClick = { onNavigate(Screen.Dashboard) }
-            )
-            Spacer(Modifier.height(2.dp))
-            SidebarNavItem(
-                label = Screen.Library.navLabel(),
-                iconActive = Icons.Filled.PhotoLibrary,
-                iconInactive = Icons.Outlined.PhotoLibrary,
-                active = currentScreen == Screen.Library,
-                enabled = !isRunning,
-                onClick = { onNavigate(Screen.Library) }
-            )
-            Spacer(Modifier.height(2.dp))
-            SidebarNavItem(
-                label = Screen.Settings.navLabel(),
-                iconActive = Icons.Filled.Tune,
-                iconInactive = Icons.Outlined.Tune,
-                active = currentScreen == Screen.Settings,
-                onClick = { onNavigate(Screen.Settings) }
-            )
+            // The Library used to be disabled while a run was in progress, and the bottom
+            // bar never was. The scan is read-only and runs on ioDispatcher, so the lock
+            // bought nothing — and it explained itself nowhere, rendering at 30% alpha with
+            // no tooltip and no cursor change. A control that refuses without saying why
+            // reads as a bug.
+            Screen.entries.forEachIndexed { index, screen ->
+                if (index > 0) Spacer(Modifier.height(2.dp))
+                SidebarNavItem(
+                    label = screen.navLabel(),
+                    iconActive = screen.navIconActive,
+                    iconInactive = screen.navIconInactive,
+                    active = currentScreen == screen,
+                    onClick = { onNavigate(screen) }
+                )
+            }
 
             Spacer(Modifier.weight(1f))
             StatusChip(isRunning = isRunning, currentStep = currentStep)

@@ -9,6 +9,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -26,6 +28,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
@@ -149,16 +153,10 @@ fun LibraryScreen(
                     }
                 }
                 if (downloadFolder != null) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .clickable { refreshKey++ }
-                            .padding(horizontal = 8.dp, vertical = 5.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    IconButton(onClick = { refreshKey++ }, modifier = Modifier.size(32.dp)) {
                         Icon(
                             Icons.Outlined.Refresh,
-                            contentDescription = "Refresh library",
+                            contentDescription = stringResource(Res.string.lib_refresh),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(16.dp)
                         )
@@ -316,7 +314,7 @@ private fun InspectorItemDetail(
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 // Was enabled = !isVideo, because the preview dialog could not show a video.
                 // It can now, so videos open from here too.
-                .clickable { onPreview() },
+                .clickable(role = Role.Button) { onPreview() },
             contentAlignment = Alignment.Center
         ) {
             if (thumbnail != null) {
@@ -619,7 +617,10 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
                 modifier = Modifier
                     .widthIn(max = 860.dp)
                     .heightIn(max = 680.dp)
-                    .clickable { }, // absorb clicks so the scrim handler doesn't fire
+                    // Consume taps so the scrim's dismiss handler doesn't fire. Deliberately
+                    // not clickable { }: that made the whole card focusable, gave it a ripple,
+                    // and announced it as a control that does nothing.
+                    .pointerInput(Unit) { detectTapGestures { } },
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.surface,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
@@ -736,7 +737,7 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth().clickable { onClick() },
+        modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { onClick() },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(12.dp),
         border = BorderStroke(
@@ -893,7 +894,12 @@ private fun LibraryFilterTabs(
                 modifier = Modifier
                     .clip(RoundedCornerShape(5.dp))
                     .background(if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent)
-                    .clickable { onSelect(filter) }
+                    .selectable(
+                        selected = active,
+                        role = Role.RadioButton,
+                        onClick = { onSelect(filter) },
+                    )
+                    .minimumInteractiveComponentSize()
                     .padding(horizontal = 12.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center
             ) {

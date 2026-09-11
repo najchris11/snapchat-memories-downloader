@@ -43,6 +43,9 @@
     <string name="btn_stop">Stop</string>
     <string name="status_idle">Ready to download</string>
     <string name="btn_view_log">View log</string>
+    <string name="btn_clear">Clear</string>
+    <string name="btn_copy_logs">Copy logs</string>
+    <string name="status_copied">Copied!</string>
 
     <!-- Dashboard banners -->
     <string name="banner_android_preview_title">Android Preview</string>
@@ -63,6 +66,7 @@
     <string name="lib_sort_newest">Sort: Newest First</string>
     <string name="lib_search_placeholder">Search library…</string>
     <string name="lib_empty_state">No memories found. Start a download from the Dashboard to populate your library.</string>
+    <string name="lib_refresh">Refresh library</string>
     <string name="lib_open_preview">Open Preview</string>
     <string name="lib_play_video">Play Video</string>
     <string name="lib_inspector_title">Inspector</string>

@@ -3,7 +3,7 @@ package com.najdev.snapvault.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -108,7 +109,12 @@ fun SettingsScreen(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(5.dp))
                                     .background(if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent)
-                                    .clickable { onThemeModeChange(mode) }
+                                    .selectable(
+                                        selected = active,
+                                        role = Role.RadioButton,
+                                        onClick = { onThemeModeChange(mode) },
+                                    )
+                                    .minimumInteractiveComponentSize()
                                     .padding(horizontal = 12.dp, vertical = 6.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -156,7 +162,12 @@ fun SettingsScreen(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(5.dp))
                                     .background(if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent)
-                                    .clickable { onLayoutOverrideChange(option) }
+                                    .selectable(
+                                        selected = active,
+                                        role = Role.RadioButton,
+                                        onClick = { onLayoutOverrideChange(option) },
+                                    )
+                                    .minimumInteractiveComponentSize()
                                     .padding(horizontal = 12.dp, vertical = 6.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -206,13 +217,14 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = stringResource(Res.string.set_deps_refresh),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = SnapVaultColors.info,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clickable { onVerifyDependencies() }.padding(vertical = 8.dp)
-                    )
+                    TextButton(onClick = onVerifyDependencies) {
+                        Text(
+                            text = stringResource(Res.string.set_deps_refresh),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = SnapVaultColors.info,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                 }
                 val hint = binaryInstallHint()
                 if ((!hasExifTool || !hasFFmpeg) && hint.isNotEmpty()) {

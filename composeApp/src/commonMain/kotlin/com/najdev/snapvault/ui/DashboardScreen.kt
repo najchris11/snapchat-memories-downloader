@@ -6,6 +6,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -23,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
@@ -235,15 +237,17 @@ private fun DashboardControls(
                         ) {
                             Text("ZIP Files", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (viewModel.selectedZipFiles.isNotEmpty()) {
-                                Text(
-                                    "Clear",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = if (viewModel.isRunning) 0.5f else 1f),
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.clickable(enabled = !viewModel.isRunning) {
-                                        viewModel.changeZipSourceMode(ZipSourceMode.MultipleFiles)
-                                    }
-                                )
+                                TextButton(
+                                    onClick = { viewModel.changeZipSourceMode(ZipSourceMode.MultipleFiles) },
+                                    enabled = !viewModel.isRunning,
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                ) {
+                                    Text(
+                                        stringResource(Res.string.btn_clear),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
                             }
                         }
                         FilePickerBox(
@@ -326,7 +330,7 @@ private fun DashboardControls(
             Row(
                 modifier = Modifier.fillMaxWidth()
                     .clip(RoundedCornerShape(6.dp))
-                    .clickable { options.expanded = !options.expanded },
+                    .clickable(role = Role.Button) { options.expanded = !options.expanded },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -567,7 +571,7 @@ private fun DashboardStatus(
             modifier = Modifier
                 .weight(1f)
                 .clip(RoundedCornerShape(6.dp))
-                .clickable { logsExpanded = !logsExpanded }
+                .clickable(role = Role.Button) { logsExpanded = !logsExpanded }
                 .padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -592,29 +596,31 @@ private fun DashboardStatus(
         }
 
         if (viewModel.logs.isNotEmpty()) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .clickable {
-                        @Suppress("DEPRECATION")
-                        clipboardManager.setText(
-                            AnnotatedString(viewModel.logs.joinToString("\n"))
-                        )
-                        logsCopied = true
-                        logScope.launch {
-                            kotlinx.coroutines.delay(2000)
-                            logsCopied = false
-                        }
+            IconButton(
+                onClick = {
+                    @Suppress("DEPRECATION")
+                    clipboardManager.setText(
+                        AnnotatedString(viewModel.logs.joinToString("\n"))
+                    )
+                    logsCopied = true
+                    logScope.launch {
+                        kotlinx.coroutines.delay(2000)
+                        logsCopied = false
                     }
-                    .padding(horizontal = 6.dp, vertical = 3.dp),
-                contentAlignment = Alignment.Center
+                },
+                modifier = Modifier.size(32.dp),
             ) {
                 if (logsCopied) {
-                    Text("Copied!", style = MaterialTheme.typography.labelSmall, color = SnapVaultColors.success, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        stringResource(Res.string.status_copied),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SnapVaultColors.success,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 } else {
                     Icon(
                         Icons.Outlined.ContentCopy,
-                        contentDescription = "Copy logs",
+                        contentDescription = stringResource(Res.string.btn_copy_logs),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(13.dp)
                     )
@@ -761,7 +767,7 @@ fun FilePickerBox(
             .height(42.dp)
             .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-            .clickable(enabled = enabled) { onClick() }
+            .clickable(enabled = enabled, role = Role.Button) { onClick() }
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -803,7 +809,8 @@ fun PipelineItem(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
-            .clickable { onCheckedChange(!checked) }
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
+            .minimumInteractiveComponentSize()
             .padding(vertical = 6.dp, horizontal = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -814,7 +821,9 @@ fun PipelineItem(
         }
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange,
+            // Null: the row above owns both the interaction and the semantics, so the
+            // Switch must not announce itself as a second control for the same option.
+            onCheckedChange = null,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                 checkedTrackColor = MaterialTheme.colorScheme.primary,

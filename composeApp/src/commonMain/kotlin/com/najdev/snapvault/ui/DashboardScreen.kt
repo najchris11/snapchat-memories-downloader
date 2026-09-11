@@ -270,7 +270,7 @@ private fun DashboardControls(
                                     Text(
                                         path.substringAfterLast('/').substringAfterLast('\\'),
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -279,7 +279,7 @@ private fun DashboardControls(
                                     Text(
                                         "+ ${viewModel.selectedZipFiles.size - 4} more",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -337,7 +337,7 @@ private fun DashboardControls(
                 Icon(
                     if (options.expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -452,7 +452,7 @@ private fun DashboardStatus(
 
     Surface(
         modifier = if (compact) modifier.fillMaxWidth() else modifier,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f),
+        color = MaterialTheme.colorScheme.surfaceContainer,
         shape = RoundedCornerShape(14.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
@@ -555,7 +555,7 @@ private fun DashboardStatus(
 
     if (compact) Spacer(Modifier.height(16.dp)) else Spacer(Modifier.weight(1f))
 
-    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     Spacer(Modifier.height(10.dp))
 
     Row(
@@ -575,15 +575,15 @@ private fun DashboardStatus(
             Icon(
                 if (logsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(14.dp)
             )
-            Text("View Logs", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+            Text("View Logs", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (viewModel.logs.isNotEmpty() && !logsExpanded) {
                 Text(
                     viewModel.logs.last(),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
@@ -615,7 +615,7 @@ private fun DashboardStatus(
                     Icon(
                         Icons.Outlined.ContentCopy,
                         contentDescription = "Copy logs",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(13.dp)
                     )
                 }
@@ -719,7 +719,7 @@ private fun MetricChip(text: String) {
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(4.dp))
             .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
-        Text(text, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
+        Text(text, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontFamily = FontFamily.Monospace)
     }
 }
 
@@ -738,7 +738,7 @@ fun SectionLabel(icon: androidx.compose.ui.graphics.vector.ImageVector, text: St
 fun ControlCard(content: @Composable () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f),
+        color = MaterialTheme.colorScheme.surfaceContainer,
         shape = RoundedCornerShape(14.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
@@ -809,7 +809,7 @@ fun PipelineItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(icon, null, tint = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
+            Icon(icon, null, tint = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
             Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
         }
         Switch(
@@ -818,7 +818,7 @@ fun PipelineItem(
             colors = SwitchDefaults.colors(
                 checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                 checkedTrackColor = MaterialTheme.colorScheme.primary,
-                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                uncheckedThumbColor = MaterialTheme.colorScheme.outline,
                 uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
             )
         )
@@ -908,14 +908,14 @@ fun StepItem(
             when {
                 complete -> Icon(Icons.Default.Check, null, tint = onAccentColor, modifier = Modifier.size(15.dp))
                 active -> Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(15.dp))
-                else -> Text(step.toString(), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                else -> Text(step.toString(), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (active || complete) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            color = if (active || complete) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }

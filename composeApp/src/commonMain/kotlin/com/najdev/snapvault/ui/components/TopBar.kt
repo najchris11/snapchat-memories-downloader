@@ -35,7 +35,7 @@ fun AppTopBar(
     DraggableArea {
         Surface(
             modifier = Modifier.fillMaxWidth().height(56.dp),
-            color = MaterialTheme.colorScheme.background.copy(alpha = 0.6f),
+            color = MaterialTheme.colorScheme.background,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
             Row(
@@ -89,7 +89,7 @@ fun AppTopBar(
                             Modifier
                                 .width(1.dp)
                                 .height(16.dp)
-                                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+                                .background(MaterialTheme.colorScheme.outlineVariant)
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                             WindowControlButton("−", onMinimize)

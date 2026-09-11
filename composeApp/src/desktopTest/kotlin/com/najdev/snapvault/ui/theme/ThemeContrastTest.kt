@@ -55,6 +55,38 @@ class ThemeContrastTest {
         }
     }
 
+    // These pairs were previously unassertable. Cards were a translucent
+    // surface.copy(alpha = 0.45f) over the background, so the colour behind any given label
+    // depended on three stacked layers and could not be computed from the scheme at all.
+    // Now that the containers are opaque roles, the ratios are real numbers.
+    @Test
+    fun secondaryTextIsReadableOnEveryContainerItSitsOn() {
+        listOf("dark" to SnapVaultColorScheme, "light" to SnapVaultLightColorScheme).forEach { (name, scheme) ->
+            listOf(
+                "surfaceContainer" to scheme.surfaceContainer,
+                "surfaceContainerLow" to scheme.surfaceContainerLow,
+                "surfaceContainerLowest" to scheme.surfaceContainerLowest,
+                "surfaceContainerHigh" to scheme.surfaceContainerHigh,
+            ).forEach { (containerName, container) ->
+                assertPair(name, scheme.onSurfaceVariant, container, "onSurfaceVariant/" + containerName)
+                assertPair(name, scheme.onSurface, container, "onSurface/" + containerName)
+            }
+        }
+    }
+
+    // Outlines and dividers are non-text, so the 3:1 non-text threshold applies. Six
+    // dividers were drawn as onSurface at 8% alpha, which is well under it — they are now
+    // outlineVariant, which exists for exactly this.
+    @Test
+    fun outlinesAreVisibleAgainstTheirContainers() {
+        listOf("dark" to SnapVaultColorScheme, "light" to SnapVaultLightColorScheme).forEach { (name, scheme) ->
+            assertPair(
+                name, scheme.outline, scheme.surfaceContainer, "outline/surfaceContainer",
+                minimum = NON_TEXT_MINIMUM,
+            )
+        }
+    }
+
     // The log panel is fixed in both themes, so it only needs checking once — but it is the
     // pair that was actually broken before round 1, which is why it is pinned here.
     @Test
@@ -91,6 +123,7 @@ class ThemeContrastTest {
     private companion object {
         const val BODY_TEXT_MINIMUM = 4.5
         const val LARGE_TEXT_MINIMUM = 3.0
+        const val NON_TEXT_MINIMUM = 3.0
 
         fun contrastRatio(a: Color, b: Color): Double {
             val la = relativeLuminance(a)

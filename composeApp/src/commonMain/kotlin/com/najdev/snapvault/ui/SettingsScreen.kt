@@ -59,7 +59,7 @@ fun SettingsScreen(
             Text(
                 text = "Manage system dependencies and utility preferences.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
@@ -80,7 +80,7 @@ fun SettingsScreen(
                     Icon(
                         Icons.Outlined.DarkMode,
                         null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp)
                     )
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
@@ -88,7 +88,7 @@ fun SettingsScreen(
                         Text(
                             "Choose between light, dark, or system default theme.",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Row(
@@ -116,7 +116,7 @@ fun SettingsScreen(
                                     text = label,
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -133,7 +133,7 @@ fun SettingsScreen(
                     Icon(
                         Icons.Outlined.Dashboard,
                         null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp)
                     )
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
@@ -141,7 +141,7 @@ fun SettingsScreen(
                         Text(
                             "Auto switches by window width; Compact forces the phone layout.",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Row(
@@ -164,7 +164,7 @@ fun SettingsScreen(
                                     text = option.name,
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -220,7 +220,7 @@ fun SettingsScreen(
                         hint,
                         style = MaterialTheme.typography.labelSmall,
                         lineHeight = 16.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -256,7 +256,7 @@ fun SettingsScreen(
                             Text(
                                 stringResource(Res.string.set_reset_index_desc),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -271,7 +271,7 @@ fun SettingsScreen(
                     }
                 }
 
-                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 // Output path
                 Row(
@@ -282,7 +282,7 @@ fun SettingsScreen(
                     Icon(
                         Icons.Outlined.FolderOpen,
                         null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp)
                     )
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
@@ -290,7 +290,7 @@ fun SettingsScreen(
                         Text(
                             downloadFolder ?: "Not set",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -316,13 +316,13 @@ fun SettingsScreen(
             Icon(
                 Icons.Outlined.Info,
                 null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(13.dp)
             )
             Text(
                 "SnapVault ${AppBuildConfig.VERSION} — GPL-3.0 License",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -332,7 +332,7 @@ fun SettingsScreen(
 fun SettingsCard(content: @Composable () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f),
+        color = MaterialTheme.colorScheme.surfaceContainer,
         contentColor = MaterialTheme.colorScheme.onSurface,
         shape = RoundedCornerShape(14.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
@@ -368,12 +368,12 @@ fun SettingsRow(
         Icon(
             icon,
             null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(16.dp)
         )
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(title, style = MaterialTheme.typography.bodyMedium)
-            Text(description, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+            Text(description, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -409,7 +409,7 @@ fun DependencyItem(
 
         Column(modifier = Modifier.weight(1f)) {
             Text(name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-            Text(description, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+            Text(description, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
         Row(

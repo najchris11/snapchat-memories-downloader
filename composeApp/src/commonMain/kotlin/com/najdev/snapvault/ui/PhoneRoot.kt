@@ -45,7 +45,7 @@ fun PhoneRoot(
     Scaffold(
         bottomBar = {
             NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
                 tonalElevation = 0.dp
             ) {
                 PhoneNavItem(

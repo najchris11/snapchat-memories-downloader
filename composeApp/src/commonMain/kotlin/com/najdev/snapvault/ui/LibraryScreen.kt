@@ -159,7 +159,7 @@ fun LibraryScreen(
                         Icon(
                             Icons.Outlined.Refresh,
                             contentDescription = "Refresh library",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -221,7 +221,7 @@ fun LibraryScreen(
                         Text(
                             stringResource(Res.string.lib_empty_state),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                             modifier = Modifier.widthIn(max = 280.dp)
                         )
@@ -269,7 +269,7 @@ fun LibraryScreen(
         if (showInspector) {
             Surface(
                 modifier = Modifier.width(280.dp).fillMaxHeight(),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
                 contentColor = MaterialTheme.colorScheme.onSurface,
                 shape = RoundedCornerShape(0.dp),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
@@ -398,11 +398,11 @@ private fun InspectorItemDetail(
                     item.date,
                     style = MaterialTheme.typography.labelSmall,
                     fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
             // Metadata rows
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -414,19 +414,19 @@ private fun InspectorItemDetail(
                 InspectorDetailRow(
                     label = "GPS",
                     value = if (item.hasGps) "Tagged" else "No data",
-                    valueColor = if (item.hasGps) SnapVaultColors.success else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    valueColor = if (item.hasGps) SnapVaultColors.success else MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 InspectorDetailRow(
                     label = "OVERLAY",
                     value = if (item.hasOverlay) "Combined" else "None",
-                    valueColor = if (item.hasOverlay) SnapVaultColors.info else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    valueColor = if (item.hasOverlay) SnapVaultColors.info else MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 item.duration?.let {
                     InspectorDetailRow(label = "DURATION", value = it, valueColor = MaterialTheme.colorScheme.onSurface)
                 }
             }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Surface(
                 onClick = onPreview,
                 shape = RoundedCornerShape(8.dp),
@@ -462,7 +462,7 @@ private fun InspectorItemDetail(
 @Composable
 private fun InspectorDetailRow(label: String, value: String, valueColor: Color) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+        Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = valueColor)
     }
 }
@@ -497,14 +497,14 @@ private fun InspectorGlobalStats(items: List<LibraryItem>) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                Icon(Icons.Outlined.Storage, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), modifier = Modifier.size(11.dp))
-                Text(stringResource(Res.string.lib_storage_label), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f))
+                Icon(Icons.Outlined.Storage, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(11.dp))
+                Text(stringResource(Res.string.lib_storage_label), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
                     if (items.isEmpty()) "—" else "${items.size} file${if (items.size == 1) "" else "s"}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
                     if (items.isEmpty()) "—" else formatBytes(totalBytes),
@@ -519,20 +519,20 @@ private fun InspectorGlobalStats(items: List<LibraryItem>) {
                 Text(
                     "$photoCount photo${if (photoCount == 1) "" else "s"} · $videoCount video${if (videoCount == 1) "" else "s"}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
 
-        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                Icon(Icons.Outlined.Tag, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), modifier = Modifier.size(11.dp))
-                Text(stringResource(Res.string.lib_metadata_label), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f))
+                Icon(Icons.Outlined.Tag, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(11.dp))
+                Text(stringResource(Res.string.lib_metadata_label), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             MetadataRow(
                 icon = Icons.Outlined.GpsFixed,
@@ -593,7 +593,7 @@ fun MetadataRow(
         }
         Column {
             Text(title, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -685,7 +685,7 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(item.title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(item.date, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                            Text(item.date, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -849,7 +849,7 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                     Text(
                         item.date,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontFamily = FontFamily.Monospace
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -901,7 +901,7 @@ private fun LibraryFilterTabs(
                     text = label,
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -926,7 +926,7 @@ private fun LibrarySearchField(
         Icon(
             Icons.Outlined.Search,
             null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(13.dp)
         )
         BasicTextField(
@@ -945,7 +945,7 @@ private fun LibrarySearchField(
                     Text(
                         stringResource(Res.string.lib_search_placeholder),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 inner()

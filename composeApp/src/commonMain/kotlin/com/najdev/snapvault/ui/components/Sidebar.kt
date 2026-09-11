@@ -37,7 +37,7 @@ fun AppSidebar(
 ) {
     Surface(
         modifier = Modifier.width(220.dp).fillMaxHeight(),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
         contentColor = MaterialTheme.colorScheme.onSurface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
@@ -86,7 +86,7 @@ private fun StatusChip(isRunning: Boolean, currentStep: Int) {
         when {
             isRunning -> MaterialTheme.colorScheme.primary
             currentStep == 3 -> SnapVaultColors.success
-            else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
         }
     )
 
@@ -126,7 +126,7 @@ fun SidebarNavItem(
         when {
             !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
             active -> MaterialTheme.colorScheme.onSurface
-            else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
         }
     )
 

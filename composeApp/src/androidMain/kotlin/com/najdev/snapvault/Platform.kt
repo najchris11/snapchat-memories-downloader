@@ -17,3 +17,9 @@ actual fun openUrl(url: String) {
 
 actual suspend fun <T> runInterruptibleCompat(block: () -> T): T =
     kotlinx.coroutines.runInterruptible(block = block)
+
+// No user-facing file manager to reveal into on this platform; the UI hides the action
+// rather than wiring it to something that does nothing.
+actual val supportsFileManager: Boolean = false
+
+actual fun revealInFileManager(path: String) = Unit

@@ -64,7 +64,7 @@ class LibraryEmptyStateTest {
         }
 
         onNodeWithText("/home/someone/SnapVault", substring = true).assertExists()
-        onNodeWithText("Change folder").assertHasClickAction().performClick()
+        onNodeWithText("Change output folder").assertHasClickAction().performClick()
         onNodeWithText("Refresh").assertHasClickAction().performClick()
         assertEquals(1, changed)
         assertEquals(1, refreshed)
@@ -104,7 +104,7 @@ class LibraryEmptyStateTest {
             }
         }
 
-        onNodeWithText("Select Download Folder").assertHasClickAction().performClick()
+        onNodeWithText("Set output folder").assertHasClickAction().performClick()
         assertEquals(1, opened)
     }
 

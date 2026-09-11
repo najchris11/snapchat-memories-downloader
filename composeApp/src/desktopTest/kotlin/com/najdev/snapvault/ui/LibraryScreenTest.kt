@@ -134,7 +134,7 @@ class LibraryScreenTest {
                         )
                     }
                 }
-                onNodeWithText("Select Download Folder").assertIsDisplayed()
+                onNodeWithText("Set output folder").assertIsDisplayed()
             }
         }
     }

@@ -54,6 +54,8 @@ import androidx.compose.ui.window.DialogProperties
 import com.najdev.snapvault.WindowSize
 import com.najdev.snapvault.getCachedThumbnail
 import com.najdev.snapvault.loadFullImage
+import com.najdev.snapvault.revealInFileManager
+import com.najdev.snapvault.supportsFileManager
 import com.najdev.snapvault.ioDispatcher
 import com.najdev.snapvault.scanMediaFiles
 import com.najdev.snapvault.ui.theme.MediaColors
@@ -103,6 +105,81 @@ private const val STAT_SEPARATOR = " · "
  * said "No memories found".
  */
 enum class LibraryEmptyReason { NoFolder, NoMedia, FilteredOut }
+
+/**
+ * The order the grid draws memories in.
+ *
+ * Applied here rather than in `scanMediaFiles` so that changing it does not re-read the
+ * folder, and so the scanner keeps its capture-date-over-mtime ordering as the default —
+ * which is what [Newest] is: the scan order, untouched. `LibraryItem.date` is a formatted
+ * display string, so it cannot be sorted on directly.
+ */
+enum class MediaSort {
+    Newest,
+    Oldest,
+    Largest,
+    Name;
+
+    fun applyTo(items: List<LibraryItem>): List<LibraryItem> = when (this) {
+        Newest -> items
+        Oldest -> items.reversed()
+        Largest -> items.sortedByDescending { it.fileSizeBytes }
+        // Case-insensitive: otherwise a capital letter sorts an item to the front, which
+        // reads as a broken sort rather than as ASCII ordering.
+        Name -> items.sortedBy { it.title.lowercase() }
+    }
+}
+
+@Composable
+internal fun MediaSort.label(): String = when (this) {
+    MediaSort.Newest -> stringResource(Res.string.lib_sort_newest)
+    MediaSort.Oldest -> stringResource(Res.string.lib_sort_oldest)
+    MediaSort.Largest -> stringResource(Res.string.lib_sort_largest)
+    MediaSort.Name -> stringResource(Res.string.lib_sort_name)
+}
+
+/**
+ * Sort picker. A menu rather than another tab strip: the filter row already needs ~384dp of
+ * the ~328dp a phone has, so a fourth control in it would not fit at any width.
+ */
+@Composable
+internal fun LibrarySortMenu(
+    selected: MediaSort,
+    onSelect: (MediaSort) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier) {
+        IconButton(onClick = { expanded = true }, modifier = Modifier.size(32.dp)) {
+            Icon(
+                Icons.Outlined.SwapVert,
+                contentDescription = stringResource(Res.string.lib_sort_label),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            MediaSort.entries.forEach { sort ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            sort.label(),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = if (sort == selected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (sort == selected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        )
+                    },
+                    onClick = { onSelect(sort); expanded = false },
+                )
+            }
+        }
+    }
+}
 
 /** Returns why the grid is empty, or `null` when it has something to show. */
 internal fun libraryEmptyReason(downloadFolder: String?, scanned: Int, filtered: Int): LibraryEmptyReason? = when {
@@ -196,6 +273,59 @@ private fun EmptyStateAction(label: String, onClick: () -> Unit) {
     }
 }
 
+/**
+ * The Library header's platform actions. Empty on the mobile targets, where there is no file
+ * manager to open — see [supportsFileManager].
+ */
+@Composable
+internal fun LibraryHeaderActions(
+    downloadFolder: String?,
+    canRevealFiles: Boolean = supportsFileManager,
+    onOpenOutputFolder: (String) -> Unit = ::revealInFileManager,
+) {
+    if (downloadFolder == null || !canRevealFiles) return
+    IconButton(onClick = { onOpenOutputFolder(downloadFolder) }, modifier = Modifier.size(32.dp)) {
+        Icon(
+            Icons.Outlined.FolderOpen,
+            contentDescription = stringResource(Res.string.lib_open_output_folder),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(16.dp)
+        )
+    }
+}
+
+@Composable
+private fun InspectorAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(8.dp),
+        color = Color.Transparent,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                icon,
+                contentDescription = label,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(14.dp)
+            )
+            Text(
+                label,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
 data class LibraryItem(
     val id: String,
     val date: String,
@@ -230,6 +360,7 @@ fun LibraryScreen(
     }
 
     var selectedFilter by remember { mutableStateOf(MediaFilter.All) }
+    var selectedSort by remember { mutableStateOf(MediaSort.Newest) }
     var searchQuery by remember { mutableStateOf("") }
     // An index rather than the item itself: the keyboard moves the selection by position,
     // and "the item after this one" is not a question a LibraryItem can answer.
@@ -240,12 +371,14 @@ fun LibraryScreen(
     val searchFocus = remember { FocusRequester() }
     var searchFocused by remember { mutableStateOf(false) }
 
-    val filteredItems = remember(items, selectedFilter, searchQuery) {
-        items
-            .filter(selectedFilter::matches)
-            .filter { item ->
-                searchQuery.isBlank() || item.title.contains(searchQuery, ignoreCase = true)
-            }
+    val filteredItems = remember(items, selectedFilter, searchQuery, selectedSort) {
+        selectedSort.applyTo(
+            items
+                .filter(selectedFilter::matches)
+                .filter { item ->
+                    searchQuery.isBlank() || item.title.contains(searchQuery, ignoreCase = true)
+                }
+        )
     }
     val selectedItem = filteredItems.getOrNull(selectedIndex)
 
@@ -307,6 +440,8 @@ fun LibraryScreen(
                     }
                 }
                 if (downloadFolder != null) {
+                    LibraryHeaderActions(downloadFolder = downloadFolder)
+                    LibrarySortMenu(selected = selectedSort, onSelect = { selectedSort = it })
                     IconButton(onClick = { refreshKey++ }, modifier = Modifier.size(32.dp)) {
                         Icon(
                             Icons.Outlined.Refresh,
@@ -422,10 +557,15 @@ fun LibraryScreen(
 }
 
 @Composable
-private fun InspectorItemDetail(
+internal fun InspectorItemDetail(
     item: LibraryItem,
     onPreview: () -> Unit,
-    onClearSelection: () -> Unit
+    onClearSelection: () -> Unit,
+    // Passed rather than read from `supportsFileManager` directly so the absent case is
+    // reachable in a test: on desktop that constant is true, so only the present half would
+    // ever be asserted and the mobile no-op would go unverified.
+    canRevealFiles: Boolean = supportsFileManager,
+    onReveal: (String) -> Unit = ::revealInFileManager,
 ) {
     val isVideo = item.type == "video"
     val thumbnail by produceState<ImageBitmap?>(null, item.id) {
@@ -547,6 +687,15 @@ private fun InspectorItemDetail(
                     label = stringResource(Res.string.lib_detail_overlay),
                     value = stringResource(if (item.hasOverlay) Res.string.lib_overlay_combined else Res.string.lib_overlay_none),
                     valueColor = if (item.hasOverlay) SnapVaultColors.info else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (canRevealFiles) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                InspectorAction(
+                    icon = Icons.Outlined.FolderOpen,
+                    label = stringResource(Res.string.lib_reveal_file),
+                    onClick = { onReveal(item.id) },
                 )
             }
 

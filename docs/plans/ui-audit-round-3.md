@@ -19,6 +19,23 @@ fails without it, verified by deliberately reintroducing the bug.
 **Decided:** build the sort control (item 14), reveal-in-file-manager (item 15) and
 favourites (item 16). Delete the duration UI (item 12) rather than populating it.
 
+**Status:** 3a (items 1–6) landed on `fix/ui-audit-round-3a`. 146 tests, detekt clean, all
+three targets compiling. 3b and 3c still to do.
+
+Two things 3a turned up that are worth knowing before touching resources again:
+
+- **Compose Resources does not substitute a bare `%d` in a plural item.** It has to be
+  positional — `%1$d` — and the failure is silent: the literal `%d` renders on screen.
+- **Both halves of the string problem are about code that is absent**, so no behavioural
+  test can catch either. `StringResourceHygieneTest` reads the sources instead, and holds
+  both directions: no unreferenced resource, no hardcoded `Text("…")` outside a `notCopy`
+  allow-list that states why each entry is not translatable prose.
+
+One decision reversed: item 4 said to keep `lib_sort_newest` and `lib_filter_date` for the
+sort control in 3c. They are deleted with the rest instead — re-adding two strings in 3c is
+cheaper than carrying an allow-list entry in the new checker that every future reader has to
+evaluate.
+
 ---
 
 ## Current state, measured

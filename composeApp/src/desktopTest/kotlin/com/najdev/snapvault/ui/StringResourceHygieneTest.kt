@@ -58,15 +58,22 @@ class StringResourceHygieneTest {
         )
     }
 
+    // Both the visible-text form and the two ways a contentDescription gets written. The
+    // second matters as much: an unextracted contentDescription is text a screen reader
+    // speaks, in whatever language the source happened to be written in.
+    private val displayTextForms = listOf(
+        Regex("""Text\(\s*"((?:[^"\\]|\\.)*)""""),
+        Regex("""contentDescription\s*=\s*"((?:[^"\\]|\\.)*)""""),
+        Regex("""Icon\([^,\n]+,\s*"((?:[^"\\]|\\.)*)""""),
+    )
+
     @Test
     fun uiCodeHasNoHardcodedDisplayText() {
-        val literal = Regex("""Text\(\s*"((?:[^"\\]|\\.)*)"""")
         val offenders = uiSources.flatMap { file ->
             file.readLines().withIndex().flatMap { (index, line) ->
-                literal.findAll(line)
-                    .map { it.groupValues[1] }
+                displayTextForms.flatMap { form -> form.findAll(line).map { it.groupValues[1] } }
                     .filterNot { it in notCopy }
-                    .map { "${file.name}:${index + 1}  Text(\"$it\")" }
+                    .map { "${file.name}:${index + 1}  \"$it\"" }
             }
         }
 

@@ -69,7 +69,14 @@
     <string name="lib_filter_photos">Photos</string>
     <string name="lib_filter_videos">Videos</string>
     <string name="lib_search_placeholder">Search library…</string>
-    <string name="lib_empty_state">No memories found. Start a download from the Dashboard to populate your library.</string>
+    <!-- Three distinct empty states. They shared one message, which meant a library full of
+         photos filtered to Videos reported "No memories found" — of a full library. -->
+    <string name="lib_empty_no_folder">No download folder chosen yet. Pick one to see your memories here.</string>
+    <string name="lib_empty_no_media">No memories found. Start a download from the Dashboard to populate your library.</string>
+    <string name="lib_empty_filtered">No memories match the current filter or search.</string>
+    <string name="lib_change_folder">Change folder</string>
+    <string name="lib_clear_filters">Clear filters</string>
+    <string name="lib_refresh_action">Refresh</string>
     <string name="lib_refresh">Refresh library</string>
     <string name="lib_open_preview">Open Preview</string>
     <string name="lib_play_video">Play Video</string>
@@ -125,6 +132,8 @@
     </plurals>
     <string name="lib_select_folder">Select Download Folder</string>
     <string name="lib_clear_selection">Clear selection</string>
+    <string name="lib_close_preview">Close preview</string>
+    <string name="lib_overlay_badge">Overlay</string>
     <string name="lib_detail_size">SIZE</string>
     <string name="lib_detail_gps">GPS</string>
     <string name="lib_detail_overlay">OVERLAY</string>

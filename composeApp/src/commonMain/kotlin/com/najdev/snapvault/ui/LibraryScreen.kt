@@ -776,6 +776,10 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
     }
 
     Card(
+        // `clickable` rather than a tap gesture, and that is load-bearing beyond the ripple:
+        // it makes the card focusable and takes focus on click, which is the only way arrow
+        // navigation ever starts for a mouse user. Swapping it for detectTapGestures fails
+        // two tests in LibraryKeyboardTest.
         modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { onClick() },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(12.dp),

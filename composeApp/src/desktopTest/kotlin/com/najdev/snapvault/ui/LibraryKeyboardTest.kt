@@ -16,15 +16,21 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.dp
+import com.najdev.snapvault.WindowSize
 import com.najdev.snapvault.ui.theme.SnapVaultTheme
+import java.io.File
+import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -160,6 +166,34 @@ class LibraryKeyboardTest {
         assertEquals(2, opened)
     }
 
+    // Arrow navigation is only reachable if something in the grid holds focus, and the way a
+    // user actually gets there is a mouse click — not a FocusRequester the other tests call
+    // by hand. This one deliberately never requests focus itself.
+    @Test
+    fun clickingACardLeavesTheGridTakingArrowKeys() = runComposeUiTest {
+        var selected = -1
+        setContent {
+            SnapVaultTheme(darkMode = true) {
+                var index by remember { mutableStateOf(LIBRARY_NO_SELECTION) }
+                LibraryGrid(
+                    items = items(6),
+                    selectedIndex = index,
+                    onSelect = { index = it; selected = it },
+                    onOpen = { index = it; selected = it },
+                    compact = false,
+                    focusRequester = remember { FocusRequester() },
+                    modifier = Modifier.size(400.dp),
+                )
+            }
+        }
+
+        onNodeWithText("Memory 0").performClick()
+        assertEquals(0, selected, "clicking a card should select it")
+
+        onNode(isFocused()).performKeyInput { pressKey(Key.DirectionRight) }
+        assertEquals(1, selected, "the arrow keys should work straight after a mouse click")
+    }
+
     // The preview covers the whole window and its only exit was a mouse click on the scrim or
     // the close button.
     @Test
@@ -173,6 +207,50 @@ class LibraryKeyboardTest {
 
         onNode(isDialog()).performKeyInput { pressKey(Key.Escape) }
         assertTrue(dismissed, "Escape should dismiss the preview dialog")
+    }
+
+    // The other wiring tests hold the grid and the dialog apart. This one walks the path a
+    // user actually walks — click a card, the preview opens over it, Escape, then arrows —
+    // because that path crosses a focus boundary none of them do: the dialog takes focus on
+    // open (it must, or Escape would not reach it) and the grid has to get it back.
+    @Test
+    fun arrowKeysStillWorkAfterThePreviewHasBeenOpenedAndClosed() = runComposeUiTest {
+        // scanMediaFiles only stats these, and a thumbnail that fails to decode falls back to
+        // the placeholder, so empty files are enough to render a real grid. Named so the
+        // scanner's date parser orders them predictably: newest first.
+        val folder = createTempDirectory("snapvault-library").toFile()
+        listOf("2026-01-04_d", "2026-01-03_c", "2026-01-02_b", "2026-01-01_a")
+            .forEach { File(folder, "$it.jpg").createNewFile() }
+
+        try {
+            setContent {
+                SnapVaultTheme(darkMode = true) {
+                    LibraryScreen(
+                        downloadFolder = folder.absolutePath,
+                        onOpenFolder = {},
+                        windowSize = WindowSize.Expanded,
+                    )
+                }
+            }
+            waitUntil { onAllNodesWithText("2026-01-04_d").fetchSemanticsNodes().isNotEmpty() }
+
+            onNodeWithText("2026-01-04_d").performClick()
+            onNode(isDialog()).performKeyInput { pressKey(Key.Escape) }
+            waitForIdle()
+
+            // The inspector renders the selected item's title alongside the grid card, so the
+            // selected title is the one appearing twice. Asserted before as well as after, or
+            // a count of 2 on the wrong item would read as a pass.
+            onAllNodesWithText("2026-01-04_d").assertCountEquals(2)
+            onAllNodesWithText("2026-01-03_c").assertCountEquals(1)
+
+            onNode(isFocused()).performKeyInput { pressKey(Key.DirectionRight) }
+
+            onAllNodesWithText("2026-01-03_c").assertCountEquals(2)
+            onAllNodesWithText("2026-01-04_d").assertCountEquals(1)
+        } finally {
+            folder.deleteRecursively()
+        }
     }
 
     // ── Slash-to-search ──────────────────────────────────────────────────────

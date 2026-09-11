@@ -12,6 +12,11 @@ fails without it, verified by deliberately reintroducing the bug.
 
 **Decided:** `#8B5CF6` becomes the theme primary (item 2).
 
+**Status:** all ten items landed on `fix/ui-audit-round-2`. 137 tests, detekt clean, desktop
++ Android + iOS compiling. Two decisions in here were reversed while doing the work and are
+recorded where they were made: the detekt baseline (item 1) and resetting the experimental
+matching flag (round 1).
+
 ---
 
 ## Current state, measured
@@ -40,16 +45,45 @@ parameter — all of which a default rule set flags in one run.
 This goes **first** in the round because the sweeps that follow (T1 especially) touch every
 UI file, and a linter running on each of them is worth far more than one running at the end.
 
-**Fix:** add `io.gitlab.arturbosch.detekt` with its default rule set plus `UnusedImports`,
-`UnusedPrivateMember` and `UnusedParameter`. No baseline file — round 1 already cleared most
-of what it would contain, and a baseline would silently re-admit the rest. Add a
-`./gradlew detekt` step to CI.
+**Fix:** add `io.gitlab.arturbosch.detekt` building on its default rule set, with a
+`./gradlew detekt` step in CI ahead of the tests.
 
-Consider `ktlint` for formatting separately; detekt is the one that catches correctness-ish
-issues, so it is the one that earns its place first.
+**Outcome — 134 findings on the first run, and two decisions changed as a result.**
 
-**Tests:** none (tooling). Verification is that `./gradlew detekt` passes on a clean tree and
-fails on a deliberately unused import.
+*Style rules turned off.* 98 of the 134 were `MaxLineLength`, almost all log messages and
+ffmpeg argument lists in pipeline code. Reformatting them would produce a large diff across
+files unrelated to whatever change is in flight, which is the churn that gets a linter
+ignored. Off, along with the rules that fight Compose idioms rather than catching defects:
+`MagicNumber` (dp and sp literals are a UI file's whole vocabulary), `LongMethod` /
+`NestedBlockDepth` / `LongParameterList` (composable screens are legitimately both),
+`MatchingDeclarationName` (one-declaration-per-file is deliberately not the convention here),
+and `LargeClass` (`DashboardViewModel` is a ~1000-line orchestrator; splitting it is a real
+refactor, not a lint side effect). Each is commented in `config/detekt/detekt.yml` with the
+reason.
+
+*~~No baseline file~~ — reversed.* That call assumed round 1 had already cleared what a
+baseline would hold. It had, for the UI. What detekt actually surfaced was **23 pre-existing
+issues in pipeline and platform code**: 16 swallowed exceptions, 6 printed stack traces, and
+one generic throw — every one a place where a failure vanishes without the user learning
+about it. That is a real finding, and fixing it properly means threading logging through the
+pipeline, which is its own piece of work rather than a side quest inside a typography round.
+
+So the backlog is baselined at `config/detekt/baseline.xml` (13 signatures covering the 23
+sites), with `SwallowedException` and `PrintStackTrace` left **active** so anything new
+fails. Verified by injecting a swallowed exception, an unused import and an unused private
+function into a UI file: all three failed the build, confirming the baseline is scoped to
+existing sites rather than acting as a blanket amnesty.
+
+Fixed outright rather than baselined: three unused imports, one unused private property
+(`IosZipPipelineRunner` stored a `MediaProcessor` it never read — iOS does no overlay
+combining, so the constructor parameter is gone and its one caller updated), and a test
+helper that only returned a constant.
+
+**Tests:** none (tooling). Verified by `./gradlew detekt` passing on a clean tree and failing
+on each of three deliberately injected violations.
+
+**Follow-up for a later round:** burn down the baseline. 23 vanishing failures is worth its
+own pass, and the count is now visible instead of unknown.
 
 ---
 
@@ -257,6 +291,11 @@ stepper was missing it.
 **Tests:** assert the stepper's state description at each `currentStep`, and that the ring
 exposes a progress value.
 
+**Landed.** One `stepStateDescription` shared by both steppers, so they cannot drift;
+`DASHBOARD_STEP_COUNT` replaces the literal 4 and the four hand-written step numbers. The
+ring moved into `PipelineProgressRing` — Material publishes the range info itself, but not
+what the bar is measuring, and extracting it is what made the range info assertable at all.
+
 ---
 
 ## 10. T7 — Keyboard support
@@ -275,6 +314,13 @@ effect, so do this after.
 
 **Tests:** UI tests dispatching key events — Escape dismisses the dialog, arrow keys move grid
 selection.
+
+**Landed.** Escape, arrow keys, Enter/Space, Home/End, and `/` to focus search. Two things
+worth knowing next time: Compose Desktop's `Dialog` does **not** handle Escape for you, and
+the dialog must hold focus or the handler never fires, because key events follow the focus
+path. Both were established by removing the code and watching the test fail. The grid moved
+into `LibraryGrid` and the movement arithmetic into the pure `libraryGridTarget`, since the
+inline grid needed a real folder on disk before it would render anything to test.
 
 ---
 

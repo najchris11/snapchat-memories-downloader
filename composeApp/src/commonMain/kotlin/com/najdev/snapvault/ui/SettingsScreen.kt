@@ -3,7 +3,7 @@ package com.najdev.snapvault.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,8 +59,8 @@ fun SettingsScreen(
             )
             Text(
                 text = "Manage system dependencies and utility preferences.",
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
@@ -80,15 +81,15 @@ fun SettingsScreen(
                     Icon(
                         Icons.Outlined.DarkMode,
                         null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp)
                     )
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        Text(stringResource(Res.string.set_theme_label), fontSize = 13.sp)
+                        Text(stringResource(Res.string.set_theme_label), style = MaterialTheme.typography.bodyMedium)
                         Text(
                             "Choose between light, dark, or system default theme.",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Row(
@@ -107,16 +108,21 @@ fun SettingsScreen(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(5.dp))
-                                    .background(if (active) SnapVaultColors.electricPurple.copy(alpha = 0.15f) else Color.Transparent)
-                                    .clickable { onThemeModeChange(mode) }
+                                    .background(if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent)
+                                    .selectable(
+                                        selected = active,
+                                        role = Role.RadioButton,
+                                        onClick = { onThemeModeChange(mode) },
+                                    )
+                                    .minimumInteractiveComponentSize()
                                     .padding(horizontal = 12.dp, vertical = 6.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     text = label,
-                                    fontSize = 12.sp,
+                                    style = MaterialTheme.typography.bodySmall,
                                     fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (active) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -133,15 +139,15 @@ fun SettingsScreen(
                     Icon(
                         Icons.Outlined.Dashboard,
                         null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp)
                     )
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        Text("Layout", fontSize = 13.sp)
+                        Text("Layout", style = MaterialTheme.typography.bodyMedium)
                         Text(
                             "Auto switches by window width; Compact forces the phone layout.",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Row(
@@ -155,16 +161,21 @@ fun SettingsScreen(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(5.dp))
-                                    .background(if (active) SnapVaultColors.electricPurple.copy(alpha = 0.15f) else Color.Transparent)
-                                    .clickable { onLayoutOverrideChange(option) }
+                                    .background(if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent)
+                                    .selectable(
+                                        selected = active,
+                                        role = Role.RadioButton,
+                                        onClick = { onLayoutOverrideChange(option) },
+                                    )
+                                    .minimumInteractiveComponentSize()
                                     .padding(horizontal = 12.dp, vertical = 6.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     text = option.name,
-                                    fontSize = 12.sp,
+                                    style = MaterialTheme.typography.bodySmall,
                                     fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (active) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -206,21 +217,22 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = stringResource(Res.string.set_deps_refresh),
-                        fontSize = 12.sp,
-                        color = SnapVaultColors.info,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clickable { onVerifyDependencies() }.padding(vertical = 8.dp)
-                    )
+                    TextButton(onClick = onVerifyDependencies) {
+                        Text(
+                            text = stringResource(Res.string.set_deps_refresh),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = SnapVaultColors.info,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                 }
                 val hint = binaryInstallHint()
                 if ((!hasExifTool || !hasFFmpeg) && hint.isNotEmpty()) {
                     Text(
                         hint,
-                        fontSize = 11.sp,
+                        style = MaterialTheme.typography.labelSmall,
                         lineHeight = 16.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -252,11 +264,11 @@ fun SettingsScreen(
                             modifier = Modifier.size(16.dp)
                         )
                         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                            Text(stringResource(Res.string.set_reset_index_label), fontSize = 13.sp)
+                            Text(stringResource(Res.string.set_reset_index_label), style = MaterialTheme.typography.bodyMedium)
                             Text(
                                 stringResource(Res.string.set_reset_index_desc),
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -267,11 +279,11 @@ fun SettingsScreen(
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                     ) {
-                        Text(stringResource(Res.string.set_reset_index_btn), fontSize = 12.sp)
+                        Text(stringResource(Res.string.set_reset_index_btn), style = MaterialTheme.typography.bodySmall)
                     }
                 }
 
-                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 // Output path
                 Row(
@@ -282,15 +294,15 @@ fun SettingsScreen(
                     Icon(
                         Icons.Outlined.FolderOpen,
                         null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp)
                     )
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        Text("Output Path", fontSize = 13.sp)
+                        Text("Output Path", style = MaterialTheme.typography.bodyMedium)
                         Text(
                             downloadFolder ?: "Not set",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -299,7 +311,7 @@ fun SettingsScreen(
                         onClick = onEditOutputPath,
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        Text("Edit", fontSize = 12.sp, color = SnapVaultColors.electricPurple, fontWeight = FontWeight.SemiBold)
+                        Text("Edit", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -316,13 +328,13 @@ fun SettingsScreen(
             Icon(
                 Icons.Outlined.Info,
                 null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(13.dp)
             )
             Text(
                 "SnapVault ${AppBuildConfig.VERSION} — GPL-3.0 License",
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -332,7 +344,7 @@ fun SettingsScreen(
 fun SettingsCard(content: @Composable () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f),
+        color = MaterialTheme.colorScheme.surfaceContainer,
         contentColor = MaterialTheme.colorScheme.onSurface,
         shape = RoundedCornerShape(14.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
@@ -350,8 +362,8 @@ fun SettingsSectionLabel(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(7.dp)
     ) {
-        Icon(icon, null, tint = SnapVaultColors.electricPurple, modifier = Modifier.size(14.dp))
-        Text(text, fontWeight = FontWeight.Bold, color = SnapVaultColors.electricPurple, fontSize = 13.sp)
+        Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
+        Text(text, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -368,12 +380,12 @@ fun SettingsRow(
         Icon(
             icon,
             null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(16.dp)
         )
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(title, fontSize = 13.sp)
-            Text(description, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(description, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -401,15 +413,15 @@ fun DependencyItem(
             modifier = Modifier
                 .size(36.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(SnapVaultColors.electricPurple.copy(alpha = 0.1f)),
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, null, tint = SnapVaultColors.electricPurple, modifier = Modifier.size(18.dp))
+            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
         }
 
         Column(modifier = Modifier.weight(1f)) {
-            Text(name, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-            Text(description, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+            Text(name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+            Text(description, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
         Row(
@@ -424,7 +436,7 @@ fun DependencyItem(
             )
             Text(
                 if (isReady) stringResource(Res.string.set_dep_detected) else stringResource(Res.string.set_dep_missing),
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = statusColor
             )

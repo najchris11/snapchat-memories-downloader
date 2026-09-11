@@ -25,6 +25,11 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
+      # Before the tests: a lint failure is cheap to produce and cheap to read, so there's
+      # no reason to spend a test run finding out about an unused import.
+      - name: Run Detekt
+        run: ./gradlew detekt
+
       - name: Run Desktop Tests
         run: ./gradlew :composeApp:desktopTest
 

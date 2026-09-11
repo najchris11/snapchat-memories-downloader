@@ -17,14 +17,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.getCachedThumbnail
-import com.najdev.snapvault.ui.theme.SnapVaultColors
+import com.najdev.snapvault.ui.theme.MediaColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
@@ -44,7 +42,7 @@ actual fun VideoPlayer(videoPath: String, modifier: Modifier) {
     
     Box(
         modifier = modifier
-            .background(Color.Black)
+            .background(MediaColors.letterbox)
             .hoverable(interactionSource)
             .clickable {
                 isOpening = true
@@ -65,7 +63,7 @@ actual fun VideoPlayer(videoPath: String, modifier: Modifier) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(if (isHovered) Color.Black.copy(alpha = 0.4f) else Color.Black.copy(alpha = 0.2f))
+                .background(if (isHovered) MediaColors.scrimHoverStrong else MediaColors.scrimHover)
         )
         
         // Large glassmorphic play button
@@ -77,22 +75,21 @@ actual fun VideoPlayer(videoPath: String, modifier: Modifier) {
                 modifier = Modifier
                     .size(if (isHovered) 80.dp else 72.dp)
                     .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.85f))
+                    .background(MediaColors.onMedia)
                     .padding(if (isHovered) 4.dp else 0.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.PlayArrow,
                     contentDescription = "Play Video",
-                    tint = SnapVaultColors.electricPurple,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(36.dp)
                 )
             }
             
             Text(
                 text = if (isOpening) "Opening Video..." else "Click to Play Video",
-                color = Color.White,
-                fontSize = 13.sp,
+                color = MediaColors.onMedia,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.bodyMedium
             )

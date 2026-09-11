@@ -13,7 +13,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -36,7 +35,7 @@ fun AppTopBar(
     DraggableArea {
         Surface(
             modifier = Modifier.fillMaxWidth().height(56.dp),
-            color = MaterialTheme.colorScheme.background.copy(alpha = 0.6f),
+            color = MaterialTheme.colorScheme.background,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
             Row(
@@ -57,7 +56,7 @@ fun AppTopBar(
                     )
                     Text(
                         text = stringResource(Res.string.app_name),
-                        fontSize = 18.sp,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Black,
                         color = MaterialTheme.colorScheme.onSurface,
                         letterSpacing = (-0.5).sp
@@ -90,7 +89,7 @@ fun AppTopBar(
                             Modifier
                                 .width(1.dp)
                                 .height(16.dp)
-                                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+                                .background(MaterialTheme.colorScheme.outlineVariant)
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                             WindowControlButton("−", onMinimize)
@@ -109,10 +108,10 @@ private fun VersionBadge(version: String) {
     Box(
         Modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(SnapVaultColors.electricPurple.copy(alpha = 0.15f))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
-        Text(version, fontSize = 10.sp, color = SnapVaultColors.electricPurple, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+        Text(version, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
     }
 }
 
@@ -124,7 +123,7 @@ private fun DebugBadge() {
             .background(SnapVaultColors.warning.copy(alpha = 0.15f))
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
-        Text("DEBUG", fontSize = 9.sp, color = SnapVaultColors.warning, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+        Text("DEBUG", style = MaterialTheme.typography.labelSmall, color = SnapVaultColors.warning, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
     }
 }
 
@@ -139,7 +138,7 @@ private fun WindowControlButton(label: String, onClick: () -> Unit) {
     ) {
         Text(
             text = label,
-            fontSize = 13.sp,
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             fontWeight = FontWeight.Normal
         )

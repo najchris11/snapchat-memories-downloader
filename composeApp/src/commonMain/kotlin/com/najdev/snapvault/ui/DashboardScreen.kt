@@ -6,6 +6,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -23,6 +24,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
@@ -60,6 +65,10 @@ internal const val DEFAULT_PIPELINE_EXPANDED = true
 
 internal fun usesCompactDashboardLayout(windowSize: WindowSize): Boolean =
     windowSize != WindowSize.Expanded
+
+// Both steppers count to this. It was a literal 4 in the compact layout and four hand-written
+// call sites in the expanded one, which is how they were free to disagree.
+internal const val DASHBOARD_STEP_COUNT = 4
 
 // Option state lives in one holder rather than seven loose `var`s, so the controls, the
 // action row and the status panel can be separate composables that the two layouts compose
@@ -217,7 +226,7 @@ private fun DashboardControls(
 
                 if (viewModel.zipSourceMode == ZipSourceMode.Folder) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("ZIP Export Folder", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("ZIP Export Folder", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         FilePickerBox(
                             icon = Icons.Outlined.FolderZip,
                             label = viewModel.zipFolder ?: "Select folder containing mydata~*.zip files",
@@ -233,17 +242,19 @@ private fun DashboardControls(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("ZIP Files", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("ZIP Files", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (viewModel.selectedZipFiles.isNotEmpty()) {
-                                Text(
-                                    "Clear",
-                                    fontSize = 11.sp,
-                                    color = SnapVaultColors.electricPurple.copy(alpha = if (viewModel.isRunning) 0.5f else 1f),
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.clickable(enabled = !viewModel.isRunning) {
-                                        viewModel.changeZipSourceMode(ZipSourceMode.MultipleFiles)
-                                    }
-                                )
+                                TextButton(
+                                    onClick = { viewModel.changeZipSourceMode(ZipSourceMode.MultipleFiles) },
+                                    enabled = !viewModel.isRunning,
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                ) {
+                                    Text(
+                                        stringResource(Res.string.btn_clear),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
                             }
                         }
                         FilePickerBox(
@@ -269,8 +280,8 @@ private fun DashboardControls(
                                 viewModel.selectedZipFiles.take(4).forEach { path ->
                                     Text(
                                         path.substringAfterLast('/').substringAfterLast('\\'),
-                                        fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -278,8 +289,8 @@ private fun DashboardControls(
                                 if (viewModel.selectedZipFiles.size > 4) {
                                     Text(
                                         "+ ${viewModel.selectedZipFiles.size - 4} more",
-                                        fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -290,7 +301,7 @@ private fun DashboardControls(
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
                         stringResource(Res.string.dash_history_label),
-                        fontSize = 11.sp,
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     FilePickerBox(
@@ -306,7 +317,7 @@ private fun DashboardControls(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     stringResource(Res.string.dash_output_label),
-                    fontSize = 11.sp,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 FilePickerBox(
@@ -326,7 +337,7 @@ private fun DashboardControls(
             Row(
                 modifier = Modifier.fillMaxWidth()
                     .clip(RoundedCornerShape(6.dp))
-                    .clickable { options.expanded = !options.expanded },
+                    .clickable(role = Role.Button) { options.expanded = !options.expanded },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -337,7 +348,7 @@ private fun DashboardControls(
                 Icon(
                     if (options.expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -401,11 +412,13 @@ private fun DashboardActions(
             enabled = !viewModel.isRunning && canStart,
             modifier = Modifier.weight(1f).height(52.dp),
             shape = RoundedCornerShape(10.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = SnapVaultColors.electricPurple)
+            // No colour override: primary is the brand violet, so the default container is
+            // already right and contentColor resolves to onPrimary rather than to whatever
+            // LocalContentColor happens to be.
         ) {
             Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text(stringResource(Res.string.btn_start_sync), fontWeight = FontWeight.Black, fontSize = 15.sp)
+            Text(stringResource(Res.string.btn_start_sync), fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleMedium)
         }
 
         Surface(
@@ -450,7 +463,7 @@ private fun DashboardStatus(
 
     Surface(
         modifier = if (compact) modifier.fillMaxWidth() else modifier,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f),
+        color = MaterialTheme.colorScheme.surfaceContainer,
         shape = RoundedCornerShape(14.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
@@ -483,41 +496,17 @@ private fun DashboardStatus(
     if (compact) Spacer(Modifier.height(20.dp)) else Spacer(Modifier.weight(1f))
 
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-        Box(modifier = Modifier.size(110.dp), contentAlignment = Alignment.Center) {
-            if (viewModel.indeterminate) {
-                // Real work is happening but has no per-item signal to report
-                // (post-combine date fallback, dedupe scanning) — an animated
-                // indeterminate ring, not a percentage that would otherwise sit
-                // at a misleadingly precise 0%.
-                CircularProgressIndicator(
-                    modifier = Modifier.fillMaxSize(),
-                    color = SnapVaultColors.electricPurple,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    strokeWidth = 9.dp
-                )
-            } else {
-                CircularProgressIndicator(
-                    progress = { viewModel.progress.coerceIn(0f, 1f) },
-                    modifier = Modifier.fillMaxSize(),
-                    color = SnapVaultColors.electricPurple,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    strokeWidth = 9.dp
-                )
-                Text(
-                    "${(viewModel.progress * 100).toInt()}%",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-        }
+        PipelineProgressRing(
+            progress = viewModel.progress,
+            indeterminate = viewModel.indeterminate,
+        )
     }
 
     Spacer(Modifier.height(14.dp))
 
     Text(
         viewModel.progressText.ifEmpty { stringResource(Res.string.status_idle) },
-        fontSize = 13.sp,
+        style = MaterialTheme.typography.bodyMedium,
         fontWeight = FontWeight.SemiBold,
         textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth()
@@ -553,7 +542,7 @@ private fun DashboardStatus(
 
     if (compact) Spacer(Modifier.height(16.dp)) else Spacer(Modifier.weight(1f))
 
-    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     Spacer(Modifier.height(10.dp))
 
     Row(
@@ -565,7 +554,7 @@ private fun DashboardStatus(
             modifier = Modifier
                 .weight(1f)
                 .clip(RoundedCornerShape(6.dp))
-                .clickable { logsExpanded = !logsExpanded }
+                .clickable(role = Role.Button) { logsExpanded = !logsExpanded }
                 .padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -573,15 +562,15 @@ private fun DashboardStatus(
             Icon(
                 if (logsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(14.dp)
             )
-            Text("View Logs", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+            Text("View Logs", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (viewModel.logs.isNotEmpty() && !logsExpanded) {
                 Text(
                     viewModel.logs.last(),
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
@@ -590,30 +579,32 @@ private fun DashboardStatus(
         }
 
         if (viewModel.logs.isNotEmpty()) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .clickable {
-                        @Suppress("DEPRECATION")
-                        clipboardManager.setText(
-                            AnnotatedString(viewModel.logs.joinToString("\n"))
-                        )
-                        logsCopied = true
-                        logScope.launch {
-                            kotlinx.coroutines.delay(2000)
-                            logsCopied = false
-                        }
+            IconButton(
+                onClick = {
+                    @Suppress("DEPRECATION")
+                    clipboardManager.setText(
+                        AnnotatedString(viewModel.logs.joinToString("\n"))
+                    )
+                    logsCopied = true
+                    logScope.launch {
+                        kotlinx.coroutines.delay(2000)
+                        logsCopied = false
                     }
-                    .padding(horizontal = 6.dp, vertical = 3.dp),
-                contentAlignment = Alignment.Center
+                },
+                modifier = Modifier.size(32.dp),
             ) {
                 if (logsCopied) {
-                    Text("Copied!", fontSize = 10.sp, color = SnapVaultColors.success, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        stringResource(Res.string.status_copied),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SnapVaultColors.success,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 } else {
                     Icon(
                         Icons.Outlined.ContentCopy,
-                        contentDescription = "Copy logs",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        contentDescription = stringResource(Res.string.btn_copy_logs),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(13.dp)
                     )
                 }
@@ -638,8 +629,8 @@ private fun DashboardStatus(
                     if (viewModel.isRunning) {
                         item {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("$ ", color = LogColors.prompt, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-                                Text("running_pipeline", color = LogColors.onSurface, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                                Text("$ ", color = LogColors.prompt, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                                Text("running_pipeline", color = LogColors.onSurface, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
                                 BlinkingCursor()
                             }
                         }
@@ -688,11 +679,11 @@ fun InlineBanner(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Text(title, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = accent)
+            Text(title, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = accent)
             if (body != null) {
                 Text(
                     body,
-                    fontSize = 11.sp,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -702,7 +693,7 @@ fun InlineBanner(
                 onClick = onAction,
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
             ) {
-                Text(actionLabel, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = accent)
+                Text(actionLabel, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = accent)
             }
         }
     }
@@ -717,7 +708,7 @@ private fun MetricChip(text: String) {
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(4.dp))
             .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
-        Text(text, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
+        Text(text, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontFamily = FontFamily.Monospace)
     }
 }
 
@@ -728,7 +719,7 @@ fun SectionLabel(icon: androidx.compose.ui.graphics.vector.ImageVector, text: St
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(13.dp))
-        Text(text = text, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, letterSpacing = 0.8.sp)
+        Text(text = text, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, letterSpacing = 0.8.sp)
     }
 }
 
@@ -736,7 +727,7 @@ fun SectionLabel(icon: androidx.compose.ui.graphics.vector.ImageVector, text: St
 fun ControlCard(content: @Composable () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f),
+        color = MaterialTheme.colorScheme.surfaceContainer,
         shape = RoundedCornerShape(14.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
@@ -759,7 +750,7 @@ fun FilePickerBox(
             .height(42.dp)
             .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-            .clickable(enabled = enabled) { onClick() }
+            .clickable(enabled = enabled, role = Role.Button) { onClick() }
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -771,7 +762,7 @@ fun FilePickerBox(
         )
         Text(
             text = label,
-            fontSize = 12.sp,
+            style = MaterialTheme.typography.bodySmall,
             color = if (isSelected) {
                 MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f * contentAlpha)
             } else {
@@ -783,8 +774,8 @@ fun FilePickerBox(
         )
         Text(
             stringResource(Res.string.browse_btn),
-            fontSize = 10.sp,
-            color = SnapVaultColors.electricPurple.copy(alpha = contentAlpha),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary.copy(alpha = contentAlpha),
             fontWeight = FontWeight.Bold
         )
     }
@@ -801,22 +792,25 @@ fun PipelineItem(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
-            .clickable { onCheckedChange(!checked) }
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
+            .minimumInteractiveComponentSize()
             .padding(vertical = 6.dp, horizontal = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(icon, null, tint = if (checked) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
-            Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
+            Icon(icon, null, tint = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
         }
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange,
+            // Null: the row above owns both the interaction and the semantics, so the
+            // Switch must not announce itself as a second control for the same option.
+            onCheckedChange = null,
             colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = SnapVaultColors.electricPurple,
-                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                uncheckedThumbColor = MaterialTheme.colorScheme.outline,
                 uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
             )
         )
@@ -839,7 +833,7 @@ fun BlinkingCursor() {
         ),
         label = "blink"
     )
-    Box(Modifier.padding(start = 3.dp).width(7.dp).height(14.dp).alpha(alpha).background(SnapVaultColors.electricPurple))
+    Box(Modifier.padding(start = 3.dp).width(7.dp).height(14.dp).alpha(alpha).background(MaterialTheme.colorScheme.primary))
 }
 
 @Composable
@@ -868,12 +862,76 @@ fun TerminalLogLine(log: String) {
                     else -> LogColors.info
                 },
                 fontFamily = FontFamily.Monospace,
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold
             )
         }
-        Text(text = content, color = LogColors.onSurface, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+        Text(text = content, color = LogColors.onSurface, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.labelSmall)
     }
+}
+
+/**
+ * The overall-progress ring, extracted from the status panel so its semantics can be
+ * asserted. Material's indicators publish a [androidx.compose.ui.semantics.ProgressBarRangeInfo]
+ * of their own; what they cannot supply is what the bar is measuring, so the label is set here.
+ */
+@Composable
+internal fun PipelineProgressRing(
+    progress: Float,
+    indeterminate: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val label = stringResource(Res.string.dash_progress_ring)
+    Box(modifier = modifier.size(110.dp), contentAlignment = Alignment.Center) {
+        if (indeterminate) {
+            // Real work is happening but has no per-item signal to report (post-combine date
+            // fallback, dedupe scanning) — an animated indeterminate ring, not a percentage
+            // that would otherwise sit at a misleadingly precise 0%.
+            CircularProgressIndicator(
+                modifier = Modifier.fillMaxSize().semantics { contentDescription = label },
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                strokeWidth = 9.dp
+            )
+        } else {
+            CircularProgressIndicator(
+                progress = { progress.coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxSize().semantics { contentDescription = label },
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                strokeWidth = 9.dp
+            )
+            Text(
+                "${(progress * 100).toInt()}%",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+/**
+ * The sentence a screen reader gets for one step — "Step 2 of 4, in progress".
+ *
+ * Shared by both steppers so they cannot describe the same state differently. The expanded
+ * stepper draws this state as fill and border and nothing else, which is why it needs a state
+ * description at all.
+ */
+@Composable
+internal fun stepStateDescription(
+    step: Int,
+    active: Boolean,
+    complete: Boolean,
+    warning: Boolean = false,
+): String {
+    val status = when {
+        complete && warning -> stringResource(Res.string.dash_step_state_warnings)
+        complete -> stringResource(Res.string.dash_step_state_complete)
+        active -> stringResource(Res.string.dash_step_state_active)
+        else -> stringResource(Res.string.dash_step_state_pending)
+    }
+    return stringResource(Res.string.dash_step_state, step, DASHBOARD_STEP_COUNT, status)
 }
 
 @Composable
@@ -885,10 +943,17 @@ fun StepItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     warning: Boolean = false,
 ) {
+    val state = stepStateDescription(step, active, complete, warning)
     // A run can reach the terminal step while reporting failures (BUG-15/BUG-01-class
     // issues) — that must not render identically to a clean success.
-    val accentColor = if (complete && warning) SnapVaultColors.warning else SnapVaultColors.electricPurple
+    val accentColor = if (complete && warning) SnapVaultColors.warning else MaterialTheme.colorScheme.primary
+    // The check sits on that fill, so its colour has to follow it: white was unreadable on
+    // the amber warning state and only marginal on the violet.
+    val onAccentColor = if (complete && warning) SnapVaultColors.onWarning else MaterialTheme.colorScheme.onPrimary
     Column(
+        // Merged so the circle and the label read as one item rather than a shape followed
+        // by a word — the number, icon and fill carry no text of their own.
+        modifier = Modifier.semantics(mergeDescendants = true) { stateDescription = state },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
@@ -901,16 +966,16 @@ fun StepItem(
             contentAlignment = Alignment.Center
         ) {
             when {
-                complete -> Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(15.dp))
-                active -> Icon(icon, null, tint = SnapVaultColors.electricPurple, modifier = Modifier.size(15.dp))
-                else -> Text(step.toString(), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                complete -> Icon(Icons.Default.Check, null, tint = onAccentColor, modifier = Modifier.size(15.dp))
+                active -> Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(15.dp))
+                else -> Text(step.toString(), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         Text(
             text = label,
-            fontSize = 10.sp,
+            style = MaterialTheme.typography.labelSmall,
             fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (active || complete) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            color = if (active || complete) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
@@ -921,7 +986,7 @@ fun StepItem(
  * reported failures — as text plus dots, in a row that cannot squash.
  */
 @Composable
-private fun CompactStepper(currentStep: Int, hasWarnings: Boolean) {
+internal fun CompactStepper(currentStep: Int, hasWarnings: Boolean) {
     val labels = listOf(
         stringResource(Res.string.dash_step_setup),
         stringResource(Res.string.dash_step_syncing),
@@ -932,11 +997,22 @@ private fun CompactStepper(currentStep: Int, hasWarnings: Boolean) {
     val accent = if (currentStep >= labels.lastIndex && hasWarnings) {
         SnapVaultColors.warning
     } else {
-        SnapVaultColors.electricPurple
+        MaterialTheme.colorScheme.primary
     }
 
+    // Same state, same sentence as the expanded stepper — the dots are decoration and carry
+    // no semantics of their own.
+    val state = stepStateDescription(
+        step = index + 1,
+        active = currentStep == index,
+        complete = currentStep > index,
+        warning = hasWarnings,
+    )
+
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) { stateDescription = state },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -956,8 +1032,8 @@ private fun CompactStepper(currentStep: Int, hasWarnings: Boolean) {
             }
         }
         Text(
-            text = stringResource(Res.string.dash_step_progress, index + 1, labels.size, labels[index]),
-            fontSize = 12.sp,
+            text = stringResource(Res.string.dash_step_progress, index + 1, DASHBOARD_STEP_COUNT, labels[index]),
+            style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface
         )
@@ -966,7 +1042,7 @@ private fun CompactStepper(currentStep: Int, hasWarnings: Boolean) {
 
 @Composable
 fun StepperDivider(filled: Boolean = false) {
-    Box(Modifier.width(36.dp).height(1.5.dp).background(if (filled) SnapVaultColors.electricPurple.copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant))
+    Box(Modifier.width(36.dp).height(1.5.dp).background(if (filled) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant))
 }
 
 @Composable
@@ -983,16 +1059,16 @@ private fun ModeToggleButton(
         enabled = enabled,
         modifier = modifier.height(32.dp),
         shape = RoundedCornerShape(6.dp),
-        color = if (selected) SnapVaultColors.electricPurple.copy(alpha = 0.15f * contentAlpha) else MaterialTheme.colorScheme.surfaceContainerLowest,
-        border = BorderStroke(1.dp, if (selected) SnapVaultColors.electricPurple.copy(alpha = 0.5f * contentAlpha) else MaterialTheme.colorScheme.outlineVariant)
+        color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f * contentAlpha) else MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f * contentAlpha) else MaterialTheme.colorScheme.outlineVariant)
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
             Text(
                 text = label,
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 color = if (selected) {
-                    SnapVaultColors.electricPurple.copy(alpha = contentAlpha)
+                    MaterialTheme.colorScheme.primary.copy(alpha = contentAlpha)
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f * contentAlpha)
                 }

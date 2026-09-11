@@ -3,7 +3,7 @@ package com.najdev.snapvault.ui.components
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -19,11 +19,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.Screen
 import com.najdev.snapvault.ui.theme.SnapVaultColors
 import org.jetbrains.compose.resources.stringResource
@@ -38,7 +38,7 @@ fun AppSidebar(
 ) {
     Surface(
         modifier = Modifier.width(220.dp).fillMaxHeight(),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
         contentColor = MaterialTheme.colorScheme.onSurface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
@@ -85,9 +85,9 @@ private fun StatusChip(isRunning: Boolean, currentStep: Int) {
     }
     val statusColor by animateColorAsState(
         when {
-            isRunning -> SnapVaultColors.electricPurple
+            isRunning -> MaterialTheme.colorScheme.primary
             currentStep == 3 -> SnapVaultColors.success
-            else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
         }
     )
 
@@ -101,13 +101,13 @@ private fun StatusChip(isRunning: Boolean, currentStep: Int) {
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Box(Modifier.size(6.dp).clip(RoundedCornerShape(100)).background(statusColor))
-        Text(text = statusLabel, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = statusColor)
+        Text(text = statusLabel, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = statusColor)
         Spacer(Modifier.weight(1f))
         if (isRunning) {
             CircularProgressIndicator(
                 modifier = Modifier.size(12.dp),
                 strokeWidth = 1.5.dp,
-                color = SnapVaultColors.electricPurple
+                color = MaterialTheme.colorScheme.primary
             )
         }
     }
@@ -122,12 +122,12 @@ fun SidebarNavItem(
     enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
-    val bgColor by animateColorAsState(if (active && enabled) SnapVaultColors.electricPurple.copy(alpha = 0.12f) else Color.Transparent)
+    val bgColor by animateColorAsState(if (active && enabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent)
     val contentColor by animateColorAsState(
         when {
             !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
             active -> MaterialTheme.colorScheme.onSurface
-            else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
         }
     )
 
@@ -136,7 +136,12 @@ fun SidebarNavItem(
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(bgColor)
-            .clickable(enabled = enabled) { onClick() },
+            .selectable(
+                selected = active,
+                enabled = enabled,
+                role = Role.Tab,
+                onClick = onClick,
+            ),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -144,7 +149,7 @@ fun SidebarNavItem(
                 .width(3.dp)
                 .height(36.dp)
                 .clip(RoundedCornerShape(topEnd = 4.dp, bottomEnd = 4.dp))
-                .background(if (active) SnapVaultColors.electricPurple else Color.Transparent)
+                .background(if (active) MaterialTheme.colorScheme.primary else Color.Transparent)
         )
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -154,12 +159,12 @@ fun SidebarNavItem(
             Icon(
                 imageVector = if (active && enabled) iconActive else iconInactive,
                 contentDescription = null,
-                tint = if (active && enabled) SnapVaultColors.electricPurple else contentColor,
+                tint = if (active && enabled) MaterialTheme.colorScheme.primary else contentColor,
                 modifier = Modifier.size(18.dp)
             )
             Text(
                 text = label,
-                fontSize = 13.sp,
+                style = MaterialTheme.typography.bodyMedium,
                 fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                 color = contentColor
             )

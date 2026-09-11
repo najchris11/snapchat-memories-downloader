@@ -21,12 +21,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.LayoutOverride
 import com.najdev.snapvault.Screen
 import com.najdev.snapvault.ThemeMode
 import com.najdev.snapvault.WindowSize
-import com.najdev.snapvault.ui.theme.SnapVaultColors
 import com.najdev.snapvault.viewmodel.DashboardViewModel
 
 // Compact-width root: replaces the desktop sidebar with a bottom NavigationBar.
@@ -47,7 +45,7 @@ fun PhoneRoot(
     Scaffold(
         bottomBar = {
             NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
                 tonalElevation = 0.dp
             ) {
                 PhoneNavItem(
@@ -120,7 +118,7 @@ private fun androidx.compose.foundation.layout.RowScope.PhoneNavItem(
     NavigationBarItem(
         selected = selected,
         onClick = onClick,
-        label = { Text(label, fontSize = 10.sp) },
+        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
         icon = {
             Icon(
                 imageVector = if (selected) selectedIcon else unselectedIcon,
@@ -128,9 +126,9 @@ private fun androidx.compose.foundation.layout.RowScope.PhoneNavItem(
             )
         },
         colors = NavigationBarItemDefaults.colors(
-            selectedIconColor = SnapVaultColors.electricPurple,
-            selectedTextColor = SnapVaultColors.electricPurple,
-            indicatorColor = SnapVaultColors.electricPurple.copy(alpha = 0.12f)
+            selectedIconColor = MaterialTheme.colorScheme.primary,
+            selectedTextColor = MaterialTheme.colorScheme.primary,
+            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
         )
     )
 }

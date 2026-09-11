@@ -27,8 +27,6 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalTestApi::class)
 class LibraryScreenTest {
 
-    private fun inspectorHeading() = "Inspector"
-
     @Test
     fun expandedShowsTheInspectorPanel() = runComposeUiTest {
         setContent {
@@ -41,7 +39,7 @@ class LibraryScreenTest {
             }
         }
 
-        onNodeWithText(inspectorHeading()).assertIsDisplayed()
+        onNodeWithText(INSPECTOR_HEADING).assertIsDisplayed()
     }
 
     @Test
@@ -56,7 +54,7 @@ class LibraryScreenTest {
             }
         }
 
-        onAllNodesWithText(inspectorHeading()).assertCountEquals(0)
+        onAllNodesWithText(INSPECTOR_HEADING).assertCountEquals(0)
     }
 
     // Medium keeps the sidebar (drawn by App, not here) but cannot also afford a 280dp
@@ -74,7 +72,7 @@ class LibraryScreenTest {
             }
         }
 
-        onAllNodesWithText(inspectorHeading()).assertCountEquals(0)
+        onAllNodesWithText(INSPECTOR_HEADING).assertCountEquals(0)
     }
 
     // Regression for the review finding on PR #31. The filter tabs and a 200dp search field
@@ -139,5 +137,10 @@ class LibraryScreenTest {
                 onNodeWithText("Select Download Folder").assertIsDisplayed()
             }
         }
+    }
+
+    private companion object {
+        // Rendered by InspectorGlobalStats whenever the panel is present.
+        const val INSPECTOR_HEADING = "Inspector"
     }
 }

@@ -209,14 +209,14 @@ private fun DashboardControls(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     ModeToggleButton(
-                        label = "ZIP Folder",
+                        label = stringResource(Res.string.zip_source_folder),
                         selected = viewModel.zipSourceMode == ZipSourceMode.Folder,
                         onClick = { viewModel.changeZipSourceMode(ZipSourceMode.Folder) },
                         modifier = Modifier.weight(1f),
                         enabled = !viewModel.isRunning
                     )
                     ModeToggleButton(
-                        label = "Pick Files",
+                        label = stringResource(Res.string.zip_source_files),
                         selected = viewModel.zipSourceMode == ZipSourceMode.MultipleFiles,
                         onClick = { viewModel.changeZipSourceMode(ZipSourceMode.MultipleFiles) },
                         modifier = Modifier.weight(1f),
@@ -226,10 +226,10 @@ private fun DashboardControls(
 
                 if (viewModel.zipSourceMode == ZipSourceMode.Folder) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("ZIP Export Folder", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(Res.string.zip_folder_label), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         FilePickerBox(
                             icon = Icons.Outlined.FolderZip,
-                            label = viewModel.zipFolder ?: "Select folder containing mydata~*.zip files",
+                            label = viewModel.zipFolder ?: stringResource(Res.string.zip_folder_placeholder),
                             onClick = viewModel::pickZipFolder,
                             isSelected = viewModel.zipFolder != null,
                             enabled = !viewModel.isRunning
@@ -242,7 +242,7 @@ private fun DashboardControls(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("ZIP Files", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(stringResource(Res.string.zip_files_label), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (viewModel.selectedZipFiles.isNotEmpty()) {
                                 TextButton(
                                     onClick = { viewModel.changeZipSourceMode(ZipSourceMode.MultipleFiles) },
@@ -565,7 +565,7 @@ private fun DashboardStatus(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(14.dp)
             )
-            Text("View Logs", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(Res.string.log_view_logs), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (viewModel.logs.isNotEmpty() && !logsExpanded) {
                 Text(
                     viewModel.logs.last(),

@@ -1,7 +1,6 @@
 <resources>
     <!-- General -->
     <string name="app_name">SnapVault</string>
-    <string name="app_tagline">Snapchat Memories Downloader</string>
     <string name="window_title">SnapVault — Snapchat Memories Downloader</string>
 
     <!-- Sidebar Navigation -->
@@ -17,7 +16,6 @@
     <string name="help_url">https://github.com/najchris11/snapchat-memories-downloader#readme</string>
 
     <!-- Dashboard Screen -->
-    <string name="dashboard_title">Dashboard</string>
     <string name="dash_source_title">Source &amp; Destination</string>
     <string name="dash_history_label">History File</string>
     <string name="dash_history_placeholder">memories_history.json</string>
@@ -67,12 +65,9 @@
     <string name="btn_open_settings">Settings</string>
 
     <!-- Library Screen -->
-    <string name="library_title">Library</string>
     <string name="lib_filter_all">All</string>
     <string name="lib_filter_photos">Photos</string>
     <string name="lib_filter_videos">Videos</string>
-    <string name="lib_filter_date">Filter by Date</string>
-    <string name="lib_sort_newest">Sort: Newest First</string>
     <string name="lib_search_placeholder">Search library…</string>
     <string name="lib_empty_state">No memories found. Start a download from the Dashboard to populate your library.</string>
     <string name="lib_refresh">Refresh library</string>
@@ -81,18 +76,85 @@
     <string name="lib_inspector_title">Inspector</string>
     <string name="lib_storage_label">Storage Usage</string>
     <string name="lib_metadata_label">Metadata Extraction</string>
-    <string name="lib_vault_tools_label">Vault Tools</string>
-    <string name="lib_tool_export">Export</string>
-    <string name="lib_tool_optimize">Optimize</string>
-    <string name="lib_tool_privacy">Privacy</string>
-    <string name="lib_tool_vault_link">Vault Link</string>
     <string name="lib_gps_verified">GPS Data Verified</string>
-    <string name="lib_gps_items">%d items updated</string>
     <string name="lib_overlay_detected">Overlay Detected</string>
-    <string name="lib_overlay_items">%d assets combined</string>
+
+    <!-- Counts in the Library inspector. Real plurals rather than an appended "s": most
+         languages do not form plurals that way, and several have more than the two forms
+         English needs. lib_gps_items and lib_overlay_items were written for this job, went
+         unused, and are folded in here. -->
+    <plurals name="lib_file_count">
+        <item quantity="one">%1$d file</item>
+        <item quantity="other">%1$d files</item>
+    </plurals>
+    <plurals name="lib_photo_count">
+        <item quantity="one">%1$d photo</item>
+        <item quantity="other">%1$d photos</item>
+    </plurals>
+    <plurals name="lib_video_count">
+        <item quantity="one">%1$d video</item>
+        <item quantity="other">%1$d videos</item>
+    </plurals>
+    <plurals name="lib_tagged_count">
+        <item quantity="one">%1$d item tagged</item>
+        <item quantity="other">%1$d items tagged</item>
+    </plurals>
+    <plurals name="lib_asset_count">
+        <item quantity="one">%1$d asset combined</item>
+        <item quantity="other">%1$d assets combined</item>
+    </plurals>
+
+    <!-- ZIP import -->
+    <string name="zip_source_folder">ZIP Folder</string>
+    <string name="zip_source_files">Pick Files</string>
+    <string name="zip_folder_label">ZIP Export Folder</string>
+    <string name="zip_folder_placeholder">Select folder containing mydata~*.zip files</string>
+    <string name="zip_files_label">ZIP Files</string>
+
+    <!-- Log panel -->
+    <string name="log_view_logs">View Logs</string>
+
+    <!-- Library stat chips and inspector -->
+    <plurals name="lib_memory_count">
+        <item quantity="one">%1$d Memory</item>
+        <item quantity="other">%1$d Memories</item>
+    </plurals>
+    <plurals name="lib_gps_chip_count">
+        <item quantity="one">%1$d with GPS</item>
+        <item quantity="other">%1$d with GPS</item>
+    </plurals>
+    <string name="lib_select_folder">Select Download Folder</string>
+    <string name="lib_clear_selection">Clear selection</string>
+    <string name="lib_detail_size">SIZE</string>
+    <string name="lib_detail_gps">GPS</string>
+    <string name="lib_detail_overlay">OVERLAY</string>
+    <string name="lib_detail_duration">DURATION</string>
+    <string name="lib_gps_tagged">Tagged</string>
+    <string name="lib_gps_none">No data</string>
+    <string name="lib_overlay_combined">Combined</string>
+    <string name="lib_overlay_none">None</string>
+
+    <!-- Build badge -->
+    <string name="badge_debug">DEBUG</string>
 
     <!-- Settings / Environment Screen -->
     <string name="settings_title">Settings</string>
+    <string name="set_subtitle">Manage system dependencies and utility preferences.</string>
+    <string name="set_theme_description">Choose between light, dark, or system default theme.</string>
+    <string name="set_theme_system">System</string>
+    <string name="set_theme_light">Light</string>
+    <string name="set_theme_dark">Dark</string>
+    <string name="set_layout_label">Layout</string>
+    <string name="set_layout_description">Auto switches by window width; Compact forces the phone layout.</string>
+    <string name="set_layout_auto">Auto</string>
+    <string name="set_layout_compact">Compact</string>
+    <string name="set_layout_expanded">Expanded</string>
+    <string name="set_dep_exiftool_description">GPS metadata injection</string>
+    <string name="set_dep_ffmpeg_description">Video overlay processing</string>
+    <string name="set_output_path_label">Output Path</string>
+    <string name="set_output_path_unset">Not set</string>
+    <string name="set_output_path_edit">Edit</string>
+    <string name="set_licence_footer">SnapVault %1$s — GPL-3.0 License</string>
     <string name="set_deps_title">System Dependencies</string>
     <string name="set_deps_refresh">Refresh Check</string>
     <string name="set_dep_detected">Detected</string>

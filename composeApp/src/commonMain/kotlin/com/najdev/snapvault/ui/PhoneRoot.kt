@@ -49,21 +49,21 @@ fun PhoneRoot(
                 tonalElevation = 0.dp
             ) {
                 PhoneNavItem(
-                    label = "Dashboard",
+                    label = Screen.Dashboard.navLabel(),
                     selected = currentScreen == Screen.Dashboard,
                     selectedIcon = Icons.Filled.Dashboard,
                     unselectedIcon = Icons.Outlined.Dashboard,
                     onClick = { currentScreen = Screen.Dashboard },
                 )
                 PhoneNavItem(
-                    label = "Library",
+                    label = Screen.Library.navLabel(),
                     selected = currentScreen == Screen.Library,
                     selectedIcon = Icons.Filled.PhotoLibrary,
                     unselectedIcon = Icons.Outlined.PhotoLibrary,
                     onClick = { currentScreen = Screen.Library },
                 )
                 PhoneNavItem(
-                    label = "Settings",
+                    label = Screen.Settings.navLabel(),
                     selected = currentScreen == Screen.Settings,
                     selectedIcon = Icons.Filled.Settings,
                     unselectedIcon = Icons.Outlined.Settings,

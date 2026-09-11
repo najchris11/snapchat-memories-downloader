@@ -4,10 +4,12 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.attribute.FileTime
 import java.time.Instant
+import java.util.Locale
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 // Regression for BUG-18: MediaScanner's Library filter used to be a narrower,
@@ -16,15 +18,57 @@ import kotlin.test.assertTrue
 // the Library despite being a real, successfully imported file.
 class MediaScannerTest {
     private lateinit var dir: File
+    private lateinit var originalLocale: Locale
 
     @BeforeTest
     fun setUp() {
         dir = File.createTempFile("scanner-test", "").apply { delete(); mkdirs() }
+        // Dates now follow the default locale, so the assertions below have to pin one or
+        // they pass or fail depending on whose machine runs them.
+        originalLocale = Locale.getDefault()
+        Locale.setDefault(Locale.US)
     }
 
     @AfterTest
     fun tearDown() {
+        Locale.setDefault(originalLocale)
         dir.deleteRecursively()
+    }
+
+    // Capture dates were assembled as `date.month.name.take(3)` — the first three letters of
+    // the Java enum constant, so JAN/FEB/MAR forever — and the filesystem fallback pinned
+    // Locale.US. Two different routes to the same English-only result, on every date in the
+    // Library.
+    //
+    // Japanese rather than a European locale on purpose: French November abbreviates to
+    // "nov.", which is close enough to "NOV" that the test would pass against the bug.
+    @Test
+    fun capturedAndFallbackDatesBothFollowTheLocale() {
+        File(dir, "2024-11-28_memory.png").writeBytes(byteArrayOf(1))
+        val fallback = File(dir, "holiday.png").apply { writeBytes(byteArrayOf(1)) }
+        Files.setLastModifiedTime(fallback.toPath(), FileTime.from(Instant.parse("2024-11-28T12:00:00Z")))
+
+        Locale.setDefault(Locale.US)
+        val english = scanMediaFiles(dir.absolutePath).associateBy { it.title }
+        assertEquals("NOV 28, 2024", english.getValue("2024-11-28_memory").date)
+
+        Locale.setDefault(Locale.JAPAN)
+        val japanese = scanMediaFiles(dir.absolutePath).associateBy { it.title }
+
+        // The filename-dated file and the mtime-fallback file reach this string by different
+        // code paths, so both are checked.
+        assertTrue(
+            japanese.getValue("2024-11-28_memory").date.contains("11"),
+            "capture date ignored the locale: ${japanese.getValue("2024-11-28_memory").date}",
+        )
+        assertFalse(
+            japanese.getValue("2024-11-28_memory").date.contains("NOV"),
+            "capture date is still the English enum name: ${japanese.getValue("2024-11-28_memory").date}",
+        )
+        assertFalse(
+            japanese.getValue("holiday").date.contains("NOV"),
+            "the filesystem-date fallback still pins Locale.US: ${japanese.getValue("holiday").date}",
+        )
     }
 
     @Test

@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.najdev.snapvault.Screen
+import com.najdev.snapvault.ui.navLabel
 import com.najdev.snapvault.ui.theme.SnapVaultColors
 import org.jetbrains.compose.resources.stringResource
 import snapchat_memories_downloader.composeapp.generated.resources.*
@@ -46,7 +47,7 @@ fun AppSidebar(
             modifier = Modifier.fillMaxSize().padding(16.dp)
         ) {
             SidebarNavItem(
-                label = stringResource(Res.string.nav_dashboard),
+                label = Screen.Dashboard.navLabel(),
                 iconActive = Icons.Filled.Dashboard,
                 iconInactive = Icons.Outlined.Dashboard,
                 active = currentScreen == Screen.Dashboard,
@@ -54,7 +55,7 @@ fun AppSidebar(
             )
             Spacer(Modifier.height(2.dp))
             SidebarNavItem(
-                label = stringResource(Res.string.nav_library),
+                label = Screen.Library.navLabel(),
                 iconActive = Icons.Filled.PhotoLibrary,
                 iconInactive = Icons.Outlined.PhotoLibrary,
                 active = currentScreen == Screen.Library,
@@ -63,7 +64,7 @@ fun AppSidebar(
             )
             Spacer(Modifier.height(2.dp))
             SidebarNavItem(
-                label = stringResource(Res.string.nav_settings),
+                label = Screen.Settings.navLabel(),
                 iconActive = Icons.Filled.Tune,
                 iconInactive = Icons.Outlined.Tune,
                 active = currentScreen == Screen.Settings,

@@ -12,6 +12,11 @@ fails without it, verified by deliberately reintroducing the bug.
 
 **Decided:** `#8B5CF6` becomes the theme primary (item 2).
 
+**Status:** all ten items landed on `fix/ui-audit-round-2`. 137 tests, detekt clean, desktop
++ Android + iOS compiling. Two decisions in here were reversed while doing the work and are
+recorded where they were made: the detekt baseline (item 1) and resetting the experimental
+matching flag (round 1).
+
 ---
 
 ## Current state, measured
@@ -286,6 +291,11 @@ stepper was missing it.
 **Tests:** assert the stepper's state description at each `currentStep`, and that the ring
 exposes a progress value.
 
+**Landed.** One `stepStateDescription` shared by both steppers, so they cannot drift;
+`DASHBOARD_STEP_COUNT` replaces the literal 4 and the four hand-written step numbers. The
+ring moved into `PipelineProgressRing` — Material publishes the range info itself, but not
+what the bar is measuring, and extracting it is what made the range info assertable at all.
+
 ---
 
 ## 10. T7 — Keyboard support
@@ -304,6 +314,13 @@ effect, so do this after.
 
 **Tests:** UI tests dispatching key events — Escape dismisses the dialog, arrow keys move grid
 selection.
+
+**Landed.** Escape, arrow keys, Enter/Space, Home/End, and `/` to focus search. Two things
+worth knowing next time: Compose Desktop's `Dialog` does **not** handle Escape for you, and
+the dialog must hold focus or the handler never fires, because key events follow the focus
+path. Both were established by removing the code and watching the test fail. The grid moved
+into `LibraryGrid` and the movement arithmetic into the pure `libraryGridTarget`, since the
+inline grid needed a real folder on disk before it would render anything to test.
 
 ---
 

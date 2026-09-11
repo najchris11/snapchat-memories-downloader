@@ -19,18 +19,19 @@ import kotlin.test.assertEquals
 class MediaFilterTest {
 
     private val library = listOf(
-        libraryItem("photo-a", "photo"),
+        libraryItem("photo-a", "photo", favorited = true),
         libraryItem("video-a", "video"),
         libraryItem("photo-b", "photo"),
     )
 
-    private fun libraryItem(title: String, type: String) = LibraryItem(
+    private fun libraryItem(title: String, type: String, favorited: Boolean = false) = LibraryItem(
         id = title,
         date = "2026-01-01",
         title = title,
         type = type,
         hasGps = false,
         hasOverlay = false,
+        favorited = favorited,
     )
 
     @Test
@@ -46,6 +47,17 @@ class MediaFilterTest {
         assertEquals(
             listOf("video-a"),
             library.filter(MediaFilter.Videos::matches).map { it.title },
+        )
+    }
+
+    // Favourites is the only filter that crosses media types — it is a filter on what the
+    // user marked, not on what the file is, which is why it sits in the same strip rather
+    // than in a separate control.
+    @Test
+    fun favouritesSelectsAcrossMediaTypes() {
+        assertEquals(
+            listOf("photo-a"),
+            library.filter(MediaFilter.Favourites::matches).map { it.title },
         )
     }
 

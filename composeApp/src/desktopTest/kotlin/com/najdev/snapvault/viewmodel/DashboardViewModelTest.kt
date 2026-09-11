@@ -1,9 +1,12 @@
 package com.najdev.snapvault.viewmodel
 
 import com.najdev.snapvault.ImportMode
+import com.najdev.snapvault.VaultIndex
+import com.najdev.snapvault.model.FileMeta
 import com.najdev.snapvault.PlatformPickers
 import com.najdev.snapvault.downloader.CombineResult
 import com.najdev.snapvault.downloader.ExtractResult
+import com.najdev.snapvault.downloader.NoOpZipPipelineRunner
 import com.najdev.snapvault.downloader.ZipPipelineRunner
 import com.najdev.snapvault.metadata.MediaProcessor
 import com.najdev.snapvault.parser.HtmlMemoryEntry
@@ -408,5 +411,103 @@ class DashboardViewModelTest {
 
         viewModel.stopSync()
         awaitCompletion(viewModel)
+    }
+
+    // Reset used to delete vault_index.json outright. That was right when the file held only
+    // what the pipeline could recompute; it stopped being right the moment favourites moved
+    // in, because a re-run rebuilds hasGps and hasOverlay and cannot rebuild a favourite.
+    @Test
+    fun resetVaultIndexKeepsFavouritesAndClearsEverythingElse() {
+        val fs = FakeFileSystem()
+        fs.createDirectories("/out".toPath())
+        fs.write("/out/vault_index.json".toPath()) {
+            writeUtf8(
+                """{"kept.jpg":{"hasGps":true,"hasOverlay":true,"favorited":true},""" +
+                    """"plain.jpg":{"hasGps":true,"hasOverlay":true,"favorited":false}}"""
+            )
+        }
+        val viewModel = DashboardViewModel(
+            zipPipelineRunner = NoOpZipPipelineRunner,
+            mediaProcessor = FakeMediaProcessor(),
+            fileSystem = fs,
+            pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+        )
+        viewModel.pickOutputFolder()
+
+        assertTrue(viewModel.resetVaultIndex())
+
+        val after = VaultIndex.read(fs, "/out")
+        assertEquals(setOf("kept.jpg"), after.keys, "only the favourite survives a reset")
+        assertEquals(
+            FileMeta(hasGps = false, hasOverlay = false, favorited = true),
+            after["kept.jpg"],
+            "the processing state must be cleared so the next run re-processes the file",
+        )
+    }
+
+    @Test
+    fun resetVaultIndexRemovesTheIndexWhenNothingWasFavourited() {
+        val fs = FakeFileSystem()
+        fs.createDirectories("/out".toPath())
+        fs.write("/out/vault_index.json".toPath()) {
+            writeUtf8("""{"plain.jpg":{"hasGps":true,"hasOverlay":true}}""")
+        }
+        val viewModel = DashboardViewModel(
+            zipPipelineRunner = NoOpZipPipelineRunner,
+            mediaProcessor = FakeMediaProcessor(),
+            fileSystem = fs,
+            pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+        )
+        viewModel.pickOutputFolder()
+
+        assertTrue(viewModel.resetVaultIndex())
+
+        assertFalse(fs.exists("/out/vault_index.json".toPath()))
+    }
+
+    // The hazard the whole VaultIndex indirection exists for. DashboardViewModel builds its
+    // FileMeta entries from scratch at five sites and writes the map wholesale at the end of
+    // a run, from a copy loaded when the run started — so a favourite toggled while a sync is
+    // in progress lives only on disk, and the run's own final write erases it.
+    //
+    // The favourite is set from inside combineAll, which is the only hook that runs after the
+    // index has been loaded and before it is written back.
+    @Test
+    fun aFavouriteSetDuringARunSurvivesThatRunsIndexWrite() {
+        val fs = FakeFileSystem()
+        fs.createDirectories("/out".toPath())
+        fs.write("/history.json".toPath()) { writeUtf8(historyJson) }
+
+        val viewModel = DashboardViewModel(
+            zipPipelineRunner = FakeZipPipelineRunner(
+                combineResults = listOf(
+                    CombineResult(uuid = "deadbeef-0002", outputPath = "", status = "combined"),
+                ),
+                metaStartTotal = 1,
+                onAfterMetaStart = { VaultIndex.setFavorite(fs, "/out", "kept.jpg", true) },
+            ),
+            mediaProcessor = FakeMediaProcessor(),
+            fileSystem = fs,
+            pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+        )
+        viewModel.changeImportMode(ImportMode.Legacy)
+        viewModel.pickHtmlFile()
+        viewModel.pickOutputFolder()
+
+        viewModel.startSync(
+            runDownload = false,
+            runMetadata = false,
+            experimentalMetadataMatching = false,
+            runCombine = true,
+            runDedupe = false,
+            dryRun = false,
+        )
+        awaitCompletion(viewModel)
+
+        assertEquals(
+            true,
+            VaultIndex.read(fs, "/out")["kept.jpg"]?.favorited,
+            "the run wrote its own map over the index and took the favourite with it",
+        )
     }
 }

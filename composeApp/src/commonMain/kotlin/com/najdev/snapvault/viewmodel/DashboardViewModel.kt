@@ -6,6 +6,7 @@ import com.najdev.snapvault.downloader.Deduplicator
 import com.najdev.snapvault.downloader.DownloadEngine
 import com.najdev.snapvault.downloader.ZipPipelineRunner
 import com.najdev.snapvault.metadata.MediaProcessor
+import com.najdev.snapvault.VaultIndex
 import com.najdev.snapvault.model.FileMeta
 import com.najdev.snapvault.model.MemoryItem
 import com.najdev.snapvault.parser.*
@@ -14,9 +15,6 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import okio.buffer
@@ -244,8 +242,9 @@ class DashboardViewModel(
         if (isRunning) return false
         val folder = downloadFolder ?: return false
         return runCatching {
-            val path = "$folder/vault_index.json".toPath()
-            if (fileSystem.exists(path)) fileSystem.delete(path)
+            // Keeps favourites: they are the one thing in the index the next run cannot
+            // rebuild, and reset exists to force re-processing, not to discard user data.
+            VaultIndex.resetKeepingFavorites(fileSystem, folder)
             true
         }.getOrDefault(false)
     }
@@ -322,10 +321,7 @@ class DashboardViewModel(
             itemsByZip.putAll(trimmed)
         }
 
-        val vaultIndexPath = "$outDir/vault_index.json".toPath()
-        val downloadedMeta: MutableMap<String, FileMeta> = runCatching {
-            Json.decodeFromString<Map<String, FileMeta>>(fileSystem.read(vaultIndexPath) { readUtf8() })
-        }.getOrDefault(emptyMap()).toMutableMap()
+        val downloadedMeta: MutableMap<String, FileMeta> = VaultIndex.read(fileSystem, outDir).toMutableMap()
 
         log("[INFO] Extracting media files…")
         var extractedCount = 0
@@ -429,9 +425,10 @@ class DashboardViewModel(
         if (runDedupe) runDeduplication(outDir, dryRun)
 
         runCatching {
-            fileSystem.write(vaultIndexPath) {
-                writeUtf8(Json.encodeToString<Map<String, FileMeta>>(downloadedMeta))
-            }
+            // writeMerging, not write: the FileMeta(…) entries above are built from scratch by
+            // this run and carry `favorited = false`, and a favourite toggled *during* the run
+            // exists only on disk. Writing the run's own map would wipe both.
+            VaultIndex.writeMerging(fileSystem, outDir, downloadedMeta)
             log("[INFO] Vault index saved (${downloadedMeta.size} entries).")
         }.onFailure { e -> log("[WARN] Could not write vault index: ${e.message}") }
 
@@ -476,10 +473,7 @@ class DashboardViewModel(
         val items = if (AppBuildConfig.IS_DEBUG) parsed.take(2500) else parsed
         if (items.isEmpty()) throw PipelineAbortException("No items found. Use memories_history.json from your Snapchat export (mydata.snapchat.com).")
 
-        val vaultIndexPath = "$outDir/vault_index.json".toPath()
-        val downloadedMeta: MutableMap<String, FileMeta> = runCatching {
-            Json.decodeFromString<Map<String, FileMeta>>(fileSystem.read(vaultIndexPath) { readUtf8() })
-        }.getOrDefault(emptyMap()).toMutableMap()
+        val downloadedMeta: MutableMap<String, FileMeta> = VaultIndex.read(fileSystem, outDir).toMutableMap()
 
         // Items with a file on disk after the download phase; used by the metadata pass.
         val presentItems = mutableListOf<MemoryItem>()
@@ -564,9 +558,10 @@ class DashboardViewModel(
         if (runDedupe) runDeduplication(outDir, dryRun)
 
         runCatching {
-            fileSystem.write(vaultIndexPath) {
-                writeUtf8(Json.encodeToString<Map<String, FileMeta>>(downloadedMeta))
-            }
+            // writeMerging, not write: the FileMeta(…) entries above are built from scratch by
+            // this run and carry `favorited = false`, and a favourite toggled *during* the run
+            // exists only on disk. Writing the run's own map would wipe both.
+            VaultIndex.writeMerging(fileSystem, outDir, downloadedMeta)
             log("[INFO] Vault index saved (${downloadedMeta.size} entries).")
         }.onFailure { e -> log("[WARN] Could not write vault index: ${e.message}") }
     }

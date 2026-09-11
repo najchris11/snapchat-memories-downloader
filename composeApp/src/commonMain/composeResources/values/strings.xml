@@ -68,6 +68,7 @@
     <string name="lib_filter_all">All</string>
     <string name="lib_filter_photos">Photos</string>
     <string name="lib_filter_videos">Videos</string>
+    <string name="lib_filter_favourites">Favourites</string>
     <string name="lib_search_placeholder">Search library…</string>
     <!-- Three distinct empty states. They shared one message, which meant a library full of
          photos filtered to Videos reported "No memories found" — of a full library. -->
@@ -75,6 +76,8 @@
     <string name="lib_empty_no_media">No memories found. Start a download from the Dashboard to populate your library.</string>
     <string name="lib_empty_filtered">No memories match the current filter or search.</string>
     <string name="lib_change_folder">Change output folder</string>
+    <string name="lib_favourite_add">Add to favourites</string>
+    <string name="lib_favourite_remove">Remove from favourites</string>
     <string name="lib_reveal_file">Reveal in file manager</string>
     <string name="lib_open_output_folder">Open output folder</string>
     <string name="lib_clear_filters">Clear filters</string>
@@ -179,6 +182,6 @@
     <string name="set_theme_label">Application Theme</string>
     <string name="set_advanced_title">Advanced Tools</string>
     <string name="set_reset_index_label">Reset Local Index</string>
-    <string name="set_reset_index_desc">Clears vault_index.json. The next download will re-process all memories from scratch.</string>
+    <string name="set_reset_index_desc">Clears vault_index.json so the next download re-processes all memories from scratch. Favourites are kept.</string>
     <string name="set_reset_index_btn">Reset Download Index</string>
 </resources>

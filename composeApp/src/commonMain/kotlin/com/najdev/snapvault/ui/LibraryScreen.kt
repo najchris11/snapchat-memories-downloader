@@ -99,7 +99,6 @@ data class LibraryItem(
     val date: String,
     val title: String,
     val type: String,
-    val duration: String?,
     val hasGps: Boolean,
     val hasOverlay: Boolean,
     val favorited: Boolean = false,
@@ -468,9 +467,6 @@ private fun InspectorItemDetail(
                     value = stringResource(if (item.hasOverlay) Res.string.lib_overlay_combined else Res.string.lib_overlay_none),
                     valueColor = if (item.hasOverlay) SnapVaultColors.info else MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                item.duration?.let {
-                    InspectorDetailRow(label = stringResource(Res.string.lib_detail_duration), value = it, valueColor = MaterialTheme.colorScheme.onSurface)
-                }
             }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -879,25 +875,6 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                         fontWeight = FontWeight.Bold,
                         color = if (isVideo) SnapVaultColors.info else MaterialTheme.colorScheme.primary
                     )
-                }
-
-                // Duration badge
-                if (item.duration != null) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(7.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(MediaColors.scrimBadge)
-                            .padding(horizontal = 5.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            item.duration,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontFamily = FontFamily.Monospace,
-                            color = MediaColors.onMedia
-                        )
-                    }
                 }
 
                 // Favorite badge

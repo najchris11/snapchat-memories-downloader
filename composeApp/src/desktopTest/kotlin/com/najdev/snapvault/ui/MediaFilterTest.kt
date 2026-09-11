@@ -29,7 +29,6 @@ class MediaFilterTest {
         date = "2026-01-01",
         title = title,
         type = type,
-        duration = null,
         hasGps = false,
         hasOverlay = false,
     )

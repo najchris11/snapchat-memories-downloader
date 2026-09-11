@@ -61,7 +61,6 @@ actual fun scanMediaFiles(folderPath: String): List<LibraryItem> {
                 date = scanned.captureDate?.let { formatCaptureDate(it) } ?: formatFileDate(scanned.lastModifiedMillis),
                 title = scanned.path.name.substringBeforeLast('.'),
                 type = if (ext in videoExtensions) "video" else "photo",
-                duration = null,
                 hasGps = meta?.hasGps ?: false,
                 hasOverlay = meta?.hasOverlay ?: false,
                 fileSizeBytes = scanned.size

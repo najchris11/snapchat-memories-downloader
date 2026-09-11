@@ -128,7 +128,6 @@
     <string name="lib_detail_size">SIZE</string>
     <string name="lib_detail_gps">GPS</string>
     <string name="lib_detail_overlay">OVERLAY</string>
-    <string name="lib_detail_duration">DURATION</string>
     <string name="lib_gps_tagged">Tagged</string>
     <string name="lib_gps_none">No data</string>
     <string name="lib_overlay_combined">Combined</string>

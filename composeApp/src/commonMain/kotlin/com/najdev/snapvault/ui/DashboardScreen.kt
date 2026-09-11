@@ -818,11 +818,6 @@ fun PipelineItem(
 }
 
 @Composable
-fun TerminalDot(color: Color) {
-    Box(Modifier.size(10.dp).clip(RoundedCornerShape(100)).background(color.copy(alpha = 0.6f)))
-}
-
-@Composable
 fun BlinkingCursor() {
     val alpha by rememberInfiniteTransition(label = "cursor").animateFloat(
         initialValue = 1f,

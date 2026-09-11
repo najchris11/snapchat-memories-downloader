@@ -55,8 +55,7 @@ class LibraryKeyboardTest {
             date = "2026-01-0${it % 9 + 1}",
             title = "Memory $it",
             type = "photo",
-            duration = null,
-            hasGps = false,
+                hasGps = false,
             hasOverlay = false,
         )
     }

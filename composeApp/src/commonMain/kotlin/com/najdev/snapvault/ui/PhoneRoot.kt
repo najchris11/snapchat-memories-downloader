@@ -3,13 +3,6 @@ package com.najdev.snapvault.ui
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.outlined.Dashboard
-import androidx.compose.material.icons.outlined.PhotoLibrary
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -31,6 +24,8 @@ import com.najdev.snapvault.viewmodel.DashboardViewModel
 // Hosts the same three screens as the expanded layout.
 @Composable
 fun PhoneRoot(
+    currentScreen: Screen,
+    onNavigate: (Screen) -> Unit,
     dashboardViewModel: DashboardViewModel,
     hasExifTool: Boolean,
     hasFFmpeg: Boolean,
@@ -40,35 +35,21 @@ fun PhoneRoot(
     layoutOverride: LayoutOverride,
     onLayoutOverrideChange: (LayoutOverride) -> Unit,
 ) {
-    var currentScreen by remember { mutableStateOf(Screen.Dashboard) }
-
     Scaffold(
         bottomBar = {
             NavigationBar(
                 containerColor = MaterialTheme.colorScheme.surfaceContainer,
                 tonalElevation = 0.dp
             ) {
-                PhoneNavItem(
-                    label = Screen.Dashboard.navLabel(),
-                    selected = currentScreen == Screen.Dashboard,
-                    selectedIcon = Icons.Filled.Dashboard,
-                    unselectedIcon = Icons.Outlined.Dashboard,
-                    onClick = { currentScreen = Screen.Dashboard },
-                )
-                PhoneNavItem(
-                    label = Screen.Library.navLabel(),
-                    selected = currentScreen == Screen.Library,
-                    selectedIcon = Icons.Filled.PhotoLibrary,
-                    unselectedIcon = Icons.Outlined.PhotoLibrary,
-                    onClick = { currentScreen = Screen.Library },
-                )
-                PhoneNavItem(
-                    label = Screen.Settings.navLabel(),
-                    selected = currentScreen == Screen.Settings,
-                    selectedIcon = Icons.Filled.Settings,
-                    unselectedIcon = Icons.Outlined.Settings,
-                    onClick = { currentScreen = Screen.Settings },
-                )
+                Screen.entries.forEach { screen ->
+                    PhoneNavItem(
+                        label = screen.navLabel(),
+                        selected = currentScreen == screen,
+                        selectedIcon = screen.navIconActive,
+                        unselectedIcon = screen.navIconInactive,
+                        onClick = { onNavigate(screen) },
+                    )
+                }
             }
         }
     ) { paddingValues ->
@@ -80,7 +61,7 @@ fun PhoneRoot(
             when (currentScreen) {
                 Screen.Dashboard -> DashboardScreen(
                     viewModel = dashboardViewModel,
-                    onNavigateToSettings = { currentScreen = Screen.Settings },
+                    onNavigateToSettings = { onNavigate(Screen.Settings) },
                     hasExifTool = hasExifTool,
                     hasFFmpeg = hasFFmpeg,
                     windowSize = WindowSize.Compact,

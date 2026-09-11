@@ -72,6 +72,16 @@ kotlin {
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
             }
         }
+
+        // Compose UI tests for the desktop target. The UI layer had no test coverage at all,
+        // so every layout and state-default regression had to be caught by eye; these let
+        // composable behaviour be asserted the same way pipeline behaviour already is.
+        val desktopTest by getting {
+            dependencies {
+                implementation(compose.desktop.uiTestJUnit4)
+                implementation(compose.desktop.currentOs)
+            }
+        }
         
         // Code shared by the two JVM targets (desktop + Android): java.util.zip readers,
         // JVM actuals for common expect declarations, and anything else JVM-only that
@@ -201,11 +211,16 @@ val generateBuildConfig by tasks.registering {
     doLast {
         val dir = outDir.get().asFile
         dir.mkdirs()
+        // Deliberately `val`, not `const val`. IS_DEBUG changes whenever you alternate
+        // between `run` (true) and compile/test (false), and a const is inlined at every
+        // use site — so a const made every consumer of this file recompile on each switch,
+        // which is the condition that leaves build/classes holding synthetic lambda classes
+        // from two different compilations. As a plain val, only this file recompiles.
         dir.resolve("AppBuildConfig.kt").writeText("""
             package com.najdev.snapvault
             object AppBuildConfig {
                 const val VERSION = "$appVersion"
-                const val IS_DEBUG = $isDebugBuild
+                val IS_DEBUG = $isDebugBuild
             }
         """.trimIndent())
     }

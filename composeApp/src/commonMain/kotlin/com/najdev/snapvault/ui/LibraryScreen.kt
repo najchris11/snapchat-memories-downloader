@@ -9,6 +9,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -37,13 +38,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.najdev.snapvault.WindowSize
+import com.najdev.snapvault.getCachedThumbnail
 import com.najdev.snapvault.ioDispatcher
-import com.najdev.snapvault.loadThumbnail
 import com.najdev.snapvault.scanMediaFiles
-import com.najdev.snapvault.ui.theme.ElectricPurple
-import com.najdev.snapvault.ui.theme.InfoBlue
 import com.najdev.snapvault.ui.theme.SnapVaultColors
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 import snapchat_memories_downloader.composeapp.generated.resources.*
@@ -63,8 +62,16 @@ data class LibraryItem(
 @Composable
 fun LibraryScreen(
     downloadFolder: String?,
-    onOpenFolder: () -> Unit
+    onOpenFolder: () -> Unit,
+    windowSize: WindowSize = WindowSize.Expanded,
 ) {
+    // The inspector is a hard 280dp sibling column. Alongside a 160dp-minimum adaptive grid
+    // and 24dp padding it left roughly 72dp for the grid on a 400dp window — less than half
+    // of one cell — so it is Expanded-only. Everything it shows for a selected item is also
+    // in MediaPreviewDialog, which a tap already opens.
+    val showInspector = windowSize == WindowSize.Expanded
+    val compact = windowSize == WindowSize.Compact
+
     var refreshKey by remember { mutableStateOf(0) }
     // Off the UI thread: scanning stats every file in the folder, which visibly hitches
     // composition for large libraries.
@@ -96,7 +103,7 @@ fun LibraryScreen(
     Row(modifier = Modifier.fillMaxSize()) {
         // ── Main content ─────────────────────────────────────────────────────
         Column(
-            modifier = Modifier.weight(1f).fillMaxHeight().padding(24.dp),
+            modifier = Modifier.weight(1f).fillMaxHeight().padding(if (compact) 16.dp else 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Stats row
@@ -105,7 +112,12 @@ fun LibraryScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Scrolls rather than overflowing: four chips need more width than a phone
+                // has, and the row sits next to the refresh button.
+                Row(
+                    modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     StatChip(
                         icon = Icons.Outlined.PhotoLibrary,
                         label = "${items.size} Memories",
@@ -126,6 +138,15 @@ fun LibraryScreen(
                         label = "${items.count { it.hasGps }} with GPS",
                         tint = SnapVaultColors.success
                     )
+                    // Total size otherwise only appears in the inspector, so without this it
+                    // would simply vanish on narrower windows.
+                    if (!showInspector && items.isNotEmpty()) {
+                        StatChip(
+                            icon = Icons.Outlined.Storage,
+                            label = formatBytes(items.sumOf { it.fileSizeBytes }),
+                            tint = SnapVaultColors.electricPurple
+                        )
+                    }
                 }
                 if (downloadFolder != null) {
                     Box(
@@ -145,88 +166,41 @@ fun LibraryScreen(
                 }
             }
 
-            // Filter + search bar + sorting controls
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            // Filter tabs plus search. Side by side these need about 384dp — roughly 184dp
+            // of tabs and a fixed 200dp field — which is more than Compact (~328dp) or the
+            // narrow end of Medium (~332dp, after the 220dp sidebar) can give, so the field
+            // clipped off-screen. Below Expanded they stack, and the field is flexible
+            // rather than fixed so it cannot overflow at any width.
+            if (showInspector) {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Type filter tabs
-                    Row(
-                        modifier = Modifier
-                            .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                            .padding(3.dp)
-                    ) {
-                        listOf("All", "Photos", "Videos").forEach { filter ->
-                            val active = selectedFilter == filter
-                            val label = when (filter) {
-                                "All" -> stringResource(Res.string.lib_filter_all)
-                                "Photos" -> stringResource(Res.string.lib_filter_photos)
-                                "Videos" -> stringResource(Res.string.lib_filter_videos)
-                                else -> filter
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(5.dp))
-                                    .background(if (active) SnapVaultColors.electricPurple.copy(alpha = 0.15f) else Color.Transparent)
-                                    .clickable { selectedFilter = filter }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = label,
-                                    fontSize = 12.sp,
-                                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = if (active) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
-                                )
-                            }
-                        }
-                    }
-
-                }
-
-                // Search field
-                Row(
-                    modifier = Modifier
-                        .width(200.dp)
-                        .height(32.dp)
-                        .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                        .padding(horizontal = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(
-                        Icons.Outlined.Search,
-                        null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        modifier = Modifier.size(13.dp)
+                    LibraryFilterTabs(
+                        selected = selectedFilter,
+                        onSelect = { selectedFilter = it },
                     )
-                    BasicTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        textStyle = LocalTextStyle.current.copy(
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 12.sp
-                        ),
-                        cursorBrush = SolidColor(SnapVaultColors.electricPurple),
-                        decorationBox = { inner ->
-                            if (searchQuery.isEmpty()) {
-                                Text(
-                                    stringResource(Res.string.lib_search_placeholder),
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                )
-                            }
-                            inner()
-                        }
+                    LibrarySearchField(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        modifier = Modifier.width(200.dp),
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    LibraryFilterTabs(
+                        selected = selectedFilter,
+                        onSelect = { selectedFilter = it },
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    )
+                    LibrarySearchField(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
@@ -265,7 +239,7 @@ fun LibraryScreen(
                 }
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 160.dp),
+                    columns = GridCells.Adaptive(minSize = if (compact) 130.dp else 160.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     modifier = Modifier.weight(1f)
@@ -291,27 +265,29 @@ fun LibraryScreen(
             )
         }
 
-        // ── Inspector panel ──────────────────────────────────────────────────
-        Surface(
-            modifier = Modifier.width(280.dp).fillMaxHeight(),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            shape = RoundedCornerShape(0.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            AnimatedContent(
-                targetState = selectedItem,
-                transitionSpec = { fadeIn() togetherWith fadeOut() },
-                label = "inspector"
-            ) { selected ->
-                if (selected != null) {
-                    InspectorItemDetail(
-                        item = selected,
-                        onPreview = { showPreview = true },
-                        onClearSelection = { selectedItem = null }
-                    )
-                } else {
-                    InspectorGlobalStats(items = items)
+        // ── Inspector panel (Expanded only) ──────────────────────────────────
+        if (showInspector) {
+            Surface(
+                modifier = Modifier.width(280.dp).fillMaxHeight(),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                shape = RoundedCornerShape(0.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                AnimatedContent(
+                    targetState = selectedItem,
+                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    label = "inspector"
+                ) { selected ->
+                    if (selected != null) {
+                        InspectorItemDetail(
+                            item = selected,
+                            onPreview = { showPreview = true },
+                            onClearSelection = { selectedItem = null }
+                        )
+                    } else {
+                        InspectorGlobalStats(items = items)
+                    }
                 }
             }
         }
@@ -326,7 +302,7 @@ private fun InspectorItemDetail(
 ) {
     val isVideo = item.type == "video"
     val thumbnail by produceState<ImageBitmap?>(null, item.id) {
-        value = withContext(Dispatchers.Default) { loadThumbnail(item.id) }
+        value = withContext(ioDispatcher) { getCachedThumbnail(item.id) }
     }
 
     Column(
@@ -338,7 +314,9 @@ private fun InspectorItemDetail(
                 .fillMaxWidth()
                 .aspectRatio(1f)
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .clickable(enabled = !isVideo) { onPreview() },
+                // Was enabled = !isVideo, because the preview dialog could not show a video.
+                // It can now, so videos open from here too.
+                .clickable { onPreview() },
             contentAlignment = Alignment.Center
         ) {
             if (thumbnail != null) {
@@ -348,7 +326,6 @@ private fun InspectorItemDetail(
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
-                // Hover hint for photos
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -356,8 +333,10 @@ private fun InspectorItemDetail(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.Outlined.ZoomIn,
-                        contentDescription = "Open preview",
+                        if (isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.ZoomIn,
+                        contentDescription = stringResource(
+                            if (isVideo) Res.string.lib_play_video else Res.string.lib_open_preview
+                        ),
                         tint = Color.White.copy(alpha = 0.8f),
                         modifier = Modifier.size(32.dp)
                     )
@@ -447,23 +426,33 @@ private fun InspectorItemDetail(
                 }
             }
 
-            if (!isVideo) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                Surface(
-                    onClick = onPreview,
-                    shape = RoundedCornerShape(8.dp),
-                    color = SnapVaultColors.electricPurple.copy(alpha = 0.1f),
-                    border = BorderStroke(1.dp, SnapVaultColors.electricPurple.copy(alpha = 0.25f)),
-                    modifier = Modifier.fillMaxWidth()
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+            Surface(
+                onClick = onPreview,
+                shape = RoundedCornerShape(8.dp),
+                color = SnapVaultColors.electricPurple.copy(alpha = 0.1f),
+                border = BorderStroke(1.dp, SnapVaultColors.electricPurple.copy(alpha = 0.25f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Outlined.ZoomIn, null, tint = SnapVaultColors.electricPurple, modifier = Modifier.size(15.dp))
-                        Text("Open Preview", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = SnapVaultColors.electricPurple)
-                    }
+                    Icon(
+                        if (isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.ZoomIn,
+                        null,
+                        tint = SnapVaultColors.electricPurple,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Text(
+                        stringResource(
+                            if (isVideo) Res.string.lib_play_video else Res.string.lib_open_preview
+                        ),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SnapVaultColors.electricPurple
+                    )
                 }
             }
         }
@@ -614,7 +603,8 @@ fun MetadataRow(
 fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
     val isVideo = item.type == "video"
     val thumbnail by produceState<ImageBitmap?>(null, item.id) {
-        value = withContext(Dispatchers.Default) { loadThumbnail(item.id) }
+        // Videos are rendered by VideoPlayer, which loads its own (cached) frame.
+        value = if (isVideo) null else withContext(ioDispatcher) { getCachedThumbnail(item.id) }
     }
 
     Dialog(
@@ -643,28 +633,28 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
                             .background(Color.Black),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (thumbnail != null) {
-                            Image(
+                        when {
+                            // VideoPlayer draws its own cached frame and play affordance, and
+                            // hands the file to the system player on click. It has been
+                            // implemented on every platform since the Library was written and
+                            // was never called — this spot used to read "Video preview not
+                            // available" instead.
+                            isVideo -> VideoPlayer(
+                                videoPath = item.id,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                            thumbnail != null -> Image(
                                 bitmap = thumbnail!!,
                                 contentDescription = item.title,
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Fit
                             )
-                        } else {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Icon(
-                                    if (isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.Image,
-                                    null,
-                                    tint = Color.White.copy(alpha = 0.25f),
-                                    modifier = Modifier.size(72.dp)
-                                )
-                                if (isVideo) {
-                                    Text("Video preview not available", fontSize = 13.sp, color = Color.White.copy(alpha = 0.4f))
-                                }
-                            }
+                            else -> Icon(
+                                Icons.Outlined.Image,
+                                contentDescription = null,
+                                tint = Color.White.copy(alpha = 0.25f),
+                                modifier = Modifier.size(72.dp)
+                            )
                         }
 
                         // Close button
@@ -742,7 +732,7 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
 fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit = {}) {
     val isVideo = item.type == "video"
     val thumbnail by produceState<ImageBitmap?>(null, item.id) {
-        value = withContext(Dispatchers.Default) { loadThumbnail(item.id) }
+        value = withContext(ioDispatcher) { getCachedThumbnail(item.id) }
     }
 
     Card(
@@ -876,6 +866,90 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun LibraryFilterTabs(
+    selected: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+            .padding(3.dp)
+    ) {
+        listOf("All", "Photos", "Videos").forEach { filter ->
+            val active = selected == filter
+            val label = when (filter) {
+                "All" -> stringResource(Res.string.lib_filter_all)
+                "Photos" -> stringResource(Res.string.lib_filter_photos)
+                "Videos" -> stringResource(Res.string.lib_filter_videos)
+                else -> filter
+            }
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(if (active) SnapVaultColors.electricPurple.copy(alpha = 0.15f) else Color.Transparent)
+                    .clickable { onSelect(filter) }
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = label,
+                    fontSize = 12.sp,
+                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (active) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibrarySearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .height(32.dp)
+            .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Icon(
+            Icons.Outlined.Search,
+            null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            modifier = Modifier.size(13.dp)
+        )
+        BasicTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            modifier = Modifier.weight(1f),
+            singleLine = true,
+            textStyle = LocalTextStyle.current.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 12.sp
+            ),
+            cursorBrush = SolidColor(SnapVaultColors.electricPurple),
+            decorationBox = { inner ->
+                if (query.isEmpty()) {
+                    Text(
+                        stringResource(Res.string.lib_search_placeholder),
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+                inner()
+            }
+        )
     }
 }
 

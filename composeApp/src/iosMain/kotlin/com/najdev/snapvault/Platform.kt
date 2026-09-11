@@ -4,9 +4,16 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import platform.Foundation.NSRecursiveLock
+import platform.Foundation.NSURL
+import platform.UIKit.UIApplication
 
 actual val isAndroidBuild: Boolean = false
 actual fun binaryInstallHint(): String = ""
+
+actual fun openUrl(url: String) {
+    val nsUrl = NSURL.URLWithString(url) ?: return
+    UIApplication.sharedApplication.openURL(nsUrl)
+}
 
 // Kotlin/Native has no thread interruption; cancellation is handled at suspension points.
 actual suspend fun <T> runInterruptibleCompat(block: () -> T): T = block()

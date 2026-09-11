@@ -1,11 +1,30 @@
 package com.najdev.snapvault
 
 import kotlinx.coroutines.runInterruptible
+import java.awt.Desktop
+import java.net.URI
 
 actual val isAndroidBuild: Boolean = false
 
 actual suspend fun <T> runInterruptibleCompat(block: () -> T): T =
     runInterruptible(block = block)
+
+actual fun openUrl(url: String) {
+    runCatching {
+        if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+            Desktop.getDesktop().browse(URI(url))
+            return
+        }
+        // Headless-ish desktops and most Linux setups without the AWT Desktop integration.
+        val os = System.getProperty("os.name").lowercase()
+        val command = when {
+            os.contains("mac") -> arrayOf("open", url)
+            os.contains("win") -> arrayOf("rundll32", "url.dll,FileProtocolHandler", url)
+            else -> arrayOf("xdg-open", url)
+        }
+        Runtime.getRuntime().exec(command)
+    }
+}
 
 actual fun binaryInstallHint(): String = when (BinaryExtractor.getPlatform()) {
     "darwin-arm64", "darwin-x64" -> """

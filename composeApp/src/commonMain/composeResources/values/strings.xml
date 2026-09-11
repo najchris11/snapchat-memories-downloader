@@ -13,9 +13,8 @@
     <string name="nav_status_complete">Complete</string>
 
     <!-- Top Bar -->
-    <string name="topbar_search">Search</string>
-    <string name="topbar_notifications">Notifications</string>
-    <string name="topbar_help">Help</string>
+    <string name="topbar_help">Open documentation</string>
+    <string name="help_url">https://github.com/najchris11/snapchat-memories-downloader#readme</string>
 
     <!-- Dashboard Screen -->
     <string name="dashboard_title">Dashboard</string>
@@ -25,10 +24,13 @@
     <string name="dash_output_label">Output Folder</string>
     <string name="dash_output_placeholder">Select destination folder</string>
     <string name="browse_btn">Browse</string>
+    <string name="opt_mode_zip">ZIP Import</string>
+    <string name="opt_mode_legacy">Legacy (HTML/JSON)</string>
     <string name="dash_pipeline_title">Pipeline Options</string>
     <string name="opt_download_memories">Download Memories</string>
     <string name="opt_inject_gps">Write Metadata (GPS + Date)</string>
     <string name="opt_write_date_metadata">Write Date Metadata</string>
+    <string name="opt_precise_matching">Precise time + GPS matching</string>
     <string name="opt_combine_overlays">Merge Video Overlays</string>
     <string name="opt_clean_duplicates">Clean Duplicate Files</string>
     <string name="opt_dedupe_dry_run">Preview only (dry run — nothing deleted)</string>
@@ -36,9 +38,21 @@
     <string name="dash_step_syncing">Downloading</string>
     <string name="dash_step_processing">Processing</string>
     <string name="dash_step_complete">Complete</string>
+    <string name="dash_step_progress">Step %1$d of %2$d · %3$s</string>
     <string name="btn_start_sync">Start Download</string>
     <string name="btn_stop">Stop</string>
     <string name="status_idle">Ready to download</string>
+    <string name="btn_view_log">View log</string>
+
+    <!-- Dashboard banners -->
+    <string name="banner_android_preview_title">Android Preview</string>
+    <string name="banner_android_preview_body">Video overlay combining is not yet implemented on Android. ZIP extraction and date/GPS tagging for images work.</string>
+    <string name="warn_run_failures_title">%d step(s) failed</string>
+    <string name="warn_run_failures_body">Some files were not processed. The log lists what failed and why.</string>
+    <string name="banner_deps_title">Missing dependencies</string>
+    <string name="banner_deps_exiftool">ExifTool was not found, so date and GPS tags will not be written.</string>
+    <string name="banner_deps_ffmpeg">FFmpeg was not found, so video overlays will not be combined.</string>
+    <string name="btn_open_settings">Settings</string>
 
     <!-- Library Screen -->
     <string name="library_title">Library</string>
@@ -49,6 +63,8 @@
     <string name="lib_sort_newest">Sort: Newest First</string>
     <string name="lib_search_placeholder">Search library…</string>
     <string name="lib_empty_state">No memories found. Start a download from the Dashboard to populate your library.</string>
+    <string name="lib_open_preview">Open Preview</string>
+    <string name="lib_play_video">Play Video</string>
     <string name="lib_inspector_title">Inspector</string>
     <string name="lib_storage_label">Storage Usage</string>
     <string name="lib_metadata_label">Metadata Extraction</string>

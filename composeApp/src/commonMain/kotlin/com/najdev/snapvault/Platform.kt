@@ -17,6 +17,10 @@ expect class SyncLock() {
 // Empty on platforms where neither tool applies (Android, iOS).
 expect fun binaryInstallHint(): String
 
+// Opens a URL in the user's browser. Silently does nothing if the platform can't service
+// the request — a failed Help click should not take the window down.
+expect fun openUrl(url: String)
+
 // Runs [block] so that coroutine cancellation interrupts the executing thread.
 // On the JVM this lets blocking calls (Process.waitFor, stream copies) abort promptly
 // when the user stops the pipeline; on platforms without thread interruption it just

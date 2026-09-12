@@ -31,3 +31,9 @@ actual class SyncLock actual constructor() {
         }
     }
 }
+
+// No user-facing file manager to reveal into on this platform; the UI hides the action
+// rather than wiring it to something that does nothing.
+actual val supportsFileManager: Boolean = false
+
+actual fun revealInFileManager(path: String) = Unit

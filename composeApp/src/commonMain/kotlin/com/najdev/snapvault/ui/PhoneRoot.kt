@@ -19,6 +19,7 @@ import com.najdev.snapvault.Screen
 import com.najdev.snapvault.ThemeMode
 import com.najdev.snapvault.WindowSize
 import com.najdev.snapvault.viewmodel.DashboardViewModel
+import kotlinx.coroutines.launch
 
 // Compact-width root: replaces the desktop sidebar with a bottom NavigationBar.
 // Hosts the same three screens as the expanded layout.
@@ -35,6 +36,9 @@ fun PhoneRoot(
     layoutOverride: LayoutOverride,
     onLayoutOverrideChange: (LayoutOverride) -> Unit,
 ) {
+    // Resetting the index is a disk write under VaultIndex's lock, so it suspends.
+    val resetScope = rememberCoroutineScope()
+
     Scaffold(
         bottomBar = {
             NavigationBar(
@@ -76,7 +80,7 @@ fun PhoneRoot(
                     hasFFmpeg = hasFFmpeg,
                     onVerifyDependencies = onVerifyDependencies,
                     downloadFolder = dashboardViewModel.downloadFolder,
-                    onResetIndex = { dashboardViewModel.resetVaultIndex() },
+                    onResetIndex = { resetScope.launch { dashboardViewModel.resetVaultIndex() } },
                     onEditOutputPath = { dashboardViewModel.pickOutputFolder() },
                     themeMode = themeMode,
                     onThemeModeChange = onThemeModeChange,

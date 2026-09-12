@@ -54,10 +54,15 @@ import androidx.compose.ui.window.DialogProperties
 import com.najdev.snapvault.WindowSize
 import com.najdev.snapvault.getCachedThumbnail
 import com.najdev.snapvault.loadFullImage
+import com.najdev.snapvault.revealInFileManager
+import com.najdev.snapvault.supportsFileManager
+import com.najdev.snapvault.VaultIndex
 import com.najdev.snapvault.ioDispatcher
 import com.najdev.snapvault.scanMediaFiles
 import com.najdev.snapvault.ui.theme.MediaColors
 import com.najdev.snapvault.ui.theme.SnapVaultColors
+import kotlinx.coroutines.launch
+import okio.FileSystem
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
@@ -74,12 +79,18 @@ import snapchat_memories_downloader.composeapp.generated.resources.*
 enum class MediaFilter {
     All,
     Photos,
-    Videos;
+    Videos,
+
+    // The only filter that is not about what the file is. It sits in the same strip because
+    // it answers the same question — which of these am I looking at — and because a library
+    // has exactly one axis of "show me less".
+    Favourites;
 
     fun matches(item: LibraryItem): Boolean = when (this) {
         All -> true
         Photos -> item.type == "photo"
         Videos -> item.type == "video"
+        Favourites -> item.favorited
     }
 }
 
@@ -88,6 +99,7 @@ internal fun MediaFilter.label(): String = when (this) {
     MediaFilter.All -> stringResource(Res.string.lib_filter_all)
     MediaFilter.Photos -> stringResource(Res.string.lib_filter_photos)
     MediaFilter.Videos -> stringResource(Res.string.lib_filter_videos)
+    MediaFilter.Favourites -> stringResource(Res.string.lib_filter_favourites)
 }
 
 // Typographic, not copy: an em dash standing in for a statistic that has no value yet, and
@@ -103,6 +115,81 @@ private const val STAT_SEPARATOR = " · "
  * said "No memories found".
  */
 enum class LibraryEmptyReason { NoFolder, NoMedia, FilteredOut }
+
+/**
+ * The order the grid draws memories in.
+ *
+ * Applied here rather than in `scanMediaFiles` so that changing it does not re-read the
+ * folder, and so the scanner keeps its capture-date-over-mtime ordering as the default —
+ * which is what [Newest] is: the scan order, untouched. `LibraryItem.date` is a formatted
+ * display string, so it cannot be sorted on directly.
+ */
+enum class MediaSort {
+    Newest,
+    Oldest,
+    Largest,
+    Name;
+
+    fun applyTo(items: List<LibraryItem>): List<LibraryItem> = when (this) {
+        Newest -> items
+        Oldest -> items.reversed()
+        Largest -> items.sortedByDescending { it.fileSizeBytes }
+        // Case-insensitive: otherwise a capital letter sorts an item to the front, which
+        // reads as a broken sort rather than as ASCII ordering.
+        Name -> items.sortedBy { it.title.lowercase() }
+    }
+}
+
+@Composable
+internal fun MediaSort.label(): String = when (this) {
+    MediaSort.Newest -> stringResource(Res.string.lib_sort_newest)
+    MediaSort.Oldest -> stringResource(Res.string.lib_sort_oldest)
+    MediaSort.Largest -> stringResource(Res.string.lib_sort_largest)
+    MediaSort.Name -> stringResource(Res.string.lib_sort_name)
+}
+
+/**
+ * Sort picker. A menu rather than another tab strip: the filter row already needs ~384dp of
+ * the ~328dp a phone has, so a fourth control in it would not fit at any width.
+ */
+@Composable
+internal fun LibrarySortMenu(
+    selected: MediaSort,
+    onSelect: (MediaSort) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier) {
+        IconButton(onClick = { expanded = true }, modifier = Modifier.size(32.dp)) {
+            Icon(
+                Icons.Outlined.SwapVert,
+                contentDescription = stringResource(Res.string.lib_sort_label),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            MediaSort.entries.forEach { sort ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            sort.label(),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = if (sort == selected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (sort == selected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        )
+                    },
+                    onClick = { onSelect(sort); expanded = false },
+                )
+            }
+        }
+    }
+}
 
 /** Returns why the grid is empty, or `null` when it has something to show. */
 internal fun libraryEmptyReason(downloadFolder: String?, scanned: Int, filtered: Int): LibraryEmptyReason? = when {
@@ -196,6 +283,60 @@ private fun EmptyStateAction(label: String, onClick: () -> Unit) {
     }
 }
 
+/**
+ * The Library header's platform actions. Empty on the mobile targets, where there is no file
+ * manager to open — see [supportsFileManager].
+ */
+@Composable
+internal fun LibraryHeaderActions(
+    downloadFolder: String?,
+    canRevealFiles: Boolean = supportsFileManager,
+    onOpenOutputFolder: (String) -> Unit = ::revealInFileManager,
+) {
+    if (downloadFolder == null || !canRevealFiles) return
+    IconButton(onClick = { onOpenOutputFolder(downloadFolder) }, modifier = Modifier.size(32.dp)) {
+        Icon(
+            Icons.Outlined.FolderOpen,
+            contentDescription = stringResource(Res.string.lib_open_output_folder),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(16.dp)
+        )
+    }
+}
+
+@Composable
+private fun InspectorAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    tint: Color? = null,
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(8.dp),
+        color = Color.Transparent,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                icon,
+                contentDescription = label,
+                tint = tint ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(14.dp)
+            )
+            Text(
+                label,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
 data class LibraryItem(
     val id: String,
     val date: String,
@@ -223,13 +364,41 @@ fun LibraryScreen(
     var refreshKey by remember { mutableStateOf(0) }
     // Off the UI thread: scanning stats every file in the folder, which visibly hitches
     // composition for large libraries.
-    val items by produceState(emptyList<LibraryItem>(), downloadFolder, refreshKey) {
+    val scanned by produceState(emptyList<LibraryItem>(), downloadFolder, refreshKey) {
         value = if (downloadFolder != null) {
             withContext(ioDispatcher) { scanMediaFiles(downloadFolder) }
         } else emptyList()
     }
 
+    // Favourites are applied over the scan rather than triggering one. A rescan would re-stat
+    // the whole folder and decode thumbnails again to change one boolean, and the write that
+    // backs the toggle is asynchronous — so the heart would lag the press by a disk round
+    // trip. Cleared with the folder, since the ids are paths into it.
+    var favoriteOverrides by remember(downloadFolder) { mutableStateOf(emptyMap<String, Boolean>()) }
+    val items = remember(scanned, favoriteOverrides) {
+        if (favoriteOverrides.isEmpty()) scanned
+        else scanned.map { item -> favoriteOverrides[item.id]?.let { item.copy(favorited = it) } ?: item }
+    }
+    val writeScope = rememberCoroutineScope()
+
+    // Shared by the inspector and the preview dialog, because the inspector exists only at
+    // Expanded width and a phone would otherwise have no way to favourite anything.
+    //
+    // The overlay updates first so the heart follows the press rather than a disk round trip;
+    // the write is keyed by file name because that is what the scanner looks entries up by.
+    // keyOf, not substringAfterLast('/'): a Windows absolute path has no forward slash in it.
+    fun toggleFavorite(item: LibraryItem, favorited: Boolean) {
+        favoriteOverrides = favoriteOverrides + (item.id to favorited)
+        val folder = downloadFolder ?: return
+        writeScope.launch(ioDispatcher) {
+            runCatching {
+                VaultIndex.setFavorite(FileSystem.SYSTEM, folder, VaultIndex.keyOf(item.id), favorited)
+            }
+        }
+    }
+
     var selectedFilter by remember { mutableStateOf(MediaFilter.All) }
+    var selectedSort by remember { mutableStateOf(MediaSort.Newest) }
     var searchQuery by remember { mutableStateOf("") }
     // An index rather than the item itself: the keyboard moves the selection by position,
     // and "the item after this one" is not a question a LibraryItem can answer.
@@ -240,18 +409,26 @@ fun LibraryScreen(
     val searchFocus = remember { FocusRequester() }
     var searchFocused by remember { mutableStateOf(false) }
 
-    val filteredItems = remember(items, selectedFilter, searchQuery) {
-        items
-            .filter(selectedFilter::matches)
-            .filter { item ->
-                searchQuery.isBlank() || item.title.contains(searchQuery, ignoreCase = true)
-            }
+    val filteredItems = remember(items, selectedFilter, searchQuery, selectedSort) {
+        selectedSort.applyTo(
+            items
+                .filter(selectedFilter::matches)
+                .filter { item ->
+                    searchQuery.isBlank() || item.title.contains(searchQuery, ignoreCase = true)
+                }
+        )
     }
     val selectedItem = filteredItems.getOrNull(selectedIndex)
 
     // Filtering re-indexes everything, so a held index would point at a different memory —
     // or past the end. Dropping it is the only honest answer.
-    LaunchedEffect(filteredItems) { selectedIndex = LIBRARY_NO_SELECTION }
+    //
+    // Keyed on the ids rather than on `filteredItems`, because the list compares structurally
+    // and a favourite toggle changes an item's *contents* without moving it. Keying on the
+    // list itself dropped the selection on every toggle, closing the inspector out from under
+    // the press that caused it. Positions are what the index means; only those matter here.
+    val itemOrder = remember(filteredItems) { filteredItems.map { it.id } }
+    LaunchedEffect(itemOrder) { selectedIndex = LIBRARY_NO_SELECTION }
 
     // Counted once rather than rescanned inside each chip's label.
     val photoCount = items.count { it.type == "photo" }
@@ -307,6 +484,8 @@ fun LibraryScreen(
                     }
                 }
                 if (downloadFolder != null) {
+                    LibraryHeaderActions(downloadFolder = downloadFolder)
+                    LibrarySortMenu(selected = selectedSort, onSelect = { selectedSort = it })
                     IconButton(onClick = { refreshKey++ }, modifier = Modifier.size(32.dp)) {
                         Icon(
                             Icons.Outlined.Refresh,
@@ -387,8 +566,9 @@ fun LibraryScreen(
 
         if (showPreview && selectedItem != null) {
             MediaPreviewDialog(
-                item = selectedItem!!,
-                onDismiss = { showPreview = false }
+                item = selectedItem,
+                onDismiss = { showPreview = false },
+                onToggleFavorite = { toggleFavorite(selectedItem, it) },
             )
         }
 
@@ -410,7 +590,8 @@ fun LibraryScreen(
                         InspectorItemDetail(
                             item = selected,
                             onPreview = { showPreview = true },
-                            onClearSelection = { selectedIndex = LIBRARY_NO_SELECTION }
+                            onClearSelection = { selectedIndex = LIBRARY_NO_SELECTION },
+                            onToggleFavorite = { toggleFavorite(selected, it) },
                         )
                     } else {
                         InspectorGlobalStats(items = items)
@@ -422,10 +603,16 @@ fun LibraryScreen(
 }
 
 @Composable
-private fun InspectorItemDetail(
+internal fun InspectorItemDetail(
     item: LibraryItem,
     onPreview: () -> Unit,
-    onClearSelection: () -> Unit
+    onClearSelection: () -> Unit,
+    // Passed rather than read from `supportsFileManager` directly so the absent case is
+    // reachable in a test: on desktop that constant is true, so only the present half would
+    // ever be asserted and the mobile no-op would go unverified.
+    canRevealFiles: Boolean = supportsFileManager,
+    onReveal: (String) -> Unit = ::revealInFileManager,
+    onToggleFavorite: (Boolean) -> Unit = {},
 ) {
     val isVideo = item.type == "video"
     val thumbnail by produceState<ImageBitmap?>(null, item.id) {
@@ -547,6 +734,27 @@ private fun InspectorItemDetail(
                     label = stringResource(Res.string.lib_detail_overlay),
                     value = stringResource(if (item.hasOverlay) Res.string.lib_overlay_combined else Res.string.lib_overlay_none),
                     valueColor = if (item.hasOverlay) SnapVaultColors.info else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            // The label says what pressing does, not what the item currently is — that is
+            // what a button's accessible name is for, and the filled/outlined heart already
+            // carries the state visually.
+            InspectorAction(
+                icon = if (item.favorited) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                label = stringResource(
+                    if (item.favorited) Res.string.lib_favourite_remove else Res.string.lib_favourite_add
+                ),
+                onClick = { onToggleFavorite(!item.favorited) },
+                tint = if (item.favorited) MaterialTheme.colorScheme.error else null,
+            )
+
+            if (canRevealFiles) {
+                InspectorAction(
+                    icon = Icons.Outlined.FolderOpen,
+                    label = stringResource(Res.string.lib_reveal_file),
+                    onClick = { onReveal(item.id) },
                 )
             }
 
@@ -732,6 +940,9 @@ fun MediaPreviewDialog(
     // Injected so the progressive load can be asserted without real files on disk. The
     // default is the real loader, on the same dispatcher as the thumbnail path.
     loadFull: suspend (String) -> ImageBitmap? = { path -> withContext(ioDispatcher) { loadFullImage(path) } },
+    // The dialog is the only surface reachable at every width: the inspector renders at
+    // Expanded only, so without this there is no way to favourite anything on a phone.
+    onToggleFavorite: ((Boolean) -> Unit)? = null,
 ) {
     val isVideo = item.type == "video"
     val thumbnail by produceState<ImageBitmap?>(null, item.id) {
@@ -857,6 +1068,23 @@ fun MediaPreviewDialog(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
+                            if (onToggleFavorite != null) {
+                                IconButton(onClick = { onToggleFavorite(!item.favorited) }) {
+                                    Icon(
+                                        if (item.favorited) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                        contentDescription = stringResource(
+                                            if (item.favorited) Res.string.lib_favourite_remove
+                                            else Res.string.lib_favourite_add
+                                        ),
+                                        tint = if (item.favorited) {
+                                            MaterialTheme.colorScheme.error
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                            }
                             if (item.fileSizeBytes > 0) {
                                 Text(formatBytes(item.fileSizeBytes), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                             }

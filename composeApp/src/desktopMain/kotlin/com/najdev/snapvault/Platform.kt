@@ -2,6 +2,7 @@ package com.najdev.snapvault
 
 import kotlinx.coroutines.runInterruptible
 import java.awt.Desktop
+import java.io.File
 import java.net.URI
 
 actual val isAndroidBuild: Boolean = false
@@ -49,4 +50,32 @@ actual fun binaryInstallHint(): String = when (BinaryExtractor.getPlatform()) {
         Install ExifTool and FFmpeg manually and ensure both are on your PATH.
         ExifTool: https://exiftool.org    FFmpeg: https://ffmpeg.org/download.html
     """.trimIndent()
+}
+
+actual val supportsFileManager: Boolean = true
+
+actual fun revealInFileManager(path: String) {
+    runCatching {
+        val file = File(path)
+        val os = System.getProperty("os.name").lowercase()
+        // Selecting the file is better than opening its folder, but only Windows and macOS
+        // have a portable way to ask for it. Linux file managers all differ, so there the
+        // parent directory is the honest best effort.
+        val selectCommand = when {
+            os.contains("mac") -> arrayOf("open", "-R", file.absolutePath)
+            os.contains("win") -> arrayOf("explorer", "/select,", file.absolutePath)
+            else -> null
+        }
+        if (selectCommand != null) {
+            Runtime.getRuntime().exec(selectCommand)
+            return
+        }
+
+        val target = if (file.isDirectory) file else file.parentFile ?: return
+        if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
+            Desktop.getDesktop().open(target)
+            return
+        }
+        Runtime.getRuntime().exec(arrayOf("xdg-open", target.absolutePath))
+    }
 }

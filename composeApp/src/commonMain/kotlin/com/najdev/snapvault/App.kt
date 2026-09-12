@@ -132,7 +132,7 @@ fun App(
                                         hasFFmpeg = hasFFmpeg,
                                         onVerifyDependencies = onVerifyDependencies,
                                         downloadFolder = dashboardViewModel.downloadFolder,
-                                        onResetIndex = { dashboardViewModel.resetVaultIndex() },
+                                        onResetIndex = { scope.launch { dashboardViewModel.resetVaultIndex() } },
                                         onEditOutputPath = { dashboardViewModel.pickOutputFolder() },
                                         themeMode = themeMode,
                                         onThemeModeChange = { themeMode = it; saveThemeModePreference(it) },

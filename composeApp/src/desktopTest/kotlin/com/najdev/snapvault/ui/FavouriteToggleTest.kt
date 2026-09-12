@@ -156,4 +156,82 @@ class FavouriteToggleTest {
             folder.deleteRecursively()
         }
     }
+
+    // ── Reachability at every width ──────────────────────────────────────────
+
+    // The inspector is rendered only at Expanded width (`showInspector = windowSize ==
+    // WindowSize.Expanded`), so an inspector-only toggle left Compact and Medium users unable
+    // to favourite anything — while still showing them a Favourites filter over state they
+    // had no way to create. The preview dialog is the one surface reachable at every width.
+    @Test
+    fun thePreviewDialogCarriesTheToggleSoItIsReachableWithoutTheInspector() = runComposeUiTest {
+        val toggled = mutableListOf<Boolean>()
+        setContent {
+            SnapVaultTheme(darkMode = true) {
+                MediaPreviewDialog(
+                    item = memory(favorited = false),
+                    onDismiss = {},
+                    loadFull = { null },
+                    onToggleFavorite = { toggled += it },
+                )
+            }
+        }
+
+        onNodeWithContentDescription(label(false)).assertHasClickAction().performClick()
+        assertEquals(listOf(true), toggled)
+    }
+
+    @Test
+    fun thePreviewDialogShowsTheCurrentFavouriteState() = runComposeUiTest {
+        setContent {
+            SnapVaultTheme(darkMode = true) {
+                MediaPreviewDialog(
+                    item = memory(favorited = true),
+                    onDismiss = {},
+                    loadFull = { null },
+                    onToggleFavorite = {},
+                )
+            }
+        }
+
+        onNodeWithContentDescription(label(true)).assertExists()
+        onNodeWithContentDescription(label(false)).assertDoesNotExist()
+    }
+
+    // Compact is the width with no inspector at all. Driven through LibraryScreen rather than
+    // the dialog directly, because what is being pinned is that the path from a grid card to a
+    // persisted favourite exists at that width — the finding was about reachability, not about
+    // the dialog in isolation.
+    @Test
+    fun aFavouriteCanBeSetAtCompactWidthWhereThereIsNoInspector() = runComposeUiTest {
+        val folder = createTempDirectory("snapvault-compact-favourite").toFile()
+        File(folder, "2026-01-02_b.jpg").createNewFile()
+
+        try {
+            setContent {
+                SnapVaultTheme(darkMode = true) {
+                    LibraryScreen(
+                        downloadFolder = folder.absolutePath,
+                        onOpenFolder = {},
+                        windowSize = WindowSize.Compact,
+                    )
+                }
+            }
+            waitUntil { onAllNodesWithText("2026-01-02_b").fetchSemanticsNodes().isNotEmpty() }
+
+            // No inspector at this width, so the card's title appears exactly once.
+            onAllNodesWithText("2026-01-02_b").assertCountEquals(1)
+
+            onNodeWithText("2026-01-02_b").performClick()
+            onNodeWithContentDescription(label(false)).performClick()
+            waitForIdle()
+
+            waitUntil {
+                VaultIndex.read(okio.FileSystem.SYSTEM, folder.absolutePath)["2026-01-02_b.jpg"]
+                    ?.favorited == true
+            }
+        } finally {
+            folder.deleteRecursively()
+        }
+    }
 }

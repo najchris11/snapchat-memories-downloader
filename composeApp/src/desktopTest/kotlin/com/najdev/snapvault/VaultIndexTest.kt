@@ -1,6 +1,7 @@
 package com.najdev.snapvault
 
 import com.najdev.snapvault.model.FileMeta
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import okio.FileSystem
 import okio.Path.Companion.toPath
@@ -53,25 +54,25 @@ class VaultIndexTest {
     }
 
     @Test
-    fun aFavouriteSurvivesARoundTrip() {
-        VaultIndex.setFavorite(fs, dir.absolutePath, "memory.jpg", true)
+    fun aFavouriteSurvivesARoundTrip() = runBlocking {
+            VaultIndex.setFavorite(fs, dir.absolutePath, "memory.jpg", true)
 
-        assertEquals(true, VaultIndex.read(fs, dir.absolutePath)["memory.jpg"]?.favorited)
+            assertEquals(true, VaultIndex.read(fs, dir.absolutePath)["memory.jpg"]?.favorited)
 
-        VaultIndex.setFavorite(fs, dir.absolutePath, "memory.jpg", false)
-        assertEquals(false, VaultIndex.read(fs, dir.absolutePath)["memory.jpg"]?.favorited)
+            VaultIndex.setFavorite(fs, dir.absolutePath, "memory.jpg", false)
+            assertEquals(false, VaultIndex.read(fs, dir.absolutePath)["memory.jpg"]?.favorited)
     }
 
     @Test
-    fun favouritingDoesNotDisturbTheFactsThePipelineOwns() {
-        writeRaw("""{"memory.jpg":{"hasGps":true,"hasOverlay":true}}""")
+    fun favouritingDoesNotDisturbTheFactsThePipelineOwns() = runBlocking {
+            writeRaw("""{"memory.jpg":{"hasGps":true,"hasOverlay":true}}""")
 
-        VaultIndex.setFavorite(fs, dir.absolutePath, "memory.jpg", true)
+            VaultIndex.setFavorite(fs, dir.absolutePath, "memory.jpg", true)
 
-        assertEquals(
-            FileMeta(hasGps = true, hasOverlay = true, favorited = true),
-            VaultIndex.read(fs, dir.absolutePath)["memory.jpg"],
-        )
+            assertEquals(
+                FileMeta(hasGps = true, hasOverlay = true, favorited = true),
+                VaultIndex.read(fs, dir.absolutePath)["memory.jpg"],
+            )
     }
 
     // The one the plan predicted would actually break. The pipeline builds its entries from
@@ -121,24 +122,24 @@ class VaultIndexTest {
     // merge has to read from disk at write time rather than trusting the copy loaded at the
     // start of the run.
     @Test
-    fun aFavouriteSetDuringARunSurvivesThatRunsWrite() {
-        val pipelineStarted = VaultIndex.read(fs, dir.absolutePath)
-        assertTrue(pipelineStarted.isEmpty())
+    fun aFavouriteSetDuringARunSurvivesThatRunsWrite() = runBlocking {
+            val pipelineStarted = VaultIndex.read(fs, dir.absolutePath)
+            assertTrue(pipelineStarted.isEmpty())
 
-        // …the user favourites something while the run is going…
-        VaultIndex.setFavorite(fs, dir.absolutePath, "memory.jpg", true)
+            // …the user favourites something while the run is going…
+            VaultIndex.setFavorite(fs, dir.absolutePath, "memory.jpg", true)
 
-        // …and the run finishes and writes its own map.
-        VaultIndex.writeMerging(
-            fs,
-            dir.absolutePath,
-            mapOf("memory.jpg" to FileMeta(hasGps = true, hasOverlay = false)),
-        )
+            // …and the run finishes and writes its own map.
+            VaultIndex.writeMerging(
+                fs,
+                dir.absolutePath,
+                mapOf("memory.jpg" to FileMeta(hasGps = true, hasOverlay = false)),
+            )
 
-        assertEquals(
-            FileMeta(hasGps = true, hasOverlay = false, favorited = true),
-            VaultIndex.read(fs, dir.absolutePath)["memory.jpg"],
-        )
+            assertEquals(
+                FileMeta(hasGps = true, hasOverlay = false, favorited = true),
+                VaultIndex.read(fs, dir.absolutePath)["memory.jpg"],
+            )
     }
 
     @Test
@@ -155,38 +156,70 @@ class VaultIndexTest {
     // Reset exists to make the next run re-process everything. It must not take favourites
     // with it: those are not derivable from the export and cannot be recovered by re-running.
     @Test
-    fun resetClearsProcessingStateButKeepsFavourites() {
-        writeRaw(
-            """{"kept.jpg":{"hasGps":true,"hasOverlay":true,"favorited":true},""" +
-                """"plain.jpg":{"hasGps":true,"hasOverlay":true,"favorited":false}}"""
-        )
+    fun resetClearsProcessingStateButKeepsFavourites() = runBlocking {
+            writeRaw(
+                """{"kept.jpg":{"hasGps":true,"hasOverlay":true,"favorited":true},""" +
+                    """"plain.jpg":{"hasGps":true,"hasOverlay":true,"favorited":false}}"""
+            )
 
-        VaultIndex.resetKeepingFavorites(fs, dir.absolutePath)
+            VaultIndex.resetKeepingFavorites(fs, dir.absolutePath)
 
-        val after = VaultIndex.read(fs, dir.absolutePath)
-        assertEquals(setOf("kept.jpg"), after.keys, "only favourites survive a reset")
-        assertEquals(FileMeta(hasGps = false, hasOverlay = false, favorited = true), after["kept.jpg"])
+            val after = VaultIndex.read(fs, dir.absolutePath)
+            assertEquals(setOf("kept.jpg"), after.keys, "only favourites survive a reset")
+            assertEquals(FileMeta(hasGps = false, hasOverlay = false, favorited = true), after["kept.jpg"])
     }
 
     @Test
-    fun resetWithNoFavouritesLeavesNoIndexBehind() {
-        writeRaw("""{"plain.jpg":{"hasGps":true,"hasOverlay":true,"favorited":false}}""")
+    fun resetWithNoFavouritesLeavesNoIndexBehind() = runBlocking {
+            writeRaw("""{"plain.jpg":{"hasGps":true,"hasOverlay":true,"favorited":false}}""")
 
-        VaultIndex.resetKeepingFavorites(fs, dir.absolutePath)
+            VaultIndex.resetKeepingFavorites(fs, dir.absolutePath)
 
-        assertEquals(false, fs.exists("${dir.absolutePath}/${VaultIndex.FILE_NAME}".toPath()))
+            assertEquals(false, fs.exists("${dir.absolutePath}/${VaultIndex.FILE_NAME}".toPath()))
     }
 
     // Older indexes are written without the field. Kotlin's default-value encoding would omit
     // `favorited: false` entirely, which is fine to read back but makes the file harder to
     // inspect by hand — and this file is the only place a favourite lives.
     @Test
-    fun favouritesAreWrittenExplicitlyRatherThanOmittedAsADefault() {
-        VaultIndex.setFavorite(fs, dir.absolutePath, "memory.jpg", false)
+    fun favouritesAreWrittenExplicitlyRatherThanOmittedAsADefault() = runBlocking {
+            VaultIndex.setFavorite(fs, dir.absolutePath, "memory.jpg", false)
 
-        val raw = File(dir, VaultIndex.FILE_NAME).readText()
-        assertTrue("favorited" in raw, "the field should be visible in the file: $raw")
-        // Still has to be readable by the strict-ish decoder the app uses.
-        assertEquals(false, Json.decodeFromString<Map<String, FileMeta>>(raw)["memory.jpg"]?.favorited)
+            val raw = File(dir, VaultIndex.FILE_NAME).readText()
+            assertTrue("favorited" in raw, "the field should be visible in the file: $raw")
+            // Still has to be readable by the strict-ish decoder the app uses.
+            assertEquals(false, Json.decodeFromString<Map<String, FileMeta>>(raw)["memory.jpg"]?.favorited)
+    }
+
+    // The Library identifies an item by its absolute path; the index is keyed by file name,
+    // because that is what the scanner looks entries up by. Deriving one from the other with
+    // substringAfterLast('/') worked only on POSIX: a Windows absolute path contains no
+    // forward slash at all, so the *whole path* became the key. The optimistic heart appeared
+    // and then vanished on the next scan, which found nothing under the file name.
+    @Test
+    fun theIndexKeyIsTheFileNameOnWindowsPathsToo() {
+        assertEquals("memory.jpg", VaultIndex.keyOf("""C:\\vault\\2026\\memory.jpg"""))
+        assertEquals("memory.jpg", VaultIndex.keyOf("/home/someone/SnapVault/memory.jpg"))
+        // A UNC path, and a path that mixes separators the way a hand-built one can.
+        assertEquals("memory.jpg", VaultIndex.keyOf("""\\\\server\\share\\memory.jpg"""))
+        assertEquals("memory.jpg", VaultIndex.keyOf("""C:/vault\\memory.jpg"""))
+        // Already a bare name.
+        assertEquals("memory.jpg", VaultIndex.keyOf("memory.jpg"))
+    }
+
+    @Test
+    fun aFavouriteSetFromAWindowsStylePathIsFoundUnderTheFileName() = runBlocking {
+            VaultIndex.setFavorite(
+                fs,
+                dir.absolutePath,
+                VaultIndex.keyOf("""C:\\vault\\memory.jpg"""),
+                true,
+            )
+
+            assertEquals(
+                true,
+                VaultIndex.read(fs, dir.absolutePath)["memory.jpg"]?.favorited,
+                "the scanner looks the entry up by file name, so that has to be the key",
+            )
     }
 }

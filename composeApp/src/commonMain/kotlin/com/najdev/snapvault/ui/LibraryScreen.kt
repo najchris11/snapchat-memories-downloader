@@ -381,6 +381,22 @@ fun LibraryScreen(
     }
     val writeScope = rememberCoroutineScope()
 
+    // Shared by the inspector and the preview dialog, because the inspector exists only at
+    // Expanded width and a phone would otherwise have no way to favourite anything.
+    //
+    // The overlay updates first so the heart follows the press rather than a disk round trip;
+    // the write is keyed by file name because that is what the scanner looks entries up by.
+    // keyOf, not substringAfterLast('/'): a Windows absolute path has no forward slash in it.
+    fun toggleFavorite(item: LibraryItem, favorited: Boolean) {
+        favoriteOverrides = favoriteOverrides + (item.id to favorited)
+        val folder = downloadFolder ?: return
+        writeScope.launch(ioDispatcher) {
+            runCatching {
+                VaultIndex.setFavorite(FileSystem.SYSTEM, folder, VaultIndex.keyOf(item.id), favorited)
+            }
+        }
+    }
+
     var selectedFilter by remember { mutableStateOf(MediaFilter.All) }
     var selectedSort by remember { mutableStateOf(MediaSort.Newest) }
     var searchQuery by remember { mutableStateOf("") }
@@ -551,7 +567,8 @@ fun LibraryScreen(
         if (showPreview && selectedItem != null) {
             MediaPreviewDialog(
                 item = selectedItem,
-                onDismiss = { showPreview = false }
+                onDismiss = { showPreview = false },
+                onToggleFavorite = { toggleFavorite(selectedItem, it) },
             )
         }
 
@@ -574,24 +591,7 @@ fun LibraryScreen(
                             item = selected,
                             onPreview = { showPreview = true },
                             onClearSelection = { selectedIndex = LIBRARY_NO_SELECTION },
-                            onToggleFavorite = { favorited ->
-                                favoriteOverrides = favoriteOverrides + (selected.id to favorited)
-                                // vault_index.json is the only place a favourite lives, and it
-                                // is keyed by file name rather than by the absolute path the
-                                // Library uses as an item id.
-                                downloadFolder?.let { folder ->
-                                    writeScope.launch(ioDispatcher) {
-                                        runCatching {
-                                            VaultIndex.setFavorite(
-                                                FileSystem.SYSTEM,
-                                                folder,
-                                                selected.id.substringAfterLast('/'),
-                                                favorited,
-                                            )
-                                        }
-                                    }
-                                }
-                            },
+                            onToggleFavorite = { toggleFavorite(selected, it) },
                         )
                     } else {
                         InspectorGlobalStats(items = items)
@@ -940,6 +940,9 @@ fun MediaPreviewDialog(
     // Injected so the progressive load can be asserted without real files on disk. The
     // default is the real loader, on the same dispatcher as the thumbnail path.
     loadFull: suspend (String) -> ImageBitmap? = { path -> withContext(ioDispatcher) { loadFullImage(path) } },
+    // The dialog is the only surface reachable at every width: the inspector renders at
+    // Expanded only, so without this there is no way to favourite anything on a phone.
+    onToggleFavorite: ((Boolean) -> Unit)? = null,
 ) {
     val isVideo = item.type == "video"
     val thumbnail by produceState<ImageBitmap?>(null, item.id) {
@@ -1065,6 +1068,23 @@ fun MediaPreviewDialog(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
+                            if (onToggleFavorite != null) {
+                                IconButton(onClick = { onToggleFavorite(!item.favorited) }) {
+                                    Icon(
+                                        if (item.favorited) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                        contentDescription = stringResource(
+                                            if (item.favorited) Res.string.lib_favourite_remove
+                                            else Res.string.lib_favourite_add
+                                        ),
+                                        tint = if (item.favorited) {
+                                            MaterialTheme.colorScheme.error
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                            }
                             if (item.fileSizeBytes > 0) {
                                 Text(formatBytes(item.fileSizeBytes), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                             }

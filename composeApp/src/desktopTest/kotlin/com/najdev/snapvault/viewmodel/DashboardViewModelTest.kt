@@ -36,7 +36,7 @@ private class FakeZipPipelineRunner(
     // onMetaStart fires only after every onProgress call has been delivered, matching the
     // real ordering the BUG-14 fix depends on.
     private val metaStartTotal: Int? = null,
-    private val onAfterMetaStart: (() -> Unit)? = null,
+    private val onAfterMetaStart: (suspend () -> Unit)? = null,
 ) : ZipPipelineRunner {
     override fun listZipFiles(folderPath: String): List<String> = emptyList()
 
@@ -406,7 +406,10 @@ class DashboardViewModelTest {
         )
         runBlocking { withTimeout(5_000) { startedSignal.await() } }
 
-        assertFalse(viewModel.resetVaultIndex(), "must refuse to reset the vault index while a run is in progress")
+        assertFalse(
+            runBlocking { viewModel.resetVaultIndex() },
+            "must refuse to reset the vault index while a run is in progress",
+        )
         assertTrue(fs.exists("/out/vault_index.json".toPath()), "vault_index.json must survive a refused reset")
 
         viewModel.stopSync()
@@ -434,7 +437,7 @@ class DashboardViewModelTest {
         )
         viewModel.pickOutputFolder()
 
-        assertTrue(viewModel.resetVaultIndex())
+        assertTrue(runBlocking { viewModel.resetVaultIndex() })
 
         val after = VaultIndex.read(fs, "/out")
         assertEquals(setOf("kept.jpg"), after.keys, "only the favourite survives a reset")
@@ -460,7 +463,7 @@ class DashboardViewModelTest {
         )
         viewModel.pickOutputFolder()
 
-        assertTrue(viewModel.resetVaultIndex())
+        assertTrue(runBlocking { viewModel.resetVaultIndex() })
 
         assertFalse(fs.exists("/out/vault_index.json".toPath()))
     }

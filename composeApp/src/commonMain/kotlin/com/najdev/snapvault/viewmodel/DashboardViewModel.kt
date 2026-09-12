@@ -233,7 +233,7 @@ class DashboardViewModel(
         pickers.releaseAllSecurityAccess()
     }
 
-    fun resetVaultIndex(): Boolean {
+    suspend fun resetVaultIndex(): Boolean {
         // A running pipeline reads/writes vault_index.json at multiple points and holds its
         // own in-memory copy — deleting the on-disk file out from under it (e.g. from
         // Settings, reachable while a sync is in progress) risks losing entries the run is

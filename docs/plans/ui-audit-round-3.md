@@ -20,7 +20,23 @@ fails without it, verified by deliberately reintroducing the bug.
 favourites (item 16). Delete the duration UI (item 12) rather than populating it.
 
 **Status:** 3a (items 1–6) landed on `fix/ui-audit-round-3a`. 3b (items 7–13) landed on
-`fix/ui-audit-round-3b`. 157 tests, detekt clean, all three targets compiling. 3c still to do.
+`fix/ui-audit-round-3b`. 3c (items 14–16) landed on `fix/ui-audit-round-3c`. detekt clean,
+all three targets compiling.
+
+3c's three items were all the same shape: **state the UI already had a slot for and nothing
+ever filled.** The sort control existed as a comment, the reveal action as a `Desktop.open`
+helper used only by the video player, and the favourite as a `MediaCard` heart badge reading
+a field no code path ever set.
+
+Two things the plan did not predict. The favourite toggle's hazard was not only the write
+path: the Library dropped `selectedIndex` on every structural change to `filteredItems`, and
+because a `List` compares by contents, flipping one item's `favorited` counted as a change —
+the inspector closed itself out from under the press that caused it. Keying the reset on the
+item *ids* is what the index actually means. And the first merge implementation rewrote the
+pipeline's map rather than unioning it onto the on-disk one, which silently dropped every
+entry the run never looked at — exactly the favourite-set-during-a-run case the merge exists
+to protect. The viewmodel-level test caught it; the unit test had not, because its fixture
+happened to give the pipeline a map covering every key on disk.
 
 3b's seven items were three defects wearing different clothes: **a destination drawn by two
 call sites that were free to disagree** (navigation state, the Library lock, the Settings
@@ -393,6 +409,53 @@ recommendation: it should not, and the reset copy should say so.
   actually break.
 - The Favourites filter selects correctly.
 - Reset-index behaves as decided, and the copy matches the behaviour.
+
+**Landed.** Reset keeps favourites and clears everything else; an index left with no
+favourites is deleted outright, as reset always did. `set_reset_index_desc` says so.
+
+The read/write of `vault_index.json` moved out of `DashboardViewModel` and both
+`MediaScanner` actuals into `VaultIndex`, which is where the merge rules now live and where
+they can be tested without a pipeline. `writeMerging` re-reads from disk at write time rather
+than trusting the copy the run loaded at its start — a favourite toggled mid-run exists
+nowhere else.
+
+The toggle writes through to disk asynchronously but updates the grid immediately from an
+overlay map over the scan, so the heart does not lag the press by a disk round trip and no
+rescan is triggered to change one boolean.
+
+Tests: `VaultIndexTest` (14), `VaultIndexConcurrencyTest` (4), `FavouriteToggleTest` (7, two
+end-to-end through `LibraryScreen` against a real temp folder), two `DashboardViewModelTest`
+cases for reset, one for a favourite set mid-run, two `MediaScannerTest` cases for reading the
+field back, and the Favourites filter in `MediaFilterTest`.
+
+### Three defects found in review of #35
+
+**The index key was derived POSIX-only.** The toggle built it with
+`substringAfterLast('/')`, and a Windows absolute path contains no forward slash, so the
+*whole path* became the key while the scanner looked entries up by file name. The optimistic
+heart appeared and vanished on the next scan. `VaultIndex.keyOf` now splits on either
+separator and is the single conversion between an item id and an index key.
+
+**Every mutation was an unsynchronised read-modify-write.** The pipeline writes the index at
+the end of a run and the Library writes it on every toggle, which a user can do *while* a sync
+runs — so two mutators read the same index and the second discarded the first. Writes also
+truncated the real file in place, which let a lock-free reader land on partial JSON that
+`read` silently turns into an empty map: every item would have come back with no GPS, no
+overlay and no favourite. All mutators now hold one `Mutex` (hence `suspend`, hence
+`resetVaultIndex` is suspend and its two call sites launch it) and replace the file via a temp
+sibling and `atomicMove`. `read` deliberately stays lock-free — `scanMediaFiles` is not a
+coroutine — which atomic replacement is what makes safe.
+
+`VaultIndexTest` could not have caught either race: its calls are sequential, so each sees the
+previous one's write. `VaultIndexConcurrencyTest` runs real overlap on `Dispatchers.IO` against
+real files, and the two failures isolate cleanly — dropping the lock loses updates, keeping the
+lock but truncating in place produces the partial read.
+
+**The toggle was unreachable at Compact and Medium.** It lived only in `InspectorItemDetail`,
+and `showInspector = windowSize == WindowSize.Expanded` — so phone and tablet users were shown
+a Favourites filter over state they had no way to create. `MediaPreviewDialog` now carries the
+toggle too; it is the one surface reachable at every width. Both surfaces share one hoisted
+`toggleFavorite` handler rather than duplicating the overlay-then-write sequence.
 
 ---
 

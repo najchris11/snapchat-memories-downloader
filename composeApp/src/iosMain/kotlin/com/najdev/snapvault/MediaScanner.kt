@@ -4,8 +4,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import com.najdev.snapvault.model.FileMeta
 import com.najdev.snapvault.ui.LibraryItem
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.json.Json
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import org.jetbrains.skia.Bitmap
@@ -24,9 +22,7 @@ actual fun scanMediaFiles(folderPath: String): List<LibraryItem> {
     val folder = folderPath.toPath()
     if (!fs.exists(folder)) return emptyList()
 
-    val index: Map<String, FileMeta> = runCatching {
-        Json.decodeFromString<Map<String, FileMeta>>(fs.read(folder / "vault_index.json") { readUtf8() })
-    }.getOrDefault(emptyMap())
+    val index: Map<String, FileMeta> = VaultIndex.read(fs, folderPath)
 
     return fs.list(folder)
         .filter { path ->
@@ -63,6 +59,7 @@ actual fun scanMediaFiles(folderPath: String): List<LibraryItem> {
                 type = if (ext in videoExtensions) "video" else "photo",
                 hasGps = meta?.hasGps ?: false,
                 hasOverlay = meta?.hasOverlay ?: false,
+                favorited = meta?.favorited ?: false,
                 fileSizeBytes = scanned.size
             )
         }

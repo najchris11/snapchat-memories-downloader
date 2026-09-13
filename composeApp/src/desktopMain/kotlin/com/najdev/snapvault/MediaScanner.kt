@@ -5,8 +5,7 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 import com.najdev.snapvault.metadata.SupportedMediaExtensions
 import com.najdev.snapvault.model.FileMeta
 import com.najdev.snapvault.ui.LibraryItem
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.json.Json
+import okio.FileSystem
 import org.jetbrains.skia.Image as SkiaImage
 import java.io.File
 import java.time.LocalDate
@@ -23,11 +22,7 @@ actual fun scanMediaFiles(folderPath: String): List<LibraryItem> {
     val folder = File(folderPath)
     if (!folder.exists() || !folder.isDirectory) return emptyList()
 
-    val index: Map<String, FileMeta> = runCatching {
-        Json.decodeFromString<Map<String, FileMeta>>(
-            File(folder, "vault_index.json").readText()
-        )
-    }.getOrDefault(emptyMap())
+    val index: Map<String, FileMeta> = VaultIndex.read(FileSystem.SYSTEM, folderPath)
 
     val mediaExtensions = SupportedMediaExtensions.ALL
     val videoExtensions = SupportedMediaExtensions.VIDEO
@@ -67,6 +62,7 @@ actual fun scanMediaFiles(folderPath: String): List<LibraryItem> {
                 type = if (scanned.file.extension.lowercase() in videoExtensions) "video" else "photo",
                 hasGps = meta?.hasGps ?: false,
                 hasOverlay = meta?.hasOverlay ?: false,
+                favorited = meta?.favorited ?: false,
                 fileSizeBytes = scanned.file.length()
             )
         }

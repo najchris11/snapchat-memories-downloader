@@ -21,6 +21,16 @@ expect fun binaryInstallHint(): String
 // the request — a failed Help click should not take the window down.
 expect fun openUrl(url: String)
 
+// Shows [path] in the platform's file manager, selecting the file where that is supported
+// and opening its parent directory otherwise. Like openUrl, silently does nothing rather
+// than taking the window down.
+expect fun revealInFileManager(path: String)
+
+// Whether [revealInFileManager] does anything. False on the mobile targets, which have no
+// user-facing file manager to reveal into — the UI hides the action rather than offering a
+// control that does nothing.
+expect val supportsFileManager: Boolean
+
 // Runs [block] so that coroutine cancellation interrupts the executing thread.
 // On the JVM this lets blocking calls (Process.waitFor, stream copies) abort promptly
 // when the user stops the pipeline; on platforms without thread interruption it just

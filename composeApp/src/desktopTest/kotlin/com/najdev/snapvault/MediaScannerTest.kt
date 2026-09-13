@@ -175,4 +175,36 @@ class MediaScannerTest {
 
         assertEquals(listOf("2024-06-01_memory", "added-later"), items.map { it.title })
     }
+
+    // MediaCard has drawn a heart badge for `item.favorited` since the Library existed, but
+    // nothing ever set the flag: the scanner read `hasGps` and `hasOverlay` out of
+    // vault_index.json and stopped there. The badge was unreachable UI.
+    @Test
+    fun scanReadsFavouritesFromTheVaultIndex() {
+        File(dir, "2024-06-01_kept.png").writeBytes(byteArrayOf(1))
+        File(dir, "2024-06-02_plain.png").writeBytes(byteArrayOf(1))
+        File(dir, VaultIndex.FILE_NAME).writeText(
+            """{"2024-06-01_kept.png":{"hasGps":false,"hasOverlay":false,"favorited":true},""" +
+                """"2024-06-02_plain.png":{"hasGps":false,"hasOverlay":false,"favorited":false}}"""
+        )
+
+        val byTitle = scanMediaFiles(dir.absolutePath).associateBy { it.title }
+
+        assertEquals(true, byTitle["2024-06-01_kept"]?.favorited)
+        assertEquals(false, byTitle["2024-06-02_plain"]?.favorited)
+    }
+
+    // A folder scanned before favourites existed, and a folder never processed at all, both
+    // have to scan rather than throw.
+    @Test
+    fun scanTreatsAMissingFavouriteFieldAsNotFavourited() {
+        File(dir, "2024-06-01_memory.png").writeBytes(byteArrayOf(1))
+        File(dir, VaultIndex.FILE_NAME)
+            .writeText("""{"2024-06-01_memory.png":{"hasGps":true,"hasOverlay":true}}""")
+
+        val item = scanMediaFiles(dir.absolutePath).single()
+
+        assertEquals(false, item.favorited)
+        assertTrue(item.hasGps, "the fields that were there must survive")
+    }
 }

@@ -126,6 +126,11 @@ fun App(
                                         downloadFolder = dashboardViewModel.downloadFolder,
                                         onOpenFolder = dashboardViewModel::pickOutputFolder,
                                         windowSize = windowSize,
+                                        favoriteOverrides = dashboardViewModel.favoriteOverrides,
+                                        onToggleFavorite = { item, favorited ->
+                                            dashboardViewModel.setFavorite(item.id, favorited)
+                                        },
+                                        onFavoritesScanned = dashboardViewModel::reconcileFavorites,
                                     )
                                     Screen.Settings -> SettingsScreen(
                                         hasExifTool = hasExifTool,

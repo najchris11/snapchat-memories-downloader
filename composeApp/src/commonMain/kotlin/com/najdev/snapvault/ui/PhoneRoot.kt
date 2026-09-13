@@ -74,6 +74,11 @@ fun PhoneRoot(
                     downloadFolder = dashboardViewModel.downloadFolder,
                     onOpenFolder = dashboardViewModel::pickOutputFolder,
                     windowSize = WindowSize.Compact,
+                    favoriteOverrides = dashboardViewModel.favoriteOverrides,
+                    onToggleFavorite = { item, favorited ->
+                        dashboardViewModel.setFavorite(item.id, favorited)
+                    },
+                    onFavoritesScanned = dashboardViewModel::reconcileFavorites,
                 )
                 Screen.Settings -> SettingsScreen(
                     hasExifTool = hasExifTool,

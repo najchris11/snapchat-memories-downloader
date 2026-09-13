@@ -473,3 +473,37 @@ Run `./gradlew :composeApp:desktopTest` plus all three compile targets after eac
 The 38-finding audit is then closed. Remaining known items outside it, recorded in
 `CLAUDE.md`: the `iosMain` `VideoPlayer` recomposition bug, and the `IS_DEBUG` task-name
 inference that still produces different builds for `run` and `test`.
+
+---
+
+## Round 3d — the rest of the favorites failure family
+
+Review of #35 found one way to lose a favorite (the Windows key). Three more were in the same
+six lines, all with the same symptom: **the heart lights up over a write that never landed.**
+
+| | Was | Now |
+|---|---|---|
+| A failed write | swallowed by a bare `runCatching { }` — no revert, no log, no signal | reverts the overlay and logs `[WARN]` |
+| The optimistic overlay | `remember(downloadFolder)`, so it outlived a rescan and masked the disk | dropped once a scan has caught up, unless that write is still pending |
+| The write's lifetime | `rememberCoroutineScope()`, so navigating away cancelled it | on the view model's scope, which is tied to the app |
+
+All three came from the overlay and the write living in `LibraryScreen`. They now live in
+`DashboardViewModel` (`favoriteOverrides`, `setFavorite`, `reconcileFavorites`), which owns a
+scope that outlives the screen, the injected `FileSystem`, and the log. `LibraryScreen` takes
+them as parameters, which also got `FileSystem.SYSTEM` out of commonMain UI code and made the
+whole path testable against a `FakeFileSystem`.
+
+Also: American spelling throughout. The strings said "Favourites" while the field they
+describe, the JSON key on disk, and every identifier read `favorited`.
+
+### The test that could not fail
+
+The first version of the navigate-away test gated the filesystem and tore down the composition
+while the write was blocked in it. It passed — and it passed against a composition-scoped
+write too, which is how it was caught. An okio write is blocking, so once it starts it cannot
+be cancelled; blocking *inside* it puts the pause on the wrong side of the cancellation window.
+
+The one cancellable suspension point on that path is `VaultIndex`'s lock. The test now holds
+that lock from another coroutine, so the favorite write is suspended on it — provably not yet
+written — when the Library leaves composition. Verified by cancelling the write's own scope at
+teardown, which is exactly what `rememberCoroutineScope` does, and watching it fail.

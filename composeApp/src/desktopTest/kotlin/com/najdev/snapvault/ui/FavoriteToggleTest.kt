@@ -14,7 +14,19 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.v2.runComposeUiTest
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.najdev.snapvault.VaultIndex
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import com.najdev.snapvault.downloader.NoOpZipPipelineRunner
+import com.najdev.snapvault.viewmodel.DashboardViewModel
+import com.najdev.snapvault.viewmodel.FakeMediaProcessor
+import com.najdev.snapvault.viewmodel.FakePlatformPickers
 import com.najdev.snapvault.WindowSize
 import com.najdev.snapvault.ui.theme.SnapVaultTheme
 import java.io.File
@@ -114,15 +126,12 @@ class FavoriteToggleTest {
         // scanMediaFiles only stats these; empty files render a real grid.
         File(folder, "2026-01-02_b.jpg").createNewFile()
         File(folder, "2026-01-01_a.jpg").createNewFile()
+        val viewModel = libraryViewModel(folder)
 
         try {
             setContent {
                 SnapVaultTheme(darkMode = true) {
-                    LibraryScreen(
-                        downloadFolder = folder.absolutePath,
-                        onOpenFolder = {},
-                        windowSize = WindowSize.Expanded,
-                    )
+                    WiredLibrary(viewModel, folder, WindowSize.Expanded)
                 }
             }
             waitUntil { onAllNodesWithText("2026-01-02_b").fetchSemanticsNodes().isNotEmpty() }
@@ -206,15 +215,12 @@ class FavoriteToggleTest {
     fun aFavoriteCanBeSetAtCompactWidthWhereThereIsNoInspector() = runComposeUiTest {
         val folder = createTempDirectory("snapvault-compact-favorite").toFile()
         File(folder, "2026-01-02_b.jpg").createNewFile()
+        val viewModel = libraryViewModel(folder)
 
         try {
             setContent {
                 SnapVaultTheme(darkMode = true) {
-                    LibraryScreen(
-                        downloadFolder = folder.absolutePath,
-                        onOpenFolder = {},
-                        windowSize = WindowSize.Compact,
-                    )
+                    WiredLibrary(viewModel, folder, WindowSize.Compact)
                 }
             }
             waitUntil { onAllNodesWithText("2026-01-02_b").fetchSemanticsNodes().isNotEmpty() }
@@ -233,5 +239,108 @@ class FavoriteToggleTest {
         } finally {
             folder.deleteRecursively()
         }
+    }
+
+    // The write used to run on the screen's own rememberCoroutineScope(), so leaving the
+    // Library — which PhoneRoot does by swapping the composable out of a `when` — cancelled it
+    // mid-flight and the favorite was simply gone, with the heart having shown it saved.
+    //
+    // Making that deterministic takes some care. An okio write is blocking, so once it starts
+    // it cannot be cancelled and blocking *inside* it proves nothing: the first version of
+    // this test did exactly that and passed against a composition-scoped write. The one
+    // cancellable suspension point on this path is VaultIndex's lock, so the test holds that
+    // lock from another coroutine, leaving the favorite write suspended on it — cancellable,
+    // and demonstrably not yet written — while the Library is torn out of composition.
+    @Test
+    fun aFavoriteSurvivesTheLibraryLeavingCompositionBeforeItsWriteRuns() = runComposeUiTest {
+        val folder = createTempDirectory("snapvault-navigate-away").toFile()
+        File(folder, "2026-01-02_b.jpg").createNewFile()
+        val gate = GatedIndexFileSystem(okio.FileSystem.SYSTEM)
+        val viewModel = libraryViewModel(folder)
+        var libraryVisible by mutableStateOf(true)
+
+        val holder = CoroutineScope(Dispatchers.IO)
+        try {
+            // Occupies VaultIndex's lock until the gate is released.
+            holder.launch { VaultIndex.write(gate, folder.absolutePath, emptyMap()) }
+            // Not just launched — actually holding the lock, or the favorite write below could
+            // slip past it and complete before the teardown this test is about.
+            waitUntil(timeoutMillis = 5_000) { gate.isHoldingLock() }
+
+            setContent {
+                SnapVaultTheme(darkMode = true) {
+                    if (libraryVisible) WiredLibrary(viewModel, folder, WindowSize.Compact)
+                }
+            }
+            waitUntil { onAllNodesWithText("2026-01-02_b").fetchSemanticsNodes().isNotEmpty() }
+
+            onNodeWithText("2026-01-02_b").performClick()
+            onNodeWithContentDescription(label(false)).performClick()
+
+            // The write is now queued behind the lock rather than done.
+            waitUntil { viewModel.favoriteIsPending(File(folder, "2026-01-02_b.jpg").absolutePath) }
+
+            libraryVisible = false
+            waitForIdle()
+            onAllNodesWithText("2026-01-02_b").assertCountEquals(0)
+
+            gate.release()
+
+            waitUntil(timeoutMillis = 5_000) {
+                VaultIndex.read(okio.FileSystem.SYSTEM, folder.absolutePath)["2026-01-02_b.jpg"]
+                    ?.favorited == true
+            }
+        } finally {
+            gate.release()
+            holder.cancel()
+            folder.deleteRecursively()
+        }
+    }
+
+    private fun libraryViewModel(
+        folder: File,
+        fileSystem: okio.FileSystem = okio.FileSystem.SYSTEM,
+    ) = DashboardViewModel(
+        zipPipelineRunner = NoOpZipPipelineRunner,
+        mediaProcessor = FakeMediaProcessor(),
+        fileSystem = fileSystem,
+        pickers = FakePlatformPickers(htmlPath = "", outputDir = folder.absolutePath),
+    ).apply { pickOutputFolder() }
+
+    @Composable
+    private fun WiredLibrary(viewModel: DashboardViewModel, folder: File, windowSize: WindowSize) {
+        LibraryScreen(
+            downloadFolder = folder.absolutePath,
+            onOpenFolder = {},
+            windowSize = windowSize,
+            favoriteOverrides = viewModel.favoriteOverrides,
+            onToggleFavorite = { item, favorited -> viewModel.setFavorite(item.id, favorited) },
+            onFavoritesScanned = viewModel::reconcileFavorites,
+        )
+    }
+}
+
+/**
+ * Blocks index writes until released, so a test can guarantee a write is still in flight when
+ * it tears the Library out of composition. Bounded, because this blocks while VaultIndex's
+ * object-level lock is held and an unbounded wait would wedge the rest of the suite.
+ */
+private class GatedIndexFileSystem(
+    delegate: okio.FileSystem,
+) : okio.ForwardingFileSystem(delegate) {
+    private val gate = java.util.concurrent.CountDownLatch(1)
+    private val entered = java.util.concurrent.CountDownLatch(1)
+
+    fun release() = gate.countDown()
+
+    /** True once a write has actually reached the gate, and so holds VaultIndex's lock. */
+    fun isHoldingLock(): Boolean = entered.count == 0L
+
+    override fun sink(file: okio.Path, mustCreate: Boolean): okio.Sink {
+        if (VaultIndex.FILE_NAME in file.name) {
+            entered.countDown()
+            check(gate.await(10, java.util.concurrent.TimeUnit.SECONDS)) { "gate never released" }
+        }
+        return super.sink(file, mustCreate)
     }
 }

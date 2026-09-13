@@ -7,6 +7,7 @@ import com.najdev.snapvault.downloader.DownloadEngine
 import com.najdev.snapvault.downloader.ZipPipelineRunner
 import com.najdev.snapvault.metadata.MediaProcessor
 import com.najdev.snapvault.VaultIndex
+import com.najdev.snapvault.ioDispatcher
 import com.najdev.snapvault.model.FileMeta
 import com.najdev.snapvault.model.MemoryItem
 import com.najdev.snapvault.parser.*
@@ -88,6 +89,79 @@ class DashboardViewModel(
     // pipeline coroutines.
     private fun log(message: String) {
         logLock.withLock { logs.add(message) }
+    }
+
+    // ── Favorites ────────────────────────────────────────────────────────────
+
+    /**
+     * Favorites the user has toggled, overlaid on whatever the last scan found.
+     *
+     * The Library applies these over `scanMediaFiles`'s result so the heart follows the press
+     * rather than a disk round trip, and so changing one boolean does not cost a rescan of the
+     * whole folder. An entry lives only until [reconcileFavorites] confirms a scan has caught
+     * up with it, or until its write fails.
+     */
+    var favoriteOverrides by mutableStateOf(emptyMap<String, Boolean>())
+        private set
+
+    // Ids whose write is still in flight. An override may not be reconciled away while its
+    // write has yet to land, or a scan racing the write would flicker the heart back off.
+    private var pendingFavorites by mutableStateOf(emptySet<String>())
+
+    fun favoriteIsPending(itemId: String): Boolean = itemId in pendingFavorites
+
+    /**
+     * Records a favorite and persists it.
+     *
+     * This lives on the view model rather than in `LibraryScreen` because it outlives the
+     * screen: on a `rememberCoroutineScope()`, navigating away from the Library immediately
+     * after a press cancelled the write, losing the only copy of it. [scope] is tied to the
+     * app, not to a composition.
+     *
+     * A failure reverts the overlay and says so in the log. A favorite is in no export and no
+     * re-run rebuilds it, so a heart left lit over a write that never landed is the worst
+     * outcome available here — the user has no way to tell, and no other copy.
+     */
+    fun setFavorite(itemId: String, favorited: Boolean) {
+        favoriteOverrides = favoriteOverrides + (itemId to favorited)
+
+        val folder = downloadFolder
+        if (folder == null) {
+            // Nothing to write to, so do not show a heart that claims otherwise.
+            favoriteOverrides = favoriteOverrides - itemId
+            return
+        }
+
+        pendingFavorites = pendingFavorites + itemId
+        scope.launch {
+            val outcome = runCatching {
+                withContext(ioDispatcher) {
+                    VaultIndex.setFavorite(fileSystem, folder, VaultIndex.keyOf(itemId), favorited)
+                }
+            }
+            // Settle the outcome before clearing pending, not after: "no longer pending" is
+            // what everything else treats as "this write is finished", and clearing it first
+            // exposes a window where the write has failed but the heart has not yet gone out.
+            outcome.onFailure { e ->
+                favoriteOverrides = favoriteOverrides - itemId
+                log("[WARN] Could not save favorite for ${VaultIndex.keyOf(itemId)}: ${e.message}")
+            }
+            pendingFavorites = pendingFavorites - itemId
+        }
+    }
+
+    /**
+     * Drops the overrides a fresh scan has caught up with.
+     *
+     * After a scan the index on disk is the truth, and an override that outlives it masks that
+     * truth — Refresh is exactly what a user presses to ask whether a favorite saved, so a
+     * stale override answers the question wrongly. Ids still pending are left alone: their
+     * write has not landed yet, so the scan cannot have seen it.
+     */
+    fun reconcileFavorites(scannedIds: Collection<String>) {
+        if (favoriteOverrides.isEmpty()) return
+        val seen = scannedIds.toSet()
+        favoriteOverrides = favoriteOverrides.filterKeys { it in pendingFavorites || it !in seen }
     }
 
     // ── Picker actions ───────────────────────────────────────────────────────

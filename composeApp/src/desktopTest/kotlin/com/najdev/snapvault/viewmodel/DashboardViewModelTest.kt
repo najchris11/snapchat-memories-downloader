@@ -65,7 +65,7 @@ private class FakeZipPipelineRunner(
     }
 }
 
-private class FakeMediaProcessor : MediaProcessor {
+internal class FakeMediaProcessor : MediaProcessor {
     override fun checkExifTool() = true
     override fun checkFFmpeg() = true
     override fun writeGpsMetadata(filePath: String, latitude: Double, longitude: Double, dateStr: String?) = true
@@ -73,7 +73,7 @@ private class FakeMediaProcessor : MediaProcessor {
     override fun combineVideoWithOverlay(videoPath: String, overlayPath: String, outputPath: String) = true
 }
 
-private class FakePlatformPickers(
+internal class FakePlatformPickers(
     private val htmlPath: String,
     private val outputDir: String,
 ) : PlatformPickers {

@@ -29,11 +29,11 @@ import kotlin.test.assertTrue
  * is the control that makes the badge mean something.
  *
  * The label states what pressing does rather than what the current state is, because that is
- * what a button's name is for: "Remove from favourites" on an item that is one, "Add to
- * favourites" on one that is not.
+ * what a button's name is for: "Remove from favorites" on an item that is one, "Add to
+ * favorites" on one that is not.
  */
 @OptIn(ExperimentalTestApi::class)
-class FavouriteToggleTest {
+class FavoriteToggleTest {
 
     private fun memory(favorited: Boolean) = LibraryItem(
         id = "/vault/memory.jpg",
@@ -46,7 +46,7 @@ class FavouriteToggleTest {
     )
 
     private fun label(favorited: Boolean) =
-        if (favorited) "Remove from favourites" else "Add to favourites"
+        if (favorited) "Remove from favorites" else "Add to favorites"
 
     // The inspector is a scrolling column and the actions sit below the metadata rows, so in
     // a test-sized window they start off screen.
@@ -66,7 +66,7 @@ class FavouriteToggleTest {
     }
 
     @Test
-    fun anUnfavouritedItemOffersToAddIt() = runComposeUiTest {
+    fun anUnfavoritedItemOffersToAddIt() = runComposeUiTest {
         val toggled = mutableListOf<Boolean>()
         toggle(memory(favorited = false)) { toggled += it }
 
@@ -80,7 +80,7 @@ class FavouriteToggleTest {
     }
 
     @Test
-    fun aFavouritedItemOffersToRemoveIt() = runComposeUiTest {
+    fun aFavoritedItemOffersToRemoveIt() = runComposeUiTest {
         val toggled = mutableListOf<Boolean>()
         toggle(memory(favorited = true)) { toggled += it }
 
@@ -106,11 +106,11 @@ class FavouriteToggleTest {
     // The path a user actually walks, and the one that exposed the real hazard: the Library
     // drops `selectedIndex` whenever `filteredItems` changes, because after a filter or sort
     // the held position points at a different memory. `LaunchedEffect` compares structurally,
-    // so a favourite toggle — which changes an item's *contents* but not its position —
+    // so a favorite toggle — which changes an item's *contents* but not its position —
     // counted as a change and closed the inspector out from under the press that caused it.
     @Test
-    fun favouritingFromTheInspectorKeepsTheItemSelectedAndPersists() = runComposeUiTest {
-        val folder = createTempDirectory("snapvault-favourites").toFile()
+    fun favoritingFromTheInspectorKeepsTheItemSelectedAndPersists() = runComposeUiTest {
+        val folder = createTempDirectory("snapvault-favorites").toFile()
         // scanMediaFiles only stats these; empty files render a real grid.
         File(folder, "2026-01-02_b.jpg").createNewFile()
         File(folder, "2026-01-01_a.jpg").createNewFile()
@@ -144,7 +144,7 @@ class FavouriteToggleTest {
             assertTrue(
                 VaultIndex.read(okio.FileSystem.SYSTEM, folder.absolutePath)["2026-01-02_b.jpg"]
                     ?.favorited == true,
-                "the favourite has to reach disk — it is the only copy there is",
+                "the favorite has to reach disk — it is the only copy there is",
             )
             assertEquals(
                 null,
@@ -161,7 +161,7 @@ class FavouriteToggleTest {
 
     // The inspector is rendered only at Expanded width (`showInspector = windowSize ==
     // WindowSize.Expanded`), so an inspector-only toggle left Compact and Medium users unable
-    // to favourite anything — while still showing them a Favourites filter over state they
+    // to favorite anything — while still showing them a Favorites filter over state they
     // had no way to create. The preview dialog is the one surface reachable at every width.
     @Test
     fun thePreviewDialogCarriesTheToggleSoItIsReachableWithoutTheInspector() = runComposeUiTest {
@@ -182,7 +182,7 @@ class FavouriteToggleTest {
     }
 
     @Test
-    fun thePreviewDialogShowsTheCurrentFavouriteState() = runComposeUiTest {
+    fun thePreviewDialogShowsTheCurrentFavoriteState() = runComposeUiTest {
         setContent {
             SnapVaultTheme(darkMode = true) {
                 MediaPreviewDialog(
@@ -200,11 +200,11 @@ class FavouriteToggleTest {
 
     // Compact is the width with no inspector at all. Driven through LibraryScreen rather than
     // the dialog directly, because what is being pinned is that the path from a grid card to a
-    // persisted favourite exists at that width — the finding was about reachability, not about
+    // persisted favorite exists at that width — the finding was about reachability, not about
     // the dialog in isolation.
     @Test
-    fun aFavouriteCanBeSetAtCompactWidthWhereThereIsNoInspector() = runComposeUiTest {
-        val folder = createTempDirectory("snapvault-compact-favourite").toFile()
+    fun aFavoriteCanBeSetAtCompactWidthWhereThereIsNoInspector() = runComposeUiTest {
+        val folder = createTempDirectory("snapvault-compact-favorite").toFile()
         File(folder, "2026-01-02_b.jpg").createNewFile()
 
         try {

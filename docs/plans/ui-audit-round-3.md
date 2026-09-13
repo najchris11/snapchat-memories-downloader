@@ -17,7 +17,7 @@ Testing policy is in `AGENTS.md` / `CLAUDE.md`: a behavioural change lands with 
 fails without it, verified by deliberately reintroducing the bug.
 
 **Decided:** build the sort control (item 14), reveal-in-file-manager (item 15) and
-favourites (item 16). Delete the duration UI (item 12) rather than populating it.
+favorites (item 16). Delete the duration UI (item 12) rather than populating it.
 
 **Status:** 3a (items 1–6) landed on `fix/ui-audit-round-3a`. 3b (items 7–13) landed on
 `fix/ui-audit-round-3b`. 3c (items 14–16) landed on `fix/ui-audit-round-3c`. detekt clean,
@@ -25,16 +25,16 @@ all three targets compiling.
 
 3c's three items were all the same shape: **state the UI already had a slot for and nothing
 ever filled.** The sort control existed as a comment, the reveal action as a `Desktop.open`
-helper used only by the video player, and the favourite as a `MediaCard` heart badge reading
+helper used only by the video player, and the favorite as a `MediaCard` heart badge reading
 a field no code path ever set.
 
-Two things the plan did not predict. The favourite toggle's hazard was not only the write
+Two things the plan did not predict. The favorite toggle's hazard was not only the write
 path: the Library dropped `selectedIndex` on every structural change to `filteredItems`, and
 because a `List` compares by contents, flipping one item's `favorited` counted as a change —
 the inspector closed itself out from under the press that caused it. Keying the reset on the
 item *ids* is what the index actually means. And the first merge implementation rewrote the
 pipeline's map rather than unioning it onto the on-disk one, which silently dropped every
-entry the run never looked at — exactly the favourite-set-during-a-run case the merge exists
+entry the run never looked at — exactly the favorite-set-during-a-run case the merge exists
 to protect. The viewmodel-level test caught it; the unit test had not, because its fixture
 happened to give the pipeline a map covering every key on disk.
 
@@ -369,7 +369,7 @@ in the inspector and header for desktop and absent where `revealInFileManager` i
 
 ---
 
-## 16. D4 — Favourites
+## 16. D4 — Favorites
 
 **Severity:** Fix · **Files:** `LibraryScreen.kt`, `MediaScanner.kt`, `model/FileMeta.kt`
 
@@ -393,40 +393,40 @@ state:
    before this change still deserialises.
 2. Read it in `scanMediaFiles` (both platforms) the same way those two are read.
 3. Add a toggle to the inspector and the existing badge lights up.
-4. Add a Favourites filter alongside item 5's enum.
+4. Add a Favorites filter alongside item 5's enum.
 
 The write path is the part to be careful about: `vault_index.json` is written by the pipeline,
-so a favourite toggled during a run must not be clobbered by the run's own index write, and a
-reset-index must not silently discard favourites. Decide explicitly whether reset clears them —
+so a favorite toggled during a run must not be clobbered by the run's own index write, and a
+reset-index must not silently discard favorites. Decide explicitly whether reset clears them —
 recommendation: it should not, and the reset copy should say so.
 
 **Tests:** the highest-risk item here, so the most test coverage:
 
 - A `FileMeta` written **before** this change still deserialises — the silent-data-loss case
   above.
-- A favourite survives a round-trip through `vault_index.json`.
-- A favourite survives a pipeline run that rewrites the index. This is the one that will
+- A favorite survives a round-trip through `vault_index.json`.
+- A favorite survives a pipeline run that rewrites the index. This is the one that will
   actually break.
-- The Favourites filter selects correctly.
+- The Favorites filter selects correctly.
 - Reset-index behaves as decided, and the copy matches the behaviour.
 
-**Landed.** Reset keeps favourites and clears everything else; an index left with no
-favourites is deleted outright, as reset always did. `set_reset_index_desc` says so.
+**Landed.** Reset keeps favorites and clears everything else; an index left with no
+favorites is deleted outright, as reset always did. `set_reset_index_desc` says so.
 
 The read/write of `vault_index.json` moved out of `DashboardViewModel` and both
 `MediaScanner` actuals into `VaultIndex`, which is where the merge rules now live and where
 they can be tested without a pipeline. `writeMerging` re-reads from disk at write time rather
-than trusting the copy the run loaded at its start — a favourite toggled mid-run exists
+than trusting the copy the run loaded at its start — a favorite toggled mid-run exists
 nowhere else.
 
 The toggle writes through to disk asynchronously but updates the grid immediately from an
 overlay map over the scan, so the heart does not lag the press by a disk round trip and no
 rescan is triggered to change one boolean.
 
-Tests: `VaultIndexTest` (14), `VaultIndexConcurrencyTest` (4), `FavouriteToggleTest` (7, two
+Tests: `VaultIndexTest` (14), `VaultIndexConcurrencyTest` (4), `FavoriteToggleTest` (7, two
 end-to-end through `LibraryScreen` against a real temp folder), two `DashboardViewModelTest`
-cases for reset, one for a favourite set mid-run, two `MediaScannerTest` cases for reading the
-field back, and the Favourites filter in `MediaFilterTest`.
+cases for reset, one for a favorite set mid-run, two `MediaScannerTest` cases for reading the
+field back, and the Favorites filter in `MediaFilterTest`.
 
 ### Three defects found in review of #35
 
@@ -441,7 +441,7 @@ the end of a run and the Library writes it on every toggle, which a user can do 
 runs — so two mutators read the same index and the second discarded the first. Writes also
 truncated the real file in place, which let a lock-free reader land on partial JSON that
 `read` silently turns into an empty map: every item would have come back with no GPS, no
-overlay and no favourite. All mutators now hold one `Mutex` (hence `suspend`, hence
+overlay and no favorite. All mutators now hold one `Mutex` (hence `suspend`, hence
 `resetVaultIndex` is suspend and its two call sites launch it) and replace the file via a temp
 sibling and `atomicMove`. `read` deliberately stays lock-free — `scanMediaFiles` is not a
 coroutine — which atomic replacement is what makes safe.
@@ -453,7 +453,7 @@ lock but truncating in place produces the partial read.
 
 **The toggle was unreachable at Compact and Medium.** It lived only in `InspectorItemDetail`,
 and `showInspector = windowSize == WindowSize.Expanded` — so phone and tablet users were shown
-a Favourites filter over state they had no way to create. `MediaPreviewDialog` now carries the
+a Favorites filter over state they had no way to create. `MediaPreviewDialog` now carries the
 toggle too; it is the one surface reachable at every width. Both surfaces share one hoisted
 `toggleFavorite` handler rather than duplicating the overlay-then-write sequence.
 

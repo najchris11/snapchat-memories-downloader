@@ -335,5 +335,5 @@ Run `./gradlew :composeApp:desktopTest` plus all three compile targets after eac
 ## Deferred to round 3
 
 Strings and localisation (S1, S2, S4, S5, S6, T8), information architecture (N6, N7, N9, N10),
-the three feature builds (N11 sort, N12 reveal, D4 favourites), and the remaining dead code
+the three feature builds (N11 sort, N12 reveal, D4 favorites), and the remaining dead code
 (D2, D3, D5). See `ui-audit-round-3.md`.

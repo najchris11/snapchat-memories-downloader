@@ -84,13 +84,13 @@ enum class MediaFilter {
     // The only filter that is not about what the file is. It sits in the same strip because
     // it answers the same question — which of these am I looking at — and because a library
     // has exactly one axis of "show me less".
-    Favourites;
+    Favorites;
 
     fun matches(item: LibraryItem): Boolean = when (this) {
         All -> true
         Photos -> item.type == "photo"
         Videos -> item.type == "video"
-        Favourites -> item.favorited
+        Favorites -> item.favorited
     }
 }
 
@@ -99,7 +99,7 @@ internal fun MediaFilter.label(): String = when (this) {
     MediaFilter.All -> stringResource(Res.string.lib_filter_all)
     MediaFilter.Photos -> stringResource(Res.string.lib_filter_photos)
     MediaFilter.Videos -> stringResource(Res.string.lib_filter_videos)
-    MediaFilter.Favourites -> stringResource(Res.string.lib_filter_favourites)
+    MediaFilter.Favorites -> stringResource(Res.string.lib_filter_favorites)
 }
 
 // Typographic, not copy: an em dash standing in for a statistic that has no value yet, and
@@ -370,7 +370,7 @@ fun LibraryScreen(
         } else emptyList()
     }
 
-    // Favourites are applied over the scan rather than triggering one. A rescan would re-stat
+    // Favorites are applied over the scan rather than triggering one. A rescan would re-stat
     // the whole folder and decode thumbnails again to change one boolean, and the write that
     // backs the toggle is asynchronous — so the heart would lag the press by a disk round
     // trip. Cleared with the folder, since the ids are paths into it.
@@ -382,7 +382,7 @@ fun LibraryScreen(
     val writeScope = rememberCoroutineScope()
 
     // Shared by the inspector and the preview dialog, because the inspector exists only at
-    // Expanded width and a phone would otherwise have no way to favourite anything.
+    // Expanded width and a phone would otherwise have no way to favorite anything.
     //
     // The overlay updates first so the heart follows the press rather than a disk round trip;
     // the write is keyed by file name because that is what the scanner looks entries up by.
@@ -424,7 +424,7 @@ fun LibraryScreen(
     // or past the end. Dropping it is the only honest answer.
     //
     // Keyed on the ids rather than on `filteredItems`, because the list compares structurally
-    // and a favourite toggle changes an item's *contents* without moving it. Keying on the
+    // and a favorite toggle changes an item's *contents* without moving it. Keying on the
     // list itself dropped the selection on every toggle, closing the inspector out from under
     // the press that caused it. Positions are what the index means; only those matter here.
     val itemOrder = remember(filteredItems) { filteredItems.map { it.id } }
@@ -744,7 +744,7 @@ internal fun InspectorItemDetail(
             InspectorAction(
                 icon = if (item.favorited) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                 label = stringResource(
-                    if (item.favorited) Res.string.lib_favourite_remove else Res.string.lib_favourite_add
+                    if (item.favorited) Res.string.lib_favorite_remove else Res.string.lib_favorite_add
                 ),
                 onClick = { onToggleFavorite(!item.favorited) },
                 tint = if (item.favorited) MaterialTheme.colorScheme.error else null,
@@ -941,7 +941,7 @@ fun MediaPreviewDialog(
     // default is the real loader, on the same dispatcher as the thumbnail path.
     loadFull: suspend (String) -> ImageBitmap? = { path -> withContext(ioDispatcher) { loadFullImage(path) } },
     // The dialog is the only surface reachable at every width: the inspector renders at
-    // Expanded only, so without this there is no way to favourite anything on a phone.
+    // Expanded only, so without this there is no way to favorite anything on a phone.
     onToggleFavorite: ((Boolean) -> Unit)? = null,
 ) {
     val isVideo = item.type == "video"
@@ -1073,8 +1073,8 @@ fun MediaPreviewDialog(
                                     Icon(
                                         if (item.favorited) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                                         contentDescription = stringResource(
-                                            if (item.favorited) Res.string.lib_favourite_remove
-                                            else Res.string.lib_favourite_add
+                                            if (item.favorited) Res.string.lib_favorite_remove
+                                            else Res.string.lib_favorite_add
                                         ),
                                         tint = if (item.favorited) {
                                             MaterialTheme.colorScheme.error

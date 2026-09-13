@@ -242,7 +242,7 @@ class DashboardViewModel(
         if (isRunning) return false
         val folder = downloadFolder ?: return false
         return runCatching {
-            // Keeps favourites: they are the one thing in the index the next run cannot
+            // Keeps favorites: they are the one thing in the index the next run cannot
             // rebuild, and reset exists to force re-processing, not to discard user data.
             VaultIndex.resetKeepingFavorites(fileSystem, folder)
             true
@@ -426,7 +426,7 @@ class DashboardViewModel(
 
         runCatching {
             // writeMerging, not write: the FileMeta(…) entries above are built from scratch by
-            // this run and carry `favorited = false`, and a favourite toggled *during* the run
+            // this run and carry `favorited = false`, and a favorite toggled *during* the run
             // exists only on disk. Writing the run's own map would wipe both.
             VaultIndex.writeMerging(fileSystem, outDir, downloadedMeta)
             log("[INFO] Vault index saved (${downloadedMeta.size} entries).")
@@ -559,7 +559,7 @@ class DashboardViewModel(
 
         runCatching {
             // writeMerging, not write: the FileMeta(…) entries above are built from scratch by
-            // this run and carry `favorited = false`, and a favourite toggled *during* the run
+            // this run and carry `favorited = false`, and a favorite toggled *during* the run
             // exists only on disk. Writing the run's own map would wipe both.
             VaultIndex.writeMerging(fileSystem, outDir, downloadedMeta)
             log("[INFO] Vault index saved (${downloadedMeta.size} entries).")

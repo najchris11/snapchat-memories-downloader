@@ -13,9 +13,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Favourites are the only user-owned data SnapVault stores: everything else in
+ * Favorites are the only user-owned data SnapVault stores: everything else in
  * `vault_index.json` is a fact the pipeline can recompute by re-processing. That asymmetry is
- * what makes these tests worth having — a lost `hasGps` costs a re-run, a lost favourite is
+ * what makes these tests worth having — a lost `hasGps` costs a re-run, a lost favorite is
  * gone.
  */
 class VaultIndexTest {
@@ -41,7 +41,7 @@ class VaultIndexTest {
     // inside runCatching { … }.getOrDefault(emptyMap()), so it would not surface as an error:
     // the Library would quietly report every item as having no GPS and no overlay.
     @Test
-    fun anIndexWrittenBeforeFavouritesExistedStillParses() {
+    fun anIndexWrittenBeforeFavoritesExistedStillParses() {
         writeRaw("""{"memory.jpg":{"hasGps":true,"hasOverlay":true}}""")
 
         val index = VaultIndex.read(fs, dir.absolutePath)
@@ -54,7 +54,7 @@ class VaultIndexTest {
     }
 
     @Test
-    fun aFavouriteSurvivesARoundTrip() = runBlocking {
+    fun aFavoriteSurvivesARoundTrip() = runBlocking {
             VaultIndex.setFavorite(fs, dir.absolutePath, "memory.jpg", true)
 
             assertEquals(true, VaultIndex.read(fs, dir.absolutePath)["memory.jpg"]?.favorited)
@@ -64,7 +64,7 @@ class VaultIndexTest {
     }
 
     @Test
-    fun favouritingDoesNotDisturbTheFactsThePipelineOwns() = runBlocking {
+    fun favoritingDoesNotDisturbTheFactsThePipelineOwns() = runBlocking {
             writeRaw("""{"memory.jpg":{"hasGps":true,"hasOverlay":true}}""")
 
             VaultIndex.setFavorite(fs, dir.absolutePath, "memory.jpg", true)
@@ -77,16 +77,16 @@ class VaultIndexTest {
 
     // The one the plan predicted would actually break. The pipeline builds its entries from
     // scratch — FileMeta(hasGps = …, hasOverlay = …) at five sites — so a new field with a
-    // default would be silently reset to it on every run, wiping every favourite.
+    // default would be silently reset to it on every run, wiping every favorite.
     @Test
-    fun aPipelineRewriteKeepsFavourites() {
+    fun aPipelineRewriteKeepsFavorites() {
         writeRaw(
             """{"kept.jpg":{"hasGps":false,"hasOverlay":false,"favorited":true},""" +
                 """"plain.jpg":{"hasGps":false,"hasOverlay":false,"favorited":false}}"""
         )
         val onDisk = VaultIndex.read(fs, dir.absolutePath)
 
-        // What a run produces: freshly built, favourites nowhere in sight.
+        // What a run produces: freshly built, favorites nowhere in sight.
         val fromPipeline = mapOf(
             "kept.jpg" to FileMeta(hasGps = true, hasOverlay = false),
             "plain.jpg" to FileMeta(hasGps = true, hasOverlay = true),
@@ -95,10 +95,10 @@ class VaultIndexTest {
 
         val merged = VaultIndex.mergeUserFields(onDisk = onDisk, pipeline = fromPipeline)
 
-        assertEquals(true, merged["kept.jpg"]?.favorited, "the run wiped a favourite")
+        assertEquals(true, merged["kept.jpg"]?.favorited, "the run wiped a favorite")
         assertEquals(true, merged["kept.jpg"]?.hasGps, "the run's own facts must still win")
         assertEquals(false, merged["plain.jpg"]?.favorited)
-        assertEquals(false, merged["new.jpg"]?.favorited, "a file the run just found cannot be a favourite")
+        assertEquals(false, merged["new.jpg"]?.favorited, "a file the run just found cannot be a favorite")
         assertEquals(setOf("kept.jpg", "plain.jpg", "new.jpg"), merged.keys)
     }
 
@@ -118,15 +118,15 @@ class VaultIndexTest {
         assertEquals(onDisk["untouched.jpg"], merged["untouched.jpg"], "an untouched entry must survive intact")
     }
 
-    // A favourite set while a run is in flight is not in that run's in-memory map, so the
+    // A favorite set while a run is in flight is not in that run's in-memory map, so the
     // merge has to read from disk at write time rather than trusting the copy loaded at the
     // start of the run.
     @Test
-    fun aFavouriteSetDuringARunSurvivesThatRunsWrite() = runBlocking {
+    fun aFavoriteSetDuringARunSurvivesThatRunsWrite() = runBlocking {
             val pipelineStarted = VaultIndex.read(fs, dir.absolutePath)
             assertTrue(pipelineStarted.isEmpty())
 
-            // …the user favourites something while the run is going…
+            // …the user favorites something while the run is going…
             VaultIndex.setFavorite(fs, dir.absolutePath, "memory.jpg", true)
 
             // …and the run finishes and writes its own map.
@@ -153,10 +153,10 @@ class VaultIndexTest {
         assertEquals(emptyMap(), VaultIndex.read(fs, dir.absolutePath))
     }
 
-    // Reset exists to make the next run re-process everything. It must not take favourites
+    // Reset exists to make the next run re-process everything. It must not take favorites
     // with it: those are not derivable from the export and cannot be recovered by re-running.
     @Test
-    fun resetClearsProcessingStateButKeepsFavourites() = runBlocking {
+    fun resetClearsProcessingStateButKeepsFavorites() = runBlocking {
             writeRaw(
                 """{"kept.jpg":{"hasGps":true,"hasOverlay":true,"favorited":true},""" +
                     """"plain.jpg":{"hasGps":true,"hasOverlay":true,"favorited":false}}"""
@@ -165,12 +165,12 @@ class VaultIndexTest {
             VaultIndex.resetKeepingFavorites(fs, dir.absolutePath)
 
             val after = VaultIndex.read(fs, dir.absolutePath)
-            assertEquals(setOf("kept.jpg"), after.keys, "only favourites survive a reset")
+            assertEquals(setOf("kept.jpg"), after.keys, "only favorites survive a reset")
             assertEquals(FileMeta(hasGps = false, hasOverlay = false, favorited = true), after["kept.jpg"])
     }
 
     @Test
-    fun resetWithNoFavouritesLeavesNoIndexBehind() = runBlocking {
+    fun resetWithNoFavoritesLeavesNoIndexBehind() = runBlocking {
             writeRaw("""{"plain.jpg":{"hasGps":true,"hasOverlay":true,"favorited":false}}""")
 
             VaultIndex.resetKeepingFavorites(fs, dir.absolutePath)
@@ -180,9 +180,9 @@ class VaultIndexTest {
 
     // Older indexes are written without the field. Kotlin's default-value encoding would omit
     // `favorited: false` entirely, which is fine to read back but makes the file harder to
-    // inspect by hand — and this file is the only place a favourite lives.
+    // inspect by hand — and this file is the only place a favorite lives.
     @Test
-    fun favouritesAreWrittenExplicitlyRatherThanOmittedAsADefault() = runBlocking {
+    fun favoritesAreWrittenExplicitlyRatherThanOmittedAsADefault() = runBlocking {
             VaultIndex.setFavorite(fs, dir.absolutePath, "memory.jpg", false)
 
             val raw = File(dir, VaultIndex.FILE_NAME).readText()
@@ -208,7 +208,7 @@ class VaultIndexTest {
     }
 
     @Test
-    fun aFavouriteSetFromAWindowsStylePathIsFoundUnderTheFileName() = runBlocking {
+    fun aFavoriteSetFromAWindowsStylePathIsFoundUnderTheFileName() = runBlocking {
             VaultIndex.setFavorite(
                 fs,
                 dir.absolutePath,

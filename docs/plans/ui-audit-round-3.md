@@ -507,3 +507,29 @@ The one cancellable suspension point on that path is `VaultIndex`'s lock. The te
 that lock from another coroutine, so the favorite write is suspended on it — provably not yet
 written — when the Library leaves composition. Verified by cancelling the write's own scope at
 teardown, which is exactly what `rememberCoroutineScope` does, and watching it fail.
+
+### Review of #36 — two more
+
+**Rapid toggles on one item had unordered persistence and a shared pending flag.** Every press
+launched its own coroutine, and `pendingFavorites` was a `Set<String>` — so two presses on one
+item meant the first completion cleared the id while the second was still in flight, and a scan
+arriving in that window reconciled away an override the disk had not caught up with. A
+superseded write could also revert an override the user had since changed, or report a failure
+for a press already overtaken.
+
+Now: one ordered writer draining a channel, and a generation per item. Only the newest intent
+for an item may settle it, revert it, or report its failure.
+
+Worth recording honestly — the ordered writer is **not** covered by a failing test. A coroutine
+per press passes every one of these, because launching from one thread onto `Dispatchers.Default`
+queues FIFO and kotlinx's `Mutex` is fair, so press order survives in practice; this was verified
+by reverting to per-press coroutines and watching all ten tests still pass, including fifty
+rapid toggles. Neither of those is a documented guarantee, so the single consumer stays — but
+the guarantee is structural, not something the suite discriminates. The generation guard *is*
+covered: dropping it fails four tests.
+
+**A test that only passed locally.** `aFailedWriteRevertsTheHeartAndSaysSo` asserted the
+optimistic override immediately after `setFavorite`, racing the injected failure. It passed
+here and failed on CI. The failing write is now gated, so the optimistic state is observable at
+a fixed point rather than whenever the scheduler allows. The lesson is the same one round 3d
+already recorded once: a test whose timing decides its outcome is not a test.

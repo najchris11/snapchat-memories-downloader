@@ -104,14 +104,78 @@ class DashboardViewModel(
     var favoriteOverrides by mutableStateOf(emptyMap<String, Boolean>())
         private set
 
-    // Ids whose write is still in flight. An override may not be reconciled away while its
-    // write has yet to land, or a scan racing the write would flicker the heart back off.
-    private var pendingFavorites by mutableStateOf(emptySet<String>())
+    // itemId -> the generation of the newest intent for it that has not settled yet.
+    //
+    // A set of ids was not enough: toggle the same item twice and the first write's completion
+    // removed the id while the second was still in flight, so a scan could reconcile away an
+    // override the disk had not caught up with. Keyed by generation, only the newest intent
+    // for an item can settle it.
+    private var pendingFavorites by mutableStateOf(emptyMap<String, Long>())
+
+    private var favoriteGeneration = 0L
+
+    private data class FavoriteIntent(
+        val itemId: String,
+        val favorited: Boolean,
+        val generation: Long,
+        val folder: String,
+    )
+
+    /**
+     * Intents queued for the single writer below.
+     *
+     * One ordered writer rather than a coroutine per press: independent coroutines acquire
+     * [VaultIndex]'s lock in whatever order the scheduler hands it to them, so toggling an item
+     * twice in quick succession could persist the *older* intent last and leave the wrong value
+     * on disk. A channel drained by one consumer makes write order press order.
+     */
+    private val favoriteIntents = Channel<FavoriteIntent>(Channel.UNLIMITED)
+
+    // Started once, drains for the life of the view model. An init block rather than a
+    // property, because nothing ever needs to refer to the job.
+    init {
+        startFavoriteWriter()
+    }
+
+    private fun startFavoriteWriter() = scope.launch {
+        for (intent in favoriteIntents) {
+            val outcome = runCatching {
+                withContext(ioDispatcher) {
+                    VaultIndex.setFavorite(
+                        fileSystem,
+                        intent.folder,
+                        VaultIndex.keyOf(intent.itemId),
+                        intent.favorited,
+                    )
+                }
+            }
+            settleFavorite(intent, outcome)
+        }
+    }
+
+    /**
+     * Applies an intent's outcome, but only if it is still the newest one for that item.
+     *
+     * A superseded intent must not clear the pending flag, revert the override, or report a
+     * failure: all three belong to the press the user made last, not to one already overtaken.
+     */
+    private fun settleFavorite(intent: FavoriteIntent, outcome: Result<Unit>) {
+        if (pendingFavorites[intent.itemId] != intent.generation) return
+
+        // Settle the outcome before clearing pending, not after: "no longer pending" is what
+        // everything else treats as "this write is finished", and clearing it first exposes a
+        // window where the write has failed but the heart has not yet gone out.
+        outcome.onFailure { e ->
+            favoriteOverrides = favoriteOverrides - intent.itemId
+            log("[WARN] Could not save favorite for ${VaultIndex.keyOf(intent.itemId)}: ${e.message}")
+        }
+        pendingFavorites = pendingFavorites - intent.itemId
+    }
 
     fun favoriteIsPending(itemId: String): Boolean = itemId in pendingFavorites
 
     /**
-     * Records a favorite and persists it.
+     * Records a favorite and queues it for persistence.
      *
      * This lives on the view model rather than in `LibraryScreen` because it outlives the
      * screen: on a `rememberCoroutineScope()`, navigating away from the Library immediately
@@ -132,22 +196,9 @@ class DashboardViewModel(
             return
         }
 
-        pendingFavorites = pendingFavorites + itemId
-        scope.launch {
-            val outcome = runCatching {
-                withContext(ioDispatcher) {
-                    VaultIndex.setFavorite(fileSystem, folder, VaultIndex.keyOf(itemId), favorited)
-                }
-            }
-            // Settle the outcome before clearing pending, not after: "no longer pending" is
-            // what everything else treats as "this write is finished", and clearing it first
-            // exposes a window where the write has failed but the heart has not yet gone out.
-            outcome.onFailure { e ->
-                favoriteOverrides = favoriteOverrides - itemId
-                log("[WARN] Could not save favorite for ${VaultIndex.keyOf(itemId)}: ${e.message}")
-            }
-            pendingFavorites = pendingFavorites - itemId
-        }
+        val generation = ++favoriteGeneration
+        pendingFavorites = pendingFavorites + (itemId to generation)
+        favoriteIntents.trySend(FavoriteIntent(itemId, favorited, generation, folder))
     }
 
     /**
@@ -303,6 +354,7 @@ class DashboardViewModel(
     }
 
     fun dispose() {
+        favoriteIntents.close()
         scope.cancel()
         pickers.releaseAllSecurityAccess()
     }

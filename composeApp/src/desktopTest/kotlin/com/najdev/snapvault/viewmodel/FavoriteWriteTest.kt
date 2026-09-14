@@ -65,14 +65,23 @@ class FavoriteWriteTest {
     // The swallowed-failure case. A bare runCatching left the heart lit over nothing: no
     // revert, no log, no signal of any kind. Silence is the worst possible answer here,
     // because the user has no other copy of this.
+    //
+    // The write is gated rather than merely slow: the optimistic state is only observable
+    // until the failure lands, so without the gate this assertion depends on which of the two
+    // wins the race. It passed locally and failed on CI, which is exactly the shape of test
+    // that should not have shipped.
     @Test
     fun aFailedWriteRevertsTheHeartAndSaysSo() {
         val fs = FakeFileSystem()
-        val viewModel = viewModel(WriteFailingFileSystem(fs))
+        val control = IndexWriteControl(fs, blockFrom = 1, failAt = setOf(1))
+        val viewModel = viewModel(control)
 
         viewModel.setFavorite("/out/memory.jpg", true)
+
+        // Deterministic: the write cannot have failed yet, it is held at the gate.
         assertEquals(mapOf("/out/memory.jpg" to true), viewModel.favoriteOverrides)
 
+        control.release()
         awaitFavorite(viewModel, "/out/memory.jpg")
 
         assertEquals(
@@ -84,6 +93,125 @@ class FavoriteWriteTest {
             viewModel.logs.any { it.startsWith("[WARN]") && it.contains("favorite", ignoreCase = true) },
             "the failure has to be reported, was: ${viewModel.logs}",
         )
+    }
+
+    // ── Rapid toggles on one item ────────────────────────────────────────────
+
+    // Two presses on one item, with the first write held: the newest press is what the user
+    // sees immediately, the item stays pending throughout, and the newest value is what lands.
+    @Test
+    fun rapidTogglesOnOneItemPersistInPressOrder() {
+        val fs = FakeFileSystem()
+        val control = IndexWriteControl(fs, blockFrom = 1)
+        val viewModel = viewModel(control)
+
+        viewModel.setFavorite("/out/memory.jpg", true)
+        viewModel.setFavorite("/out/memory.jpg", false)
+
+        // The newest press is what the user sees, straight away.
+        assertEquals(mapOf("/out/memory.jpg" to false), viewModel.favoriteOverrides)
+        assertTrue(viewModel.favoriteIsPending("/out/memory.jpg"))
+
+        control.release()
+        awaitFavorite(viewModel, "/out/memory.jpg")
+
+        assertEquals(
+            false,
+            VaultIndex.read(fs, "/out")["memory.jpg"]?.favorited,
+            "the older press landed last and won",
+        )
+    }
+
+    // Fifty presses in a row, none gated: the last one has to be the one on disk, and the one
+    // press that settles.
+    //
+    // What this does *not* prove is the single ordered writer. A coroutine per press passes
+    // this too, because launching from one thread onto Dispatchers.Default queues FIFO and
+    // kotlinx's Mutex is fair, so order survives in practice — verified by reverting to
+    // per-press coroutines and watching all of these still pass. Neither of those is a
+    // documented guarantee, which is why the writer is still a single consumer; but the
+    // guarantee is structural, not something this test discriminates. What it does catch is
+    // the generation guard: without it, an earlier press settles the item and the last press's
+    // value is not what ends up on disk.
+    @Test
+    fun manyRapidTogglesEndAtTheLastPress() {
+        val fs = FakeFileSystem()
+        val viewModel = viewModel(fs)
+
+        repeat(50) { viewModel.setFavorite("/out/memory.jpg", it % 2 == 0) }
+        // Press 50 is index 49, so the last thing the user asked for is false.
+        assertEquals(mapOf("/out/memory.jpg" to false), viewModel.favoriteOverrides)
+
+        awaitFavorite(viewModel, "/out/memory.jpg")
+
+        assertEquals(
+            false,
+            VaultIndex.read(fs, "/out")["memory.jpg"]?.favorited,
+            "some press other than the last one landed last",
+        )
+    }
+
+    // pendingFavorites was a Set of ids, so the first write's completion removed the id while
+    // the second was still in flight. A scan arriving in that window would then reconcile away
+    // an override the disk had not caught up with.
+    @Test
+    fun anEarlierWriteCompletingDoesNotSettleAStillPendingLaterToggle() {
+        val fs = FakeFileSystem()
+        val control = IndexWriteControl(fs, blockFrom = 2)
+        val viewModel = viewModel(control)
+
+        viewModel.setFavorite("/out/memory.jpg", true)
+        viewModel.setFavorite("/out/memory.jpg", false)
+
+        // Let the first write land; the second is held at the gate.
+        runBlocking {
+            withTimeout(5_000) {
+                while (VaultIndex.read(fs, "/out")["memory.jpg"]?.favorited != true) delay(5)
+            }
+        }
+
+        assertTrue(
+            viewModel.favoriteIsPending("/out/memory.jpg"),
+            "an older write cleared the pending flag belonging to a newer press",
+        )
+        // …so a scan arriving now must not reconcile the override away.
+        viewModel.reconcileFavorites(listOf("/out/memory.jpg"))
+        assertEquals(mapOf("/out/memory.jpg" to false), viewModel.favoriteOverrides)
+
+        control.release()
+        awaitFavorite(viewModel, "/out/memory.jpg")
+        assertEquals(false, VaultIndex.read(fs, "/out")["memory.jpg"]?.favorited)
+    }
+
+    // A failure belongs to the press that caused it. An older write failing must not revert an
+    // override the user has since changed — the newer press is still in flight and still true.
+    @Test
+    fun anOlderFailedWriteDoesNotRevertANewerToggle() {
+        val fs = FakeFileSystem()
+        val control = IndexWriteControl(fs, blockFrom = 2, failAt = setOf(1))
+        val viewModel = viewModel(control)
+
+        viewModel.setFavorite("/out/memory.jpg", true)   // this one fails
+        viewModel.setFavorite("/out/memory.jpg", false)  // this one is what the user meant
+
+        // The second write reaching the gate means the first has already failed.
+        control.awaitBlocked()
+
+        assertEquals(
+            mapOf("/out/memory.jpg" to false),
+            viewModel.favoriteOverrides,
+            "a superseded write's failure reverted the press that replaced it",
+        )
+        assertTrue(viewModel.favoriteIsPending("/out/memory.jpg"))
+        assertEquals(
+            emptyList(),
+            viewModel.logs.filter { it.contains("favorite", ignoreCase = true) },
+            "a superseded write's failure is not the user's problem and must not be reported",
+        )
+
+        control.release()
+        awaitFavorite(viewModel, "/out/memory.jpg")
+        assertEquals(false, VaultIndex.read(fs, "/out")["memory.jpg"]?.favorited)
     }
 
     // The overlay bridges the gap between the press and the scan that reflects it. Left in
@@ -111,7 +239,7 @@ class FavoriteWriteTest {
     @Test
     fun anOverrideSurvivesAScanWhileItsWriteIsStillPending() {
         val fs = FakeFileSystem()
-        val gate = BlockingWriteFileSystem(fs)
+        val gate = IndexWriteControl(fs, blockFrom = 1)
         val viewModel = viewModel(gate)
 
         viewModel.setFavorite("/out/memory.jpg", true)
@@ -162,33 +290,39 @@ class FavoriteWriteTest {
 }
 
 /**
- * Fails writes of the index, the way a full disk or a revoked permission would.
+ * Controls index writes so a test can inspect state at an exact point.
  *
- * Scoped to that one file so the test's own setup still works — failing every write would
- * take down the fixture before the case under test ran.
+ * Scoped to the index file because the fixture's own setup writes through the same filesystem,
+ * and bounded because a blocked write holds VaultIndex's object-level lock — an unbounded wait
+ * would wedge every other test in the JVM rather than fail this one.
  */
-private class WriteFailingFileSystem(delegate: FileSystem) : ForwardingFileSystem(delegate) {
-    override fun sink(file: Path, mustCreate: Boolean): Sink =
-        if (VaultIndex.FILE_NAME in file.name) throw IOException("disk is full")
-        else super.sink(file, mustCreate)
-}
+private class IndexWriteControl(
+    delegate: FileSystem,
+    /** 1-based index of the first index write to hold at the gate. */
+    private val blockFrom: Int = Int.MAX_VALUE,
+    /** 1-based indices of index writes that should fail instead of succeeding. */
+    private val failAt: Set<Int> = emptySet(),
+) : ForwardingFileSystem(delegate) {
 
-/**
- * Holds index writes open until released, so a scan can be raced against one.
- *
- * Scoped to the index file for the same reason as above, and with a bounded wait: this blocks
- * while VaultIndex's lock is held, and that lock is one object-level Mutex shared by every
- * test in the JVM — an unbounded wait here would wedge the whole suite rather than fail.
- */
-private class BlockingWriteFileSystem(delegate: FileSystem) : ForwardingFileSystem(delegate) {
+    private val writes = java.util.concurrent.atomic.AtomicInteger()
     private val gate = java.util.concurrent.CountDownLatch(1)
+    private val reachedGate = java.util.concurrent.CountDownLatch(1)
 
     fun release() = gate.countDown()
 
+    /** Blocks until a write has reached the gate, so every earlier write has finished. */
+    fun awaitBlocked() =
+        check(reachedGate.await(10, java.util.concurrent.TimeUnit.SECONDS)) { "no write reached the gate" }
+
     override fun sink(file: Path, mustCreate: Boolean): Sink {
-        if (VaultIndex.FILE_NAME in file.name) {
+        if (VaultIndex.FILE_NAME !in file.name) return super.sink(file, mustCreate)
+
+        val n = writes.incrementAndGet()
+        if (n >= blockFrom) {
+            reachedGate.countDown()
             check(gate.await(10, java.util.concurrent.TimeUnit.SECONDS)) { "gate never released" }
         }
+        if (n in failAt) throw IOException("disk is full")
         return super.sink(file, mustCreate)
     }
 }

@@ -180,7 +180,7 @@ class MediaScannerTest {
     // nothing ever set the flag: the scanner read `hasGps` and `hasOverlay` out of
     // vault_index.json and stopped there. The badge was unreachable UI.
     @Test
-    fun scanReadsFavouritesFromTheVaultIndex() {
+    fun scanReadsFavoritesFromTheVaultIndex() {
         File(dir, "2024-06-01_kept.png").writeBytes(byteArrayOf(1))
         File(dir, "2024-06-02_plain.png").writeBytes(byteArrayOf(1))
         File(dir, VaultIndex.FILE_NAME).writeText(
@@ -194,10 +194,10 @@ class MediaScannerTest {
         assertEquals(false, byTitle["2024-06-02_plain"]?.favorited)
     }
 
-    // A folder scanned before favourites existed, and a folder never processed at all, both
+    // A folder scanned before favorites existed, and a folder never processed at all, both
     // have to scan rather than throw.
     @Test
-    fun scanTreatsAMissingFavouriteFieldAsNotFavourited() {
+    fun scanTreatsAMissingFavoriteFieldAsNotFavorited() {
         File(dir, "2024-06-01_memory.png").writeBytes(byteArrayOf(1))
         File(dir, VaultIndex.FILE_NAME)
             .writeText("""{"2024-06-01_memory.png":{"hasGps":true,"hasOverlay":true}}""")

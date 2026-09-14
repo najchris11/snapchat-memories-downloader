@@ -65,7 +65,7 @@ private class FakeZipPipelineRunner(
     }
 }
 
-private class FakeMediaProcessor : MediaProcessor {
+internal class FakeMediaProcessor : MediaProcessor {
     override fun checkExifTool() = true
     override fun checkFFmpeg() = true
     override fun writeGpsMetadata(filePath: String, latitude: Double, longitude: Double, dateStr: String?) = true
@@ -73,7 +73,7 @@ private class FakeMediaProcessor : MediaProcessor {
     override fun combineVideoWithOverlay(videoPath: String, overlayPath: String, outputPath: String) = true
 }
 
-private class FakePlatformPickers(
+internal class FakePlatformPickers(
     private val htmlPath: String,
     private val outputDir: String,
 ) : PlatformPickers {
@@ -417,10 +417,10 @@ class DashboardViewModelTest {
     }
 
     // Reset used to delete vault_index.json outright. That was right when the file held only
-    // what the pipeline could recompute; it stopped being right the moment favourites moved
-    // in, because a re-run rebuilds hasGps and hasOverlay and cannot rebuild a favourite.
+    // what the pipeline could recompute; it stopped being right the moment favorites moved
+    // in, because a re-run rebuilds hasGps and hasOverlay and cannot rebuild a favorite.
     @Test
-    fun resetVaultIndexKeepsFavouritesAndClearsEverythingElse() {
+    fun resetVaultIndexKeepsFavoritesAndClearsEverythingElse() {
         val fs = FakeFileSystem()
         fs.createDirectories("/out".toPath())
         fs.write("/out/vault_index.json".toPath()) {
@@ -440,7 +440,7 @@ class DashboardViewModelTest {
         assertTrue(runBlocking { viewModel.resetVaultIndex() })
 
         val after = VaultIndex.read(fs, "/out")
-        assertEquals(setOf("kept.jpg"), after.keys, "only the favourite survives a reset")
+        assertEquals(setOf("kept.jpg"), after.keys, "only the favorite survives a reset")
         assertEquals(
             FileMeta(hasGps = false, hasOverlay = false, favorited = true),
             after["kept.jpg"],
@@ -449,7 +449,7 @@ class DashboardViewModelTest {
     }
 
     @Test
-    fun resetVaultIndexRemovesTheIndexWhenNothingWasFavourited() {
+    fun resetVaultIndexRemovesTheIndexWhenNothingWasFavorited() {
         val fs = FakeFileSystem()
         fs.createDirectories("/out".toPath())
         fs.write("/out/vault_index.json".toPath()) {
@@ -470,13 +470,13 @@ class DashboardViewModelTest {
 
     // The hazard the whole VaultIndex indirection exists for. DashboardViewModel builds its
     // FileMeta entries from scratch at five sites and writes the map wholesale at the end of
-    // a run, from a copy loaded when the run started — so a favourite toggled while a sync is
+    // a run, from a copy loaded when the run started — so a favorite toggled while a sync is
     // in progress lives only on disk, and the run's own final write erases it.
     //
-    // The favourite is set from inside combineAll, which is the only hook that runs after the
+    // The favorite is set from inside combineAll, which is the only hook that runs after the
     // index has been loaded and before it is written back.
     @Test
-    fun aFavouriteSetDuringARunSurvivesThatRunsIndexWrite() {
+    fun aFavoriteSetDuringARunSurvivesThatRunsIndexWrite() {
         val fs = FakeFileSystem()
         fs.createDirectories("/out".toPath())
         fs.write("/history.json".toPath()) { writeUtf8(historyJson) }
@@ -510,7 +510,7 @@ class DashboardViewModelTest {
         assertEquals(
             true,
             VaultIndex.read(fs, "/out")["kept.jpg"]?.favorited,
-            "the run wrote its own map over the index and took the favourite with it",
+            "the run wrote its own map over the index and took the favorite with it",
         )
     }
 }

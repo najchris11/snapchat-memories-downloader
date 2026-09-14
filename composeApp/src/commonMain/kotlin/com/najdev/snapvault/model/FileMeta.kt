@@ -12,7 +12,7 @@ import kotlinx.serialization.Serializable
  * every memory as having no GPS and no overlay.
  *
  * It is also the only user-owned field here. [hasGps] and [hasOverlay] are recomputable by
- * re-running the pipeline; a favourite is not. See [com.najdev.snapvault.VaultIndex].
+ * re-running the pipeline; a favorite is not. See [com.najdev.snapvault.VaultIndex].
  */
 @Serializable
 data class FileMeta(

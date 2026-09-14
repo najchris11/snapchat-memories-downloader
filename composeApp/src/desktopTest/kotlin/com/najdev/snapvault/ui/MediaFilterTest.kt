@@ -50,14 +50,14 @@ class MediaFilterTest {
         )
     }
 
-    // Favourites is the only filter that crosses media types — it is a filter on what the
+    // Favorites is the only filter that crosses media types — it is a filter on what the
     // user marked, not on what the file is, which is why it sits in the same strip rather
     // than in a separate control.
     @Test
-    fun favouritesSelectsAcrossMediaTypes() {
+    fun favoritesSelectsAcrossMediaTypes() {
         assertEquals(
             listOf("photo-a"),
-            library.filter(MediaFilter.Favourites::matches).map { it.title },
+            library.filter(MediaFilter.Favorites::matches).map { it.title },
         )
     }
 

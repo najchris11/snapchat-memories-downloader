@@ -7,6 +7,7 @@ import com.najdev.snapvault.downloader.DownloadEngine
 import com.najdev.snapvault.downloader.ZipPipelineRunner
 import com.najdev.snapvault.metadata.MediaProcessor
 import com.najdev.snapvault.VaultIndex
+import com.najdev.snapvault.ioDispatcher
 import com.najdev.snapvault.model.FileMeta
 import com.najdev.snapvault.model.MemoryItem
 import com.najdev.snapvault.parser.*
@@ -88,6 +89,130 @@ class DashboardViewModel(
     // pipeline coroutines.
     private fun log(message: String) {
         logLock.withLock { logs.add(message) }
+    }
+
+    // ── Favorites ────────────────────────────────────────────────────────────
+
+    /**
+     * Favorites the user has toggled, overlaid on whatever the last scan found.
+     *
+     * The Library applies these over `scanMediaFiles`'s result so the heart follows the press
+     * rather than a disk round trip, and so changing one boolean does not cost a rescan of the
+     * whole folder. An entry lives only until [reconcileFavorites] confirms a scan has caught
+     * up with it, or until its write fails.
+     */
+    var favoriteOverrides by mutableStateOf(emptyMap<String, Boolean>())
+        private set
+
+    // itemId -> the generation of the newest intent for it that has not settled yet.
+    //
+    // A set of ids was not enough: toggle the same item twice and the first write's completion
+    // removed the id while the second was still in flight, so a scan could reconcile away an
+    // override the disk had not caught up with. Keyed by generation, only the newest intent
+    // for an item can settle it.
+    private var pendingFavorites by mutableStateOf(emptyMap<String, Long>())
+
+    private var favoriteGeneration = 0L
+
+    private data class FavoriteIntent(
+        val itemId: String,
+        val favorited: Boolean,
+        val generation: Long,
+        val folder: String,
+    )
+
+    /**
+     * Intents queued for the single writer below.
+     *
+     * One ordered writer rather than a coroutine per press: independent coroutines acquire
+     * [VaultIndex]'s lock in whatever order the scheduler hands it to them, so toggling an item
+     * twice in quick succession could persist the *older* intent last and leave the wrong value
+     * on disk. A channel drained by one consumer makes write order press order.
+     */
+    private val favoriteIntents = Channel<FavoriteIntent>(Channel.UNLIMITED)
+
+    // Started once, drains for the life of the view model. An init block rather than a
+    // property, because nothing ever needs to refer to the job.
+    init {
+        startFavoriteWriter()
+    }
+
+    private fun startFavoriteWriter() = scope.launch {
+        for (intent in favoriteIntents) {
+            val outcome = runCatching {
+                withContext(ioDispatcher) {
+                    VaultIndex.setFavorite(
+                        fileSystem,
+                        intent.folder,
+                        VaultIndex.keyOf(intent.itemId),
+                        intent.favorited,
+                    )
+                }
+            }
+            settleFavorite(intent, outcome)
+        }
+    }
+
+    /**
+     * Applies an intent's outcome, but only if it is still the newest one for that item.
+     *
+     * A superseded intent must not clear the pending flag, revert the override, or report a
+     * failure: all three belong to the press the user made last, not to one already overtaken.
+     */
+    private fun settleFavorite(intent: FavoriteIntent, outcome: Result<Unit>) {
+        if (pendingFavorites[intent.itemId] != intent.generation) return
+
+        // Settle the outcome before clearing pending, not after: "no longer pending" is what
+        // everything else treats as "this write is finished", and clearing it first exposes a
+        // window where the write has failed but the heart has not yet gone out.
+        outcome.onFailure { e ->
+            favoriteOverrides = favoriteOverrides - intent.itemId
+            log("[WARN] Could not save favorite for ${VaultIndex.keyOf(intent.itemId)}: ${e.message}")
+        }
+        pendingFavorites = pendingFavorites - intent.itemId
+    }
+
+    fun favoriteIsPending(itemId: String): Boolean = itemId in pendingFavorites
+
+    /**
+     * Records a favorite and queues it for persistence.
+     *
+     * This lives on the view model rather than in `LibraryScreen` because it outlives the
+     * screen: on a `rememberCoroutineScope()`, navigating away from the Library immediately
+     * after a press cancelled the write, losing the only copy of it. [scope] is tied to the
+     * app, not to a composition.
+     *
+     * A failure reverts the overlay and says so in the log. A favorite is in no export and no
+     * re-run rebuilds it, so a heart left lit over a write that never landed is the worst
+     * outcome available here — the user has no way to tell, and no other copy.
+     */
+    fun setFavorite(itemId: String, favorited: Boolean) {
+        favoriteOverrides = favoriteOverrides + (itemId to favorited)
+
+        val folder = downloadFolder
+        if (folder == null) {
+            // Nothing to write to, so do not show a heart that claims otherwise.
+            favoriteOverrides = favoriteOverrides - itemId
+            return
+        }
+
+        val generation = ++favoriteGeneration
+        pendingFavorites = pendingFavorites + (itemId to generation)
+        favoriteIntents.trySend(FavoriteIntent(itemId, favorited, generation, folder))
+    }
+
+    /**
+     * Drops the overrides a fresh scan has caught up with.
+     *
+     * After a scan the index on disk is the truth, and an override that outlives it masks that
+     * truth — Refresh is exactly what a user presses to ask whether a favorite saved, so a
+     * stale override answers the question wrongly. Ids still pending are left alone: their
+     * write has not landed yet, so the scan cannot have seen it.
+     */
+    fun reconcileFavorites(scannedIds: Collection<String>) {
+        if (favoriteOverrides.isEmpty()) return
+        val seen = scannedIds.toSet()
+        favoriteOverrides = favoriteOverrides.filterKeys { it in pendingFavorites || it !in seen }
     }
 
     // ── Picker actions ───────────────────────────────────────────────────────
@@ -229,6 +354,7 @@ class DashboardViewModel(
     }
 
     fun dispose() {
+        favoriteIntents.close()
         scope.cancel()
         pickers.releaseAllSecurityAccess()
     }
@@ -242,7 +368,7 @@ class DashboardViewModel(
         if (isRunning) return false
         val folder = downloadFolder ?: return false
         return runCatching {
-            // Keeps favourites: they are the one thing in the index the next run cannot
+            // Keeps favorites: they are the one thing in the index the next run cannot
             // rebuild, and reset exists to force re-processing, not to discard user data.
             VaultIndex.resetKeepingFavorites(fileSystem, folder)
             true
@@ -426,7 +552,7 @@ class DashboardViewModel(
 
         runCatching {
             // writeMerging, not write: the FileMeta(…) entries above are built from scratch by
-            // this run and carry `favorited = false`, and a favourite toggled *during* the run
+            // this run and carry `favorited = false`, and a favorite toggled *during* the run
             // exists only on disk. Writing the run's own map would wipe both.
             VaultIndex.writeMerging(fileSystem, outDir, downloadedMeta)
             log("[INFO] Vault index saved (${downloadedMeta.size} entries).")
@@ -559,7 +685,7 @@ class DashboardViewModel(
 
         runCatching {
             // writeMerging, not write: the FileMeta(…) entries above are built from scratch by
-            // this run and carry `favorited = false`, and a favourite toggled *during* the run
+            // this run and carry `favorited = false`, and a favorite toggled *during* the run
             // exists only on disk. Writing the run's own map would wipe both.
             VaultIndex.writeMerging(fileSystem, outDir, downloadedMeta)
             log("[INFO] Vault index saved (${downloadedMeta.size} entries).")

@@ -18,7 +18,7 @@ import kotlin.test.assertTrue
 /**
  * Every mutation of `vault_index.json` is a read-modify-write, and two of them genuinely
  * overlap in this app: the pipeline writes the index at the end of a run, and the Library
- * writes it whenever a favourite is toggled — which a user can do *while* a sync is running.
+ * writes it whenever a favorite is toggled — which a user can do *while* a sync is running.
  *
  * Unsynchronised, two mutators read the same index and whichever writes second discards the
  * other's work. `VaultIndexTest` cannot catch this: its calls are sequential, so each one sees
@@ -49,7 +49,7 @@ class VaultIndexConcurrencyTest {
     // most of the others, and the last writer wins — the observed count lands well below 64
     // and varies run to run.
     @Test
-    fun concurrentFavouritesDoNotOverwriteEachOther() = runBlocking {
+    fun concurrentFavoritesDoNotOverwriteEachOther() = runBlocking {
         val count = 64
         val names = (0 until count).map { "memory-$it.jpg" }
 
@@ -63,23 +63,23 @@ class VaultIndexConcurrencyTest {
         assertEquals(
             names.toSet(),
             index.keys,
-            "${names.size - index.size} favourite(s) were lost to an interleaved write",
+            "${names.size - index.size} favorite(s) were lost to an interleaved write",
         )
         assertTrue(index.values.all { it.favorited })
     }
 
     // The case the feature exists to protect, run for real rather than in sequence: the
-    // pipeline's own index write overlapping a favourite toggle. Neither may erase the other —
-    // the pipeline's facts must land, and so must every favourite.
+    // pipeline's own index write overlapping a favorite toggle. Neither may erase the other —
+    // the pipeline's facts must land, and so must every favorite.
     @Test
-    fun aPipelineWriteAndAFavouriteToggleDoNotErodeEachOther() = runBlocking {
-        val favourites = (0 until 32).map { "fav-$it.jpg" }
+    fun aPipelineWriteAndAFavoriteToggleDoNotErodeEachOther() = runBlocking {
+        val favorites = (0 until 32).map { "fav-$it.jpg" }
         val processed = (0 until 32).associate {
             "processed-$it.jpg" to FileMeta(hasGps = true, hasOverlay = true)
         }
 
         coroutineScope {
-            favourites.forEach { name ->
+            favorites.forEach { name ->
                 launch(Dispatchers.IO) { VaultIndex.setFavorite(fs, folder, name, true) }
             }
             // Interleaved with the toggles above, the way a run's final write interleaves with
@@ -91,14 +91,14 @@ class VaultIndexConcurrencyTest {
 
         val index = VaultIndex.read(fs, folder)
         assertEquals(
-            favourites.toSet(),
+            favorites.toSet(),
             index.filterValues { it.favorited }.keys,
-            "a pipeline write erased a favourite set while it was running",
+            "a pipeline write erased a favorite set while it was running",
         )
         assertEquals(
             processed.keys,
-            index.keys - favourites.toSet(),
-            "a favourite toggle erased what the run had recorded",
+            index.keys - favorites.toSet(),
+            "a favorite toggle erased what the run had recorded",
         )
     }
 
@@ -106,7 +106,7 @@ class VaultIndexConcurrencyTest {
     // Library scan. That is only safe because a write replaces the file atomically. Truncating
     // the real file in place let a read land on partial JSON, which read() turns into an empty
     // map without complaint: every item would come back with no GPS, no overlay, and no
-    // favourite.
+    // favorite.
     @Test
     fun aReadDuringAWriteNeverObservesAPartiallyWrittenIndex() = runBlocking {
         // Big enough that serialising it spans more than one write to the underlying file.

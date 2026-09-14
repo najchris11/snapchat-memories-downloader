@@ -19,7 +19,7 @@ import okio.Path.Companion.toPath
  * ## Concurrency
  *
  * Two writers genuinely overlap in this app: the pipeline writes the index at the end of a
- * run, and the Library writes it whenever a favourite is toggled — which a user can do while
+ * run, and the Library writes it whenever a favorite is toggled — which a user can do while
  * a sync is in progress. Every mutation is a read-modify-write, so two of them interleaving
  * loses whichever landed first. Hence [lock], which every mutator holds for the whole
  * sequence, and which is why they are `suspend`.
@@ -30,20 +30,20 @@ import okio.Path.Companion.toPath
  * half-written one. Truncating the real file in place was the hazard there — a concurrent
  * read would land on partial JSON, and [read] converts a parse failure into an empty map
  * without complaint, so every item would have come back with no GPS, no overlay and no
- * favourite.
+ * favorite.
  */
 object VaultIndex {
 
     const val FILE_NAME = "vault_index.json"
 
-    // Explicit defaults so a favourite is visible in the file rather than encoded as an
+    // Explicit defaults so a favorite is visible in the file rather than encoded as an
     // absence. This file is the only place one lives, and a user looking for it should be
     // able to find it by eye.
     private val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }
 
     // Guards the read-modify-write in every mutator below. One lock for the object rather
     // than one per folder: the app has a single output folder at a time, and a lock that is
-    // occasionally too broad is the right trade against losing a favourite.
+    // occasionally too broad is the right trade against losing a favorite.
     private val lock = Mutex()
 
     private fun path(folder: String) = "$folder/$FILE_NAME".toPath()
@@ -55,7 +55,7 @@ object VaultIndex {
      * by, while the Library identifies an item by its absolute path. `substringAfterLast('/')`
      * is not the conversion between them: a Windows absolute path (`C:\vault\memory.jpg`)
      * contains no forward slash, so the whole path became the key and the next scan found
-     * nothing under the file name — a favourite that appeared and then vanished on restart.
+     * nothing under the file name — a favorite that appeared and then vanished on restart.
      */
     fun keyOf(path: String): String {
         val cut = path.lastIndexOfAny(charArrayOf('/', '\\'))
@@ -101,13 +101,13 @@ object VaultIndex {
      * from scratch and so knows nothing about.
      *
      * The pipeline's own facts win — it just recomputed them. A file that only [pipeline]
-     * knows about cannot have been favourited, since the user has not seen it yet.
+     * knows about cannot have been favorited, since the user has not seen it yet.
      *
      * A union rather than a rewrite of [pipeline]: a run's map is *incremental*, seeded from
      * the index at start and added to as files are processed, so an entry it does not mention
      * is one it never looked at, not one it decided to drop. Rewriting instead of unioning
      * erased every entry written to disk after the run loaded its copy — which is precisely
-     * the favourite-set-during-a-run case this is here to protect.
+     * the favorite-set-during-a-run case this is here to protect.
      */
     fun mergeUserFields(
         onDisk: Map<String, FileMeta>,
@@ -117,10 +117,10 @@ object VaultIndex {
     }
 
     /**
-     * Writes [meta], preserving favourites currently on disk.
+     * Writes [meta], preserving favorites currently on disk.
      *
      * Re-reads under the lock rather than trusting the copy a run loaded at its start: a
-     * favourite toggled while the run was in flight exists only on disk, and would otherwise
+     * favorite toggled while the run was in flight exists only on disk, and would otherwise
      * be overwritten by the run's own final write.
      */
     suspend fun writeMerging(fileSystem: FileSystem, folder: String, meta: Map<String, FileMeta>) {
@@ -150,9 +150,9 @@ object VaultIndex {
      * Clears what the pipeline can recompute and keeps what it cannot.
      *
      * Reset exists so the next run re-processes everything, which only requires dropping
-     * `hasGps` and `hasOverlay`. Taking favourites with it would destroy the one thing in
+     * `hasGps` and `hasOverlay`. Taking favorites with it would destroy the one thing in
      * here that no re-run can rebuild. Entries with nothing left worth keeping are dropped,
-     * and an index with no favourites at all is deleted outright — which is what reset used
+     * and an index with no favorites at all is deleted outright — which is what reset used
      * to do unconditionally.
      */
     suspend fun resetKeepingFavorites(fileSystem: FileSystem, folder: String) {

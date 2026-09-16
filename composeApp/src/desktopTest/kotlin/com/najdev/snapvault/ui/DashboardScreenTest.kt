@@ -48,20 +48,59 @@ class DashboardScreenTest {
         )
     }
 
+    private fun stringResource(key: String): String {
+        val stringsXml = generateSequence(java.io.File(".").absoluteFile) { it.parentFile }
+            .first { java.io.File(it, "settings.gradle.kts").isFile }
+            .let { java.io.File(it, "composeApp/src/commonMain/composeResources/values/strings.xml") }
+        return Regex("""<string name="$key">([^<]*)</string>""").find(stringsXml.readText())
+            ?.groupValues?.get(1)
+            ?: error("no string resource named '$key'")
+    }
+
+    // Regression (D09). The switch said "nothing deleted", but only deduplication honours
+    // it: combine deleted the main/overlay originals and legacy extraction deleted the
+    // archives regardless. An ordinary user reading a global promise of a non-destructive
+    // preview and pressing Start lost files the preview never covered. The wording has to
+    // describe the one step it actually controls.
+    @Test
+    fun dryRunPromiseIsScopedToDuplicates() {
+        val label = stringResource("opt_dedupe_dry_run")
+        assertFalse(
+            "nothing deleted" in label.lowercase(),
+            "only dedupe honours this switch, so it cannot promise a global preview: '$label'",
+        )
+        assertTrue(
+            "duplicate" in label.lowercase(),
+            "the label must name what it previews: '$label'",
+        )
+
+        val helper = stringResource("opt_dedupe_dry_run_helper")
+        assertTrue(
+            "still run" in helper.lowercase(),
+            "helper text must say the other steps are unaffected: '$helper'",
+        )
+    }
+
     @Test
     fun dryRunTogglePresentsItselfAsOn() = runComposeUiTest {
+        val label = stringResource("opt_dedupe_dry_run")
+        val helper = stringResource("opt_dedupe_dry_run_helper")
         setContent {
             SnapVaultTheme(darkMode = true) {
                 PipelineItem(
                     icon = Icons.Outlined.Info,
-                    label = "Preview only (dry run — nothing deleted)",
+                    label = label,
                     checked = DEFAULT_DRY_RUN,
                     onCheckedChange = {},
+                    helperText = helper,
                 )
             }
         }
 
-        onNodeWithText("Preview only (dry run — nothing deleted)").assertIsDisplayed()
+        onNodeWithText(label).assertIsDisplayed()
+        // The scope caveat is the whole point of the rewording; it has to be on screen,
+        // not only in the resource file.
+        onNodeWithText(helper).assertIsDisplayed()
         onNode(isToggleable()).assertIsOn()
     }
 

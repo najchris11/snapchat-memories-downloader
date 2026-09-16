@@ -31,7 +31,8 @@
     <string name="opt_precise_matching">Precise time + GPS matching</string>
     <string name="opt_combine_overlays">Merge Video Overlays</string>
     <string name="opt_clean_duplicates">Clean Duplicate Files</string>
-    <string name="opt_dedupe_dry_run">Preview only (dry run — nothing deleted)</string>
+    <string name="opt_dedupe_dry_run">Preview duplicate removal</string>
+    <string name="opt_dedupe_dry_run_helper">Imports and metadata processing still run. No duplicate files will be removed.</string>
     <string name="dash_step_setup">Setup</string>
     <string name="dash_step_syncing">Downloading</string>
     <string name="dash_step_processing">Processing</string>

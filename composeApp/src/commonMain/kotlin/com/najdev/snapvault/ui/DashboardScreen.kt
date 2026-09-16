@@ -373,12 +373,15 @@ private fun DashboardControls(
                     }
                     PipelineItem(Icons.Outlined.Layers, stringResource(Res.string.opt_combine_overlays), options.runCombine) { options.runCombine = it }
                     PipelineItem(Icons.Outlined.AutoDelete, stringResource(Res.string.opt_clean_duplicates), options.runDedupe) { options.runDedupe = it }
-                    // Dedupe deletes files — give it a preview mode.
+                    // Dedupe deletes files — give it a preview mode. The helper text is not
+                    // decoration: this switch governs deduplication only, and its old
+                    // "nothing deleted" wording read as a promise about the whole run (D09).
                     AnimatedVisibility(visible = options.runDedupe) {
                         PipelineItem(
                             Icons.Outlined.Visibility,
                             stringResource(Res.string.opt_dedupe_dry_run),
-                            options.dryRun
+                            options.dryRun,
+                            helperText = stringResource(Res.string.opt_dedupe_dry_run_helper),
                         ) { options.dryRun = it }
                     }
                 }
@@ -786,6 +789,10 @@ fun PipelineItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     checked: Boolean,
+    // For an option whose label cannot carry its own caveat. The dry-run switch needs one:
+    // it reads like a global promise but governs only the deduplication step (D09).
+    // Declared before onCheckedChange so existing trailing-lambda call sites still bind.
+    helperText: String? = null,
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
@@ -798,9 +805,22 @@ fun PipelineItem(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
             Icon(icon, null, tint = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
-            Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+            Column {
+                Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                if (helperText != null) {
+                    Text(
+                        helperText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
         Switch(
             checked = checked,

@@ -185,7 +185,15 @@ class ZipExtractEngine {
         staging: File,
     ): String {
         val destFile = File(outDir, destFileName)
-        if (destFile.exists()) return "skipped"
+        // "Something is at the path" is not "this entry was extracted" (D14). A folder is not
+        // ours to remove and holds nothing of this entry, so it is a failure — reporting it as
+        // a skip let a legacy archive be deleted with its memory extracted nowhere. An empty
+        // file carries no data and is replaced. Anything else is kept: the metadata pass
+        // rewrites extracted files in place, so a size that differs from the entry is the
+        // normal state of a finished file, not evidence against it.
+        if (destFile.isDirectory) return "error: a folder named $destFileName is in the way"
+        if (destFile.isFile && destFile.length() > 0L) return "skipped"
+        val replacingEmpty = destFile.isFile
 
         val entry = zf.getEntry(entryName) ?: return "error: entry not found: $entryName"
         // Unique temp name: the same destFileName can be extracted concurrently from
@@ -202,7 +210,7 @@ class ZipExtractEngine {
                 tmpFile.delete()
                 return "error: size mismatch extracting $destFileName (${tmpFile.length()} of ${entry.size} bytes)"
             }
-            moveIntoPlace(tmpFile, destFile)
+            moveIntoPlace(tmpFile, destFile, replacingEmpty)
         } catch (e: Exception) {
             tmpFile.delete()
             "error: ${e.message}"
@@ -217,7 +225,12 @@ class ZipExtractEngine {
     // lacks NIO.2 file APIs without desugaring.
     private val moveLock = Any()
 
-    private fun moveIntoPlace(tmpFile: File, destFile: File): String = synchronized(moveLock) {
+    private fun moveIntoPlace(tmpFile: File, destFile: File, replacingEmpty: Boolean): String = synchronized(moveLock) {
+        // Only the empty placeholder the caller already judged unfinished may be replaced, and
+        // only if it is still empty — another worker may have filled it since.
+        if (replacingEmpty && destFile.isFile && destFile.length() == 0L) {
+            destFile.delete() // renameTo will not replace an existing file on Windows
+        }
         if (destFile.exists()) {
             tmpFile.delete()
             return@synchronized "skipped"

@@ -1,5 +1,6 @@
 package com.najdev.snapvault.downloader
 
+import com.najdev.snapvault.ioDispatcher
 import com.najdev.snapvault.model.MemoryItem
 import io.ktor.client.*
 import io.ktor.client.request.*
@@ -15,13 +16,21 @@ import okio.FileSystem
 import okio.Path.Companion.toPath
 import okio.buffer
 import okio.use
+import kotlin.coroutines.CoroutineContext
 
 // Per-item outcome: "downloaded", "skipped", or "error: <reason>".
 data class DownloadResult(val item: MemoryItem, val status: String)
 
+const val DEFAULT_STALL_TIMEOUT_MS = 60_000L
+
 class DownloadEngine(
     private val client: HttpClient,
-    private val fileSystem: FileSystem
+    private val fileSystem: FileSystem,
+    private val stallTimeoutMillis: Long = DEFAULT_STALL_TIMEOUT_MS,
+    // Where the body is streamed and the stall bound is measured. A parameter only because the
+    // test filesystem is not thread-safe: tests pass a real-time context that runs one task at
+    // a time, which keeps the wall-clock stall behaviour without racing FakeFileSystem.
+    private val ioContext: CoroutineContext = ioDispatcher,
 ) {
 
     fun parseDateToFilenamePrefix(dateStr: String?): String? {
@@ -97,6 +106,50 @@ class DownloadEngine(
 
     private val resumableExtensions = listOf("mp4", "jpg", "jpeg", "png", "zip")
 
+    /** A download that stopped making progress and was given up on rather than waited on. */
+    private class DownloadStalledException(what: String, millis: Long) :
+        Exception("no data for ${millis / 1000}s while $what — the connection stalled")
+
+    /**
+     * Whether a file under a media name is one a finished download would have left.
+     *
+     * Existence was the whole test before (D14), so an empty file or a saved error page under
+     * the right name was skipped on every run from then on. This stays cheap — a metadata call
+     * and a few leading bytes — because resume runs it across the whole library. It cannot tell
+     * a *different* finished file from the right one; that needs a record of what was written,
+     * and the metadata pass legitimately rewrites these files, so size is no evidence either.
+     */
+    private fun isFinishedFile(path: okio.Path): Boolean {
+        val meta = fileSystem.metadataOrNull(path) ?: return false
+        if (!meta.isRegularFile) return false
+        if ((meta.size ?: 0L) <= 0L) return false
+        return !looksLikeAWebPage(path)
+    }
+
+    /**
+     * True when the file's first meaningful byte opens markup or JSON.
+     *
+     * Positive detection of an error body, deliberately not an allowlist of media signatures:
+     * refusing everything unrecognised would fail real memories in container variants nobody
+     * listed. No image, video or ZIP format SnapVault handles starts with `<` or `{`.
+     */
+    private fun looksLikeAWebPage(path: okio.Path): Boolean = runCatching {
+        fileSystem.read(path) {
+            val head = readByteArray(minOf(512L, fileSystem.metadata(path).size ?: 0L))
+            val first = head.firstOrNull { it.toInt().toChar() !in " \t\r\n" }?.toInt()?.toChar()
+            first == '<' || first == '{'
+        }
+    }.getOrDefault(false)
+
+    private fun isWebPageContentType(contentType: String?): Boolean {
+        val type = contentType?.substringBefore(';')?.trim()?.lowercase() ?: return false
+        return type.startsWith("text/") || type == "application/json" || type == "application/xhtml+xml"
+    }
+
+    private suspend fun <T> withinStall(what: String, block: suspend () -> T): T =
+        withTimeoutOrNull(stallTimeoutMillis) { block() }
+            ?: throw DownloadStalledException(what, stallTimeoutMillis)
+
     // existingNames: pre-listed directory contents. downloadAll lists the directory once
     // and shares the set — per-item listing made resume checks O(n²) over the library.
     suspend fun downloadFile(item: MemoryItem, outputDir: String, existingNames: Set<String>? = null): DownloadResult {
@@ -116,7 +169,11 @@ class DownloadEngine(
                 }
             }
 
-        if (existingName != null) {
+        // A name match that is not a finished file is a placeholder to replace, not a reason
+        // to skip. It is left where it is until the replacement has been committed, so a
+        // failed retry loses nothing that was not already lost.
+        val placeholder = existingName?.let { outputFolderPath / it }?.takeUnless { isFinishedFile(it) }
+        if (existingName != null && placeholder == null) {
             val updated = item.copy(
                 isDownloaded = true,
                 downloadedPath = (outputFolderPath / existingName).toString()
@@ -125,25 +182,77 @@ class DownloadEngine(
         }
 
         try {
-            val response = if (item.isGet) {
-                client.get(item.url) {
+            val statement = if (item.isGet) {
+                client.prepareGet(item.url) {
                     header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
                 }
             } else {
                 val parts = item.url.split("?")
                 val postUrl = parts[0]
                 val postData = if (parts.size > 1) parts[1] else ""
-                client.post(postUrl) {
+                client.preparePost(postUrl) {
                     header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
                     setBody(postData)
                 }
             }
+
+            // On the IO dispatcher: the body is written with blocking file calls, and the stall
+            // bound has to measure the wall clock the network actually runs on.
+            val filepath = withContext(ioContext) {
+                streamToFile(statement, item, outputFolderPath, placeholder)
+            }
+
+            if (placeholder != null && placeholder != filepath) {
+                // The good copy landed under a different name (extension or prefix changed);
+                // the empty or error-page placeholder is now just litter with our name on it.
+                runCatching { fileSystem.delete(placeholder) }
+            }
+
+            val updated = item.copy(
+                isDownloaded = true,
+                downloadedPath = filepath.toString()
+            )
+            return DownloadResult(updated, "downloaded")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return DownloadResult(item.copy(isDownloaded = false), "error: ${e.message ?: e::class.simpleName}")
+        }
+    }
+
+    /**
+     * Streams the response into a temp file, checks it is media, and commits it.
+     *
+     * Executed as a prepared statement rather than `client.get`: the plain call buffers the
+     * whole body before returning, so a stalled body stalled *inside* it where no per-read
+     * bound could reach, and a total timeout would kill slow but healthy video downloads.
+     * Streaming lets the bound mean "no progress for this long" (D14) — and stops whole videos
+     * being held in memory on the way to disk.
+     */
+    private suspend fun streamToFile(
+        statement: HttpStatement,
+        item: MemoryItem,
+        outputFolderPath: okio.Path,
+        placeholder: okio.Path?,
+    ): okio.Path = coroutineScope {
+        // The wait for headers is bounded separately: execute{} does not call back until they
+        // arrive, so nothing inside the block can time that phase.
+        val headersArrived = CompletableDeferred<Unit>()
+        val watchdog = launch {
+            withTimeoutOrNull(stallTimeoutMillis) { headersArrived.await() }
+                ?: throw DownloadStalledException("waiting for the server to respond", stallTimeoutMillis)
+        }
+
+        val committed = statement.execute { response ->
+            headersArrived.complete(Unit)
 
             if (response.status.value !in 200..299) {
                 throw Exception("HTTP Error status: ${response.status}")
             }
 
             val contentType = response.headers[HttpHeaders.ContentType]
+            if (isWebPageContentType(contentType)) throw expiredLink()
+
             val filename = buildFilename(item, contentType)
             val filepath = outputFolderPath / filename
             // Stream into a temp file and rename into place only when the body is fully
@@ -156,36 +265,44 @@ class DownloadEngine(
                 fileSystem.sink(tmpPath).buffer().use { sink ->
                     val buffer = ByteArray(8192)
                     while (!bodyChannel.isClosedForRead) {
-                        val read = bodyChannel.readAvailable(buffer, 0, buffer.size)
+                        val read = withinStall("downloading $filename") {
+                            bodyChannel.readAvailable(buffer, 0, buffer.size)
+                        }
                         if (read > 0) {
                             sink.write(buffer, 0, read)
                         }
                     }
                 }
+                // A 2xx is not proof of media, and the header is only the server's claim: an
+                // expired link can serve its page as anything. Refused before commit, so the
+                // page never takes the name resume would trust.
+                if (looksLikeAWebPage(tmpPath)) throw expiredLink()
+
                 // The resume check above ran against a listing taken before the request; a
                 // file under this name now is one that arrived while the body was in flight.
                 // Replacing it would be indistinguishable from an ordinary success, which is
-                // how a clobbered download stayed invisible (D08).
-                if (fileSystem.exists(filepath)) {
+                // how a clobbered download stayed invisible (D08). The one file allowed to be
+                // replaced is the placeholder resume already judged unfinished — and only if
+                // it still is.
+                val replacingPlaceholder = filepath == placeholder && !isFinishedFile(filepath)
+                if (fileSystem.exists(filepath) && !replacingPlaceholder) {
                     throw Exception("$filename was written by something else while this download was in flight")
                 }
                 fileSystem.atomicMove(tmpPath, filepath)
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 runCatching { fileSystem.delete(tmpPath) }
                 throw e
             }
-
-            val updated = item.copy(
-                isDownloaded = true,
-                downloadedPath = filepath.toString()
-            )
-            return DownloadResult(updated, "downloaded")
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            return DownloadResult(item.copy(isDownloaded = false), "error: ${e.message}")
+            filepath
         }
+        watchdog.cancel()
+        committed
     }
+
+    private fun expiredLink() = Exception(
+        "the link returned a web page instead of media — it has probably expired; " +
+            "request a fresh export from Snapchat",
+    )
 
     /**
      * How one export row relates to the file it wants.

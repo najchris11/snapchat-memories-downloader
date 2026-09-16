@@ -9,6 +9,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ZipExtractEngineTest {
@@ -134,6 +135,41 @@ class ZipExtractEngineTest {
     }
 
     // ── extractDownloadedArchives (legacy pipeline) ──────────────────────────
+
+    // D14: "skipped" meant only that *something* was at the path. An empty file there — a
+    // crash between create and write in an older build, a sync client's placeholder — was
+    // skipped on every run from then on, and the Library showed a memory that would not open.
+    @Test
+    fun anEmptyFileWhereAnEntryBelongsIsReplacedRatherThanSkipped() {
+        val zip = createZip("export.zip", mapOf("memories/2023-10-12_ABC-main.jpg" to "real-bytes".toByteArray()))
+        val placeholder = File(outDir, "2023-10-12_ABC-main.jpg").apply { writeBytes(ByteArray(0)) }
+
+        val results = runExtract(zip, listOf(entry("2023-10-12_ABC-main.jpg")))
+
+        assertEquals(1, results.size)
+        assertEquals(null, results[0].error)
+        assertFalse(results[0].skipped, "an empty file is not a finished extraction")
+        assertEquals("real-bytes", placeholder.readText())
+    }
+
+    // A folder under the name is not a finished file either, and it is not ours to remove.
+    // Reporting it as "skipped" let a legacy archive be deleted with the memory extracted
+    // nowhere.
+    @Test
+    fun aFolderWhereAnEntryBelongsIsAFailureNotASkip() {
+        val archive = legacyArchive("20231012_153000_abc.zip", linkedMapOf("media~xyz.jpg" to "photo-bytes"))
+        File(outDir, "20231012_153000_abc-main.jpg").mkdirs()
+
+        val warnings = mutableListOf<String>()
+        runBlocking {
+            ZipExtractEngine().extractDownloadedArchives(outDir.absolutePath, listOf(archive.absolutePath)) {
+                warnings.add(it)
+            }
+        }
+
+        assertTrue(archive.exists(), "the archive holds the only copy and must be kept")
+        assertTrue(warnings.any { "20231012_153000_abc-main.jpg" in it }, "the obstruction must be named: $warnings")
+    }
 
     @Test
     fun extractsLegacyArchiveAsMainOverlayPairAndDeletesIt() {

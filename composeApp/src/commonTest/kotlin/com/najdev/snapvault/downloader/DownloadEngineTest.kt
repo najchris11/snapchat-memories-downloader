@@ -4,6 +4,10 @@ import com.najdev.snapvault.model.MemoryItem
 import io.ktor.client.*
 import io.ktor.client.engine.mock.*
 import io.ktor.http.*
+import io.ktor.utils.io.ByteChannel
+import io.ktor.utils.io.writeStringUtf8
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
 import okio.fakefilesystem.FakeFileSystem
 import okio.Path.Companion.toPath
@@ -16,33 +20,43 @@ import kotlin.test.assertTrue
 
 class DownloadEngineTest {
 
+    // Every engine in these tests streams on a real-time context that runs one task at a time.
+    // FakeFileSystem is not thread-safe — on the real IO dispatcher, concurrent workers threw
+    // ConcurrentModificationException from inside it — while the stall bound still needs the
+    // wall clock rather than the test scheduler's virtual time.
+    private fun testEngine(
+        client: HttpClient,
+        fileSystem: FakeFileSystem,
+        stallTimeoutMillis: Long = DEFAULT_STALL_TIMEOUT_MS,
+    ) = DownloadEngine(client, fileSystem, stallTimeoutMillis, Dispatchers.Default.limitedParallelism(1))
+
     private fun engine() = HttpClient(MockEngine { respondOk() })
 
     // ── Date parsing ────────────────────────────────────────────────────────
 
     @Test
     fun testDateParsing_isoWithTime() {
-        val downloader = DownloadEngine(engine(), FakeFileSystem())
+        val downloader = testEngine(engine(), FakeFileSystem())
         assertEquals("2023-10-12_153000", downloader.parseDateToFilenamePrefix("2023-10-12 15:30:00 UTC"))
         assertEquals("2023-10-12_153000", downloader.parseDateToFilenamePrefix("2023-10-12 15:30:00"))
     }
 
     @Test
     fun testDateParsing_isoDateOnly() {
-        val downloader = DownloadEngine(engine(), FakeFileSystem())
+        val downloader = testEngine(engine(), FakeFileSystem())
         assertEquals("2023-10-12_000000", downloader.parseDateToFilenamePrefix("2023-10-12"))
     }
 
     @Test
     fun testDateParsing_europeanFormat() {
-        val downloader = DownloadEngine(engine(), FakeFileSystem())
+        val downloader = testEngine(engine(), FakeFileSystem())
         assertEquals("2023-10-12_153000", downloader.parseDateToFilenamePrefix("12.10.2023 15:30:00"))
         assertEquals("2023-10-12_000000", downloader.parseDateToFilenamePrefix("12.10.2023"))
     }
 
     @Test
     fun testDateParsing_invalid() {
-        val downloader = DownloadEngine(engine(), FakeFileSystem())
+        val downloader = testEngine(engine(), FakeFileSystem())
         assertNull(downloader.parseDateToFilenamePrefix("invalid-date"))
         assertNull(downloader.parseDateToFilenamePrefix(null))
     }
@@ -51,7 +65,7 @@ class DownloadEngineTest {
 
     @Test
     fun testGetFileExtensionFromUrl() {
-        val downloader = DownloadEngine(engine(), FakeFileSystem())
+        val downloader = testEngine(engine(), FakeFileSystem())
         assertEquals(".mp4", downloader.getFileExtensionFromUrl("https://cdn.example.com/clip.mp4?mid=abc"))
         assertEquals(".jpg", downloader.getFileExtensionFromUrl("https://cdn.example.com/photo.jpg"))
         assertEquals(".jpeg", downloader.getFileExtensionFromUrl("https://cdn.example.com/photo.jpeg"))
@@ -61,7 +75,7 @@ class DownloadEngineTest {
 
     @Test
     fun testGetFileExtensionFromContentType() {
-        val downloader = DownloadEngine(engine(), FakeFileSystem())
+        val downloader = testEngine(engine(), FakeFileSystem())
         assertEquals(".mp4", downloader.getFileExtensionFromContentType("video/mp4"))
         assertEquals(".jpg", downloader.getFileExtensionFromContentType("image/jpeg"))
         assertEquals(".jpg", downloader.getFileExtensionFromContentType("image/jpg"))
@@ -73,7 +87,7 @@ class DownloadEngineTest {
 
     @Test
     fun testBuildFilename_withDateAndUrlExtension() {
-        val downloader = DownloadEngine(engine(), FakeFileSystem())
+        val downloader = testEngine(engine(), FakeFileSystem())
         val item = MemoryItem(
             id = "abc-123",
             url = "https://media.com/file.jpg?mid=abc-123",
@@ -85,7 +99,7 @@ class DownloadEngineTest {
 
     @Test
     fun testBuildFilename_noDateFallsBackToContentType() {
-        val downloader = DownloadEngine(engine(), FakeFileSystem())
+        val downloader = testEngine(engine(), FakeFileSystem())
         val item = MemoryItem(
             id = "xyz-789",
             url = "https://media.com/file?mid=xyz-789",
@@ -104,7 +118,7 @@ class DownloadEngineTest {
         fs.createDirectories(outDir)
         fs.write(outDir / "xyz-789.jpeg") { writeUtf8("fake") }
 
-        val downloader = DownloadEngine(engine(), fs)
+        val downloader = testEngine(engine(), fs)
         val item = MemoryItem(
             id = "xyz-789",
             url = "https://media.com/photo.jpeg",
@@ -126,7 +140,7 @@ class DownloadEngineTest {
         fs.createDirectories(outDir)
         fs.write(outDir / "20231012_153000_abc-123.jpeg") { writeUtf8("fake") }
 
-        val downloader = DownloadEngine(engine(), fs)
+        val downloader = testEngine(engine(), fs)
         val item = MemoryItem(
             id = "abc-123",
             url = "https://media.com/photo.jpeg",
@@ -147,7 +161,7 @@ class DownloadEngineTest {
         val client = HttpClient(MockEngine {
             respond("file-bytes", headers = headersOf(HttpHeaders.ContentType, "image/jpeg"))
         })
-        val downloader = DownloadEngine(client, fs)
+        val downloader = testEngine(client, fs)
         val item = MemoryItem(
             id = "abc-123",
             url = "https://media.com/photo.jpg?mid=abc-123",
@@ -173,7 +187,7 @@ class DownloadEngineTest {
             sentBody = true
             respondError(HttpStatusCode.InternalServerError)
         })
-        val downloader = DownloadEngine(client, fs)
+        val downloader = testEngine(client, fs)
         val item = MemoryItem(
             id = "bad-999",
             url = "https://media.com/photo.jpg?mid=bad-999",
@@ -215,7 +229,7 @@ class DownloadEngineTest {
         })
         val row = photoRow("https://media.com/photo.jpg?mid=abc-123")
 
-        val results = DownloadEngine(client, fs).downloadAll(listOf(row, row), "/output", workers = 4)
+        val results = testEngine(client, fs).downloadAll(listOf(row, row), "/output", workers = 4)
 
         assertEquals(1, requests, "a row repeated in the export is one file, not two downloads")
         assertEquals(
@@ -252,7 +266,7 @@ class DownloadEngineTest {
         val first = photoRow("https://media.com/photo.jpg?mid=abc-123&v=1")
         val second = photoRow("https://media.com/photo.jpg?mid=abc-123&v=2")
 
-        val results = DownloadEngine(client, fs).downloadAll(listOf(first, second), "/output", workers = 4)
+        val results = testEngine(client, fs).downloadAll(listOf(first, second), "/output", workers = 4)
 
         assertEquals(1, served.size, "the conflicting row must not be fetched at all, got: $served")
         assertEquals("downloaded", results[0].status)
@@ -283,7 +297,7 @@ class DownloadEngineTest {
             respond("our-bytes", headers = headersOf(HttpHeaders.ContentType, "image/jpeg"))
         })
 
-        val result = DownloadEngine(client, fs)
+        val result = testEngine(client, fs)
             .downloadFile(photoRow("https://media.com/photo.jpg?mid=abc-123"), "/output")
 
         assertTrue(result.status.startsWith("error"), "was: ${result.status}")
@@ -308,10 +322,134 @@ class DownloadEngineTest {
             MemoryItem(id = "aaa", url = "https://media.com/a.jpg?mid=aaa", isGet = true, dateStr = "2023-10-13 15:30:00 UTC"),
         )
 
-        val results = DownloadEngine(client, fs).downloadAll(items, "/output", workers = 4)
+        val results = testEngine(client, fs).downloadAll(items, "/output", workers = 4)
 
         assertEquals(3, requests)
         assertEquals(listOf("downloaded", "downloaded", "downloaded"), results.map { it.status })
         assertEquals(3, fs.list("/output".toPath()).size)
     }
+
+    // ── Resume must mean "finished", not "exists" (D14) ─────────────────────
+
+    // D14: resume trusted any file under the right name. An empty file — a crash at the wrong
+    // moment, a sync client's placeholder — was skipped on every run from then on, and the
+    // Library showed a memory that would not open.
+    @Test
+    fun anEmptyFileUnderTheNameIsDownloadedAgainRatherThanSkipped() = runTest {
+        val fs = FakeFileSystem()
+        fs.createDirectories("/output".toPath())
+        fs.write("/output/$photoName".toPath()) { }
+        val client = HttpClient(MockEngine {
+            respond(JPEG_BYTES, headers = headersOf(HttpHeaders.ContentType, "image/jpeg"))
+        })
+
+        val result = testEngine(client, fs).downloadFile(photoRow("https://media.com/photo.jpg?mid=abc-123"), "/output")
+
+        assertEquals("downloaded", result.status)
+        assertEquals(JPEG_BYTES, fs.read("/output/$photoName".toPath()) { readUtf8() })
+    }
+
+    // The forever-skip this finding is really about. An expired link answers 200 with a web
+    // page, and older builds saved that page under a media name. Resume then found "the file"
+    // and never fetched it again, so the one memory that most needed a retry never got one.
+    @Test
+    fun aSavedErrorPageUnderTheNameIsDownloadedAgainRatherThanSkipped() = runTest {
+        val fs = FakeFileSystem()
+        fs.createDirectories("/output".toPath())
+        fs.write("/output/$photoName".toPath()) { writeUtf8("<!DOCTYPE html><html><body>Link expired</body></html>") }
+        val client = HttpClient(MockEngine {
+            respond(JPEG_BYTES, headers = headersOf(HttpHeaders.ContentType, "image/jpeg"))
+        })
+
+        val result = testEngine(client, fs).downloadFile(photoRow("https://media.com/photo.jpg?mid=abc-123"), "/output")
+
+        assertEquals("downloaded", result.status)
+        assertEquals(JPEG_BYTES, fs.read("/output/$photoName".toPath()) { readUtf8() })
+    }
+
+    // How that page got saved in the first place: a 2xx is not proof of media. An unknown
+    // content type fell back to ".mp4", so the page was written as a video that no player
+    // opens — and, per the test above, never retried.
+    @Test
+    fun aLinkThatAnswersWithAWebPageIsAFailureNotAFile() = runTest {
+        val fs = FakeFileSystem()
+        val client = HttpClient(MockEngine {
+            // Plain words rather than markup, so only the header can give it away — the body
+            // check is covered by its own test below.
+            respond(
+                "This link has expired.",
+                headers = headersOf(HttpHeaders.ContentType, "text/plain; charset=utf-8"),
+            )
+        })
+        val row = MemoryItem(id = "vid-1", url = "https://media.com/stream?mid=vid-1", isGet = true, dateStr = null)
+
+        val result = testEngine(client, fs).downloadFile(row, "/output")
+
+        assertTrue(result.status.startsWith("error"), "was: ${result.status}")
+        assertTrue("expired" in result.status, "the failure has to suggest why, was: ${result.status}")
+        assertFalse(result.item.isDownloaded)
+        assertEquals(emptyList(), fs.list("/output".toPath()).map { it.name }, "nothing may be committed")
+    }
+
+    // The content type is the server's claim, not the body's. A page served as a generic
+    // binary is still a page.
+    @Test
+    fun aWebPageBodyIsRefusedEvenWhenTheHeaderDoesNotSaySo() = runTest {
+        val fs = FakeFileSystem()
+        val client = HttpClient(MockEngine {
+            respond(
+                "  \n<html><body>Not found</body></html>",
+                headers = headersOf(HttpHeaders.ContentType, "application/octet-stream"),
+            )
+        })
+
+        val result = testEngine(client, fs).downloadFile(photoRow("https://media.com/photo.jpg?mid=abc-123"), "/output")
+
+        assertTrue(result.status.startsWith("error"), "was: ${result.status}")
+        assertEquals(emptyList(), fs.list("/output".toPath()).map { it.name })
+    }
+
+    // A response that stops sending bytes and never closes held its worker forever — and with
+    // a few of those, every worker, so the run sat at the same percentage with no error to
+    // show. Stalling has to fail that one download and let the rest carry on.
+    @Test
+    fun aStalledResponseFailsItsDownloadAndTheRunCarriesOn() = runTest {
+        val fs = FakeFileSystem()
+        val client = HttpClient(MockEngine { request ->
+            if ("stalls" in request.url.toString()) {
+                val body = ByteChannel()
+                body.writeStringUtf8("the first few bytes")
+                body.flush()
+                respond(body, headers = headersOf(HttpHeaders.ContentType, "video/mp4"))
+            } else {
+                respond(JPEG_BYTES, headers = headersOf(HttpHeaders.ContentType, "image/jpeg"))
+            }
+        })
+        val stalls = MemoryItem(id = "stuck", url = "https://media.com/stalls.mp4?mid=stuck", isGet = true, dateStr = null)
+        val fine = MemoryItem(id = "fine", url = "https://media.com/fine.jpg?mid=fine", isGet = true, dateStr = null)
+
+        // Real milliseconds: the engine measures stalls on the wall clock the network runs on,
+        // not the test scheduler's virtual time, so this is kept short on purpose.
+        val results = testEngine(client, fs, stallTimeoutMillis = 500)
+            .downloadAll(listOf(stalls, fine), "/output", workers = 1)
+
+        assertTrue(results[0].status.startsWith("error"), "was: ${results[0].status}")
+        assertEquals("downloaded", results[1].status, "one stalled link must not stop the rest of the run")
+        assertEquals(listOf("fine.jpg"), fs.list("/output".toPath()).map { it.name }, "no partial file may remain")
+    }
+    // The other half of a stall: a server that accepts the request and never answers. The
+    // body bound cannot see this — nothing has been handed to the caller yet to read.
+    @Test
+    fun aServerThatNeverAnswersFailsItsDownloadRatherThanHangingTheRun() = runTest {
+        val fs = FakeFileSystem()
+        val client = HttpClient(MockEngine { awaitCancellation() })
+
+        val result = testEngine(client, fs, stallTimeoutMillis = 500)
+            .downloadFile(photoRow("https://media.com/photo.jpg?mid=abc-123"), "/output")
+
+        assertTrue(result.status.startsWith("error"), "was: ${result.status}")
+        assertEquals(emptyList(), fs.list("/output".toPath()).map { it.name })
+    }
 }
+
+private const val JPEG_BYTES = "jpeg-bytes"

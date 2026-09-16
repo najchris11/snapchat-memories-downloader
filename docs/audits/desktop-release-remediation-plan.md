@@ -190,6 +190,16 @@ the red button.
   conflict, not silently kept.
 - **Fix direction:** verified-completion manifest (size/hash), content-type/magic-byte check
   before trusting a video/image extension, request/socket timeouts on `HttpClient()`.
+- **Status:** three of the four cases landed — empty and error-page placeholders are no longer
+  trusted by download resume, empty and folder obstructions no longer count as extracted,
+  error-page bodies are refused by header and by content, and stalls (no response, or a body
+  that stops) fail their own download instead of holding a worker.
+- **Deferred — "same filename, different bytes":** needs the verified-completion manifest and
+  cannot be approximated. The metadata pass rewrites extracted and downloaded files in place
+  (`exiftool -overwrite_original`), so on any re-run a size or CRC comparison against the
+  source would flag *every processed file* as a conflict. The manifest has to record what the
+  pipeline itself wrote (source identity plus post-processing hash), which makes it a design
+  task of its own. Also deferred: retry with backoff for transient network failures.
 
 ### Task 2.6 — Unclean shutdown must not drop pending writes
 - **Files:** `composeApp/src/desktopMain/kotlin/com/najdev/snapvault/Main.kt` (window close →

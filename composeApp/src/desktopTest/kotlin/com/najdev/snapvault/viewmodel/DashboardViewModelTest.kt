@@ -28,6 +28,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import okio.ForwardingFileSystem
 import okio.Path.Companion.toPath
 import okio.fakefilesystem.FakeFileSystem
 import kotlin.test.Test
@@ -740,5 +741,151 @@ class DashboardViewModelTest {
         awaitCompletion(viewModel)
 
         assertTrue(locker.released, "a cancelled run must hand the directory back too")
+    }
+
+    // ── Closing must not drop a favorite (Task 2.6) ──────────────────────────
+
+    /**
+     * A filesystem whose index commits take [commitDelayMs] of real time.
+     *
+     * VaultIndex writes a temp file and moves it into place, so slowing the move holds a
+     * favorite "in flight" for as long as a test needs — the window a close lands in.
+     */
+    private class SlowCommitFileSystem(
+        delegate: FakeFileSystem,
+        private val commitDelayMs: Long,
+    ) : ForwardingFileSystem(delegate) {
+        override fun atomicMove(source: okio.Path, target: okio.Path) {
+            Thread.sleep(commitDelayMs)
+            super.atomicMove(source, target)
+        }
+    }
+
+    private fun favoritesViewModel(
+        fileSystem: okio.FileSystem,
+        runner: ZipPipelineRunner = NoOpZipPipelineRunner,
+        locker: OutputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+    ) = DashboardViewModel(
+        zipPipelineRunner = runner,
+        mediaProcessor = FakeMediaProcessor(),
+        fileSystem = fileSystem,
+        pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+        outputDirectoryLocker = locker,
+    ).also {
+        it.changeImportMode(ImportMode.Legacy)
+        it.pickHtmlFile()
+        it.pickOutputFolder()
+    }
+
+    private fun DashboardViewModel.awaitCloseSettled(): DashboardViewModel.CloseState = runBlocking {
+        withTimeout(15_000) {
+            while (closeState == DashboardViewModel.CloseState.Closing) delay(10)
+        }
+        closeState
+    }
+
+    private fun FakeFileSystem.favoriteOnDisk(name: String) = VaultIndex.read(this, "/out")[name]?.favorited
+
+    // Closing the window called exitApplication directly. Composition disposal then closed
+    // the favorites queue and cancelled the scope its writer ran in, in the same breath — so
+    // a heart pressed just before closing was killed mid-write and nothing said so. A favorite
+    // is in no export and no re-run rebuilds it; there is no other copy.
+    @Test
+    fun closingWaitsForAPendingFavoriteToSaveBeforeItIsReadyToExit() {
+        val disk = FakeFileSystem().apply { createDirectories("/out".toPath()) }
+        val viewModel = favoritesViewModel(SlowCommitFileSystem(disk, commitDelayMs = 400))
+
+        viewModel.setFavorite("/out/kept.jpg", true)
+        viewModel.requestClose()
+
+        assertEquals(DashboardViewModel.CloseState.ReadyToExit, viewModel.awaitCloseSettled())
+        assertEquals(true, disk.favoriteOnDisk("kept.jpg"), "ready to exit before the favorite was on disk")
+        viewModel.dispose()
+    }
+
+    // Waiting cannot be unbounded — a wedged disk would make the window impossible to close.
+    // But running out of patience must not quietly become the old bug: the user is told how
+    // many favorites have not saved, and gets to choose.
+    @Test
+    fun closingReportsFavoritesThatHaveNotSavedInsteadOfExiting() {
+        val disk = FakeFileSystem().apply { createDirectories("/out".toPath()) }
+        val viewModel = favoritesViewModel(SlowCommitFileSystem(disk, commitDelayMs = 1_500))
+
+        viewModel.setFavorite("/out/kept.jpg", true)
+        viewModel.requestClose(timeoutMillis = 200)
+
+        assertEquals(DashboardViewModel.CloseState.UnsavedFavorites(1), viewModel.awaitCloseSettled())
+        viewModel.dispose()
+    }
+
+    // "Keep open" has to leave an app that still works. Tearing the writer down before asking
+    // would make the question meaningless: the favorite would be lost whichever button was
+    // pressed.
+    @Test
+    fun keepingTheWindowOpenLetsTheSlowFavoriteFinishSaving() {
+        val disk = FakeFileSystem().apply { createDirectories("/out".toPath()) }
+        val viewModel = favoritesViewModel(SlowCommitFileSystem(disk, commitDelayMs = 1_000))
+
+        viewModel.setFavorite("/out/kept.jpg", true)
+        viewModel.requestClose(timeoutMillis = 100)
+        assertTrue(viewModel.awaitCloseSettled() is DashboardViewModel.CloseState.UnsavedFavorites)
+
+        viewModel.keepOpen()
+
+        assertEquals(DashboardViewModel.CloseState.Open, viewModel.closeState)
+        runBlocking {
+            withTimeout(10_000) { while (viewModel.favoriteIsPending("/out/kept.jpg")) delay(10) }
+        }
+        assertEquals(true, disk.favoriteOnDisk("kept.jpg"))
+        viewModel.dispose()
+    }
+
+    @Test
+    fun quittingAnywayAfterTheReportIsReadyToExit() {
+        val disk = FakeFileSystem().apply { createDirectories("/out".toPath()) }
+        val viewModel = favoritesViewModel(SlowCommitFileSystem(disk, commitDelayMs = 1_500))
+        viewModel.setFavorite("/out/kept.jpg", true)
+        viewModel.requestClose(timeoutMillis = 100)
+        viewModel.awaitCloseSettled()
+
+        viewModel.quitAnyway()
+
+        assertEquals(DashboardViewModel.CloseState.ReadyToExit, viewModel.awaitCloseSettled())
+        viewModel.dispose()
+    }
+
+    // Companion: nothing pending means nothing to wait for or ask about.
+    @Test
+    fun closingWithNothingPendingIsReadyToExit() {
+        val disk = FakeFileSystem().apply { createDirectories("/out".toPath()) }
+        val viewModel = favoritesViewModel(disk)
+
+        viewModel.requestClose()
+
+        assertEquals(DashboardViewModel.CloseState.ReadyToExit, viewModel.awaitCloseSettled())
+        viewModel.dispose()
+    }
+
+    // A run in progress at close was simply abandoned when the JVM exited: its children were
+    // never told to stop and its claim on the library (D07) was never released, so the next
+    // launch could find the directory held by a process that was already gone.
+    @Test
+    fun closingStopsARunningSyncAndReleasesTheLibraryBeforeItIsReadyToExit() {
+        val disk = FakeFileSystem().apply {
+            createDirectories("/out".toPath())
+            write("/history.json".toPath()) { writeUtf8(historyJson) }
+        }
+        val started = CompletableDeferred<Unit>()
+        val locker = RecordingOutputDirectoryLocker()
+        val viewModel = favoritesViewModel(disk, HangingZipPipelineRunner(started), locker)
+        viewModel.start()
+        runBlocking { withTimeout(5_000) { started.await() } }
+
+        viewModel.requestClose()
+
+        assertEquals(DashboardViewModel.CloseState.ReadyToExit, viewModel.awaitCloseSettled())
+        assertFalse(viewModel.isRunning, "the run must have finished unwinding, not merely been asked to")
+        assertTrue(locker.released, "the library must be released before the process exits")
+        viewModel.dispose()
     }
 }

@@ -185,4 +185,11 @@
     <string name="set_reset_index_label">Reset Local Index</string>
     <string name="set_reset_index_desc">Clears vault_index.json so the next download re-processes all memories from scratch. Favorites are kept.</string>
     <string name="set_reset_index_btn">Reset Download Index</string>
+    <string name="close_unsaved_title">Favorites still saving</string>
+    <plurals name="close_unsaved_body">
+        <item quantity="one">%1$d favorite has not been saved yet. It exists nowhere else — quitting now will lose it.</item>
+        <item quantity="other">%1$d favorites have not been saved yet. They exist nowhere else — quitting now will lose them.</item>
+    </plurals>
+    <string name="close_keep_open">Keep SnapVault open</string>
+    <string name="close_quit_anyway">Quit anyway</string>
 </resources>

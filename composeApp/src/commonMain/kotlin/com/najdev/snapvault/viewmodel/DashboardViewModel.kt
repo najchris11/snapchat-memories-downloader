@@ -24,6 +24,8 @@ import kotlin.time.TimeSource
 
 private class PipelineAbortException(message: String) : Exception(message)
 
+internal const val CLOSE_SAVE_TIMEOUT_MS = 5_000L
+
 class DashboardViewModel(
     private val zipPipelineRunner: ZipPipelineRunner,
     private val mediaProcessor: MediaProcessor,
@@ -374,6 +376,78 @@ class DashboardViewModel(
         progressText = "Stopping…"
         job.cancel()
         // isRunning flips in the pipeline's finally block once cancellation completes.
+    }
+
+    // ── Closing ──────────────────────────────────────────────────────────────
+
+    /**
+     * Where a request to close the app has got to.
+     *
+     * The window used to call `exitApplication` directly. Composition disposal then closed the
+     * favorites queue and cancelled the scope its writer runs in, in the same breath, so a heart
+     * pressed just before closing was killed mid-write with nothing said. A favorite is in no
+     * export and no re-run rebuilds it. Closing is now a conversation with the view model, and
+     * the window exits only on [ReadyToExit].
+     */
+    sealed interface CloseState {
+        data object Open : CloseState
+        data object Closing : CloseState
+
+        /** Waiting ran out with this many favorites unsaved. Nothing has been torn down. */
+        data class UnsavedFavorites(val count: Int) : CloseState
+        data object ReadyToExit : CloseState
+    }
+
+    var closeState by mutableStateOf<CloseState>(CloseState.Open)
+        private set
+
+    /**
+     * Lets pending favorites land, then stops any run, then reports [CloseState.ReadyToExit].
+     *
+     * Nothing is torn down while waiting. If the wait runs out, the app is left fully working
+     * and the answer is [CloseState.UnsavedFavorites] — "keep open" has to mean something, and
+     * it would not if the writer had already been cancelled.
+     */
+    fun requestClose(timeoutMillis: Long = CLOSE_SAVE_TIMEOUT_MS) {
+        if (closeState == CloseState.Closing || closeState == CloseState.ReadyToExit) return
+        closeState = CloseState.Closing
+        scope.launch {
+            // Polled rather than observed: pendingFavorites is snapshot state, and outside a
+            // composition nothing delivers its change notifications.
+            val saved = withTimeoutOrNull(timeoutMillis) {
+                while (pendingFavorites.isNotEmpty()) delay(20)
+            } != null
+            if (saved) {
+                finishClosing(timeoutMillis)
+            } else {
+                closeState = CloseState.UnsavedFavorites(pendingFavorites.size)
+            }
+        }
+    }
+
+    /** The user chose to exit with favorites unsaved. */
+    fun quitAnyway(timeoutMillis: Long = CLOSE_SAVE_TIMEOUT_MS) {
+        if (closeState !is CloseState.UnsavedFavorites) return
+        closeState = CloseState.Closing
+        scope.launch { finishClosing(timeoutMillis) }
+    }
+
+    /** The user chose to stay; the unsaved favorites carry on saving. */
+    fun keepOpen() {
+        if (closeState is CloseState.UnsavedFavorites) closeState = CloseState.Open
+    }
+
+    // A run abandoned at exit never told its children to stop and never released its claim on
+    // the library (D07). Cancelling and joining runs its finally blocks: children are killed,
+    // the lock is released. Bounded, because a run that will not unwind must not make the
+    // window impossible to close — the OS still drops the lock when the process ends.
+    private suspend fun finishClosing(timeoutMillis: Long) {
+        val job = syncJob
+        if (job != null && job.isActive) {
+            log("[WARN] Closing — stopping the run in progress…")
+            withTimeoutOrNull(timeoutMillis) { job.cancelAndJoin() }
+        }
+        closeState = CloseState.ReadyToExit
     }
 
     fun dispose() {

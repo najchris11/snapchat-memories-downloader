@@ -14,6 +14,7 @@ import com.najdev.snapvault.ui.PhoneRoot
 import com.najdev.snapvault.ui.SettingsScreen
 import com.najdev.snapvault.ui.components.AppSidebar
 import com.najdev.snapvault.ui.components.AppTopBar
+import com.najdev.snapvault.ui.components.UnsavedFavoritesDialog
 import com.najdev.snapvault.ui.theme.SnapVaultTheme
 import com.najdev.snapvault.viewmodel.DashboardViewModel
 import kotlinx.coroutines.launch
@@ -31,6 +32,10 @@ fun App(
     zipPipelineRunner: ZipPipelineRunner,
     fileSystem: FileSystem,
     showWindowControls: Boolean = false,
+    // Bumped by the host each time the OS asks to close the window. A counter rather than a
+    // flag, so a second request after "keep open" is still a change the effect below sees.
+    closeRequests: Int = 0,
+    // Called only once the view model is ready to exit — never directly by a close control.
     onCloseWindow: () -> Unit = {},
     onMinimizeWindow: () -> Unit = {},
     onMaximizeWindow: () -> Unit = {},
@@ -50,6 +55,23 @@ fun App(
         DashboardViewModel(zipPipelineRunner, mediaProcessor, fileSystem, pickers)
     }
     DisposableEffect(Unit) { onDispose { dashboardViewModel.dispose() } }
+
+    // Every way of closing goes through the view model, which lets pending favorites land and
+    // stops any run before saying it is safe to exit. See DashboardViewModel.CloseState.
+    LaunchedEffect(closeRequests) {
+        if (closeRequests > 0) dashboardViewModel.requestClose()
+    }
+    val closeState = dashboardViewModel.closeState
+    LaunchedEffect(closeState) {
+        if (closeState == DashboardViewModel.CloseState.ReadyToExit) onCloseWindow()
+    }
+    if (closeState is DashboardViewModel.CloseState.UnsavedFavorites) {
+        UnsavedFavoritesDialog(
+            count = closeState.count,
+            onKeepOpen = dashboardViewModel::keepOpen,
+            onQuitAnyway = { dashboardViewModel.quitAnyway() },
+        )
+    }
 
     val scope = rememberCoroutineScope()
 
@@ -77,7 +99,7 @@ fun App(
             Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars)) {
                 AppTopBar(
                     showWindowControls = showWindowControls,
-                    onClose = onCloseWindow,
+                    onClose = { dashboardViewModel.requestClose() },
                     onMinimize = onMinimizeWindow,
                     onMaximize = onMaximizeWindow,
                 )

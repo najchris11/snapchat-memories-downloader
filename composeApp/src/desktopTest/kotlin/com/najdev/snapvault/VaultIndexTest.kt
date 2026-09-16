@@ -10,6 +10,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 /**
@@ -51,6 +52,81 @@ class VaultIndexTest {
             index["memory.jpg"],
             "an index from a previous version must still parse, and must not lose its facts",
         )
+    }
+
+    // ── D05: a damaged index is recoverable data, not an empty one ──────────
+    //
+    // read() folds missing, unreadable, malformed and unsupported into the same empty map.
+    // Every mutator then wrote that reduced state back over the original, so one favorite
+    // toggle against a corrupt index replaced a user's whole favorite set with a single
+    // entry — and reset deleted it outright. The bytes may well be recoverable by hand;
+    // they are not recoverable once overwritten.
+
+    @Test
+    fun aDamagedIndexIsNotReplacedByAFavoriteWrite() = runBlocking {
+        writeRaw("{damaged-but-recoverable-user-data")
+        val original = File(dir, VaultIndex.FILE_NAME).readBytes()
+
+        assertFailsWith<VaultIndexUnreadableException> {
+            VaultIndex.setFavorite(fs, dir.absolutePath, "new.jpg", true)
+        }
+
+        assertEquals(
+            original.toList(),
+            File(dir, VaultIndex.FILE_NAME).readBytes().toList(),
+            "the damaged bytes must survive untouched — they may hold every favorite the user has",
+        )
+    }
+
+    @Test
+    fun aDamagedIndexIsNotReplacedByAPipelineWrite() = runBlocking {
+        writeRaw("{damaged-but-recoverable-user-data")
+        val original = File(dir, VaultIndex.FILE_NAME).readBytes()
+
+        assertFailsWith<VaultIndexUnreadableException> {
+            VaultIndex.writeMerging(
+                fs, dir.absolutePath,
+                mapOf("fresh.jpg" to FileMeta(hasGps = false, hasOverlay = false)),
+            )
+        }
+
+        assertEquals(original.toList(), File(dir, VaultIndex.FILE_NAME).readBytes().toList())
+    }
+
+    @Test
+    fun aDamagedIndexIsNotDeletedByReset() = runBlocking {
+        writeRaw("{damaged-but-recoverable-user-data")
+        val original = File(dir, VaultIndex.FILE_NAME).readBytes()
+
+        assertFailsWith<VaultIndexUnreadableException> {
+            VaultIndex.resetKeepingFavorites(fs, dir.absolutePath)
+        }
+
+        assertTrue(File(dir, VaultIndex.FILE_NAME).exists(), "reset must not delete what it could not read")
+        assertEquals(original.toList(), File(dir, VaultIndex.FILE_NAME).readBytes().toList())
+    }
+
+    // The counterpart, and the reason this is not just "throw on empty": a folder with no
+    // index yet is the ordinary first-run state. Failing closed there would make the very
+    // first favorite impossible.
+    @Test
+    fun aMissingIndexIsStillAnEmptyOneAndCanBeWritten() = runBlocking {
+        assertTrue(!File(dir, VaultIndex.FILE_NAME).exists(), "setup: no index yet")
+
+        VaultIndex.setFavorite(fs, dir.absolutePath, "first.jpg", true)
+
+        assertEquals(true, VaultIndex.read(fs, dir.absolutePath)["first.jpg"]?.favorited)
+    }
+
+    // read() itself must stay total. It is called from scanMediaFiles on every Library scan,
+    // which is not a coroutine and has no way to handle a throw; a damaged index there means
+    // the facts are unknown, which is what an empty map already says. The fix belongs in the
+    // mutators, which are the ones that destroy it.
+    @Test
+    fun readStillReportsADamagedIndexAsEmptyRatherThanThrowing() {
+        writeRaw("{damaged-but-recoverable-user-data")
+
+        assertEquals(emptyMap(), VaultIndex.read(fs, dir.absolutePath))
     }
 
     @Test

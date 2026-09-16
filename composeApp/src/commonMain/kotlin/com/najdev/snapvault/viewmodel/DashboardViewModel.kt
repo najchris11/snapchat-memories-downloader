@@ -1364,7 +1364,10 @@ class DashboardViewModel(
         indeterminate = true
         val deduplicator = Deduplicator(fileSystem)
         val results = withContext(ioDispatcher) {
-            deduplicator.deduplicateFolder(outDir.toPath(), dryRun)
+            // Read now, not from the run's copy: a heart pressed while this run was in flight
+            // exists only on disk, and it is exactly the copy that must survive (D04).
+            val favorites = VaultIndex.read(fileSystem, outDir).filterValues { it.favorited }.keys
+            deduplicator.deduplicateFolder(outDir.toPath(), dryRun, favorites)
         }
         indeterminate = false
         progress = 1f

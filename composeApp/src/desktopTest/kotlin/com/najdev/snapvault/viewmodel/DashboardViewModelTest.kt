@@ -1250,4 +1250,45 @@ class DashboardViewModelTest {
 
         assertEquals(null, viewModel.lastIndexReset)
     }
+
+    // D04 end to end: the favorite reaches dedupe from the index on disk, not from the copy the
+    // run loaded at its start — so a heart pressed on the later copy mid-run still saves it.
+    @Test
+    fun dedupeKeepsTheCopyFavoritedDuringTheRun() {
+        val disk = FakeFileSystem().apply {
+            createDirectories("/out".toPath())
+            write("/history.json".toPath()) { writeUtf8(historyJson) }
+            write("/out/2021-05-01_AAA.jpg".toPath()) { writeUtf8("same photo") }
+            write("/out/2023-11-30_ZZZ.jpg".toPath()) { writeUtf8("same photo") }
+        }
+        val viewModel = DashboardViewModel(
+            zipPipelineRunner = FakeZipPipelineRunner(
+                combineResults = emptyList(),
+                metaStartTotal = 0,
+                // Runs after the index was loaded and before dedupe: the mid-run press.
+                onAfterMetaStart = { VaultIndex.setFavorite(disk, "/out", "2023-11-30_ZZZ.jpg", true) },
+            ),
+            mediaProcessor = FakeMediaProcessor(),
+            fileSystem = disk,
+            pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+            outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+        ).apply {
+            changeImportMode(ImportMode.Legacy)
+            pickHtmlFile()
+            pickOutputFolder()
+        }
+
+        viewModel.startSync(
+            runDownload = false,
+            runMetadata = false,
+            experimentalMetadataMatching = false,
+            runCombine = true,
+            runDedupe = true,
+            dryRun = false,
+        )
+        awaitCompletion(viewModel)
+
+        assertTrue(disk.exists("/out/2023-11-30_ZZZ.jpg".toPath()), "the favorited copy was deleted")
+        assertFalse(disk.exists("/out/2021-05-01_AAA.jpg".toPath()), "the plain duplicate should have gone")
+    }
 }

@@ -2,6 +2,7 @@ package com.najdev.snapvault.downloader
 
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import com.najdev.snapvault.metadata.SupportedMediaExtensions
 import okio.FileSystem
 import okio.HashingSource
 import okio.Path
@@ -38,16 +39,26 @@ class Deduplicator(
     private fun isProtected(path: Path): Boolean =
         path.name == "vault_index.json" || path.name.endsWith(".part")
 
+    // Only what the Library shows is a candidate. Every regular file used to be, so choosing
+    // Documents or Downloads as the destination made identical PDFs, notes and ZIPs
+    // "duplicates" to delete (D04). Those are not memories and not SnapVault's to tidy.
+    private fun isMemory(path: Path): Boolean =
+        path.name.substringAfterLast('.', "").lowercase() in SupportedMediaExtensions.ALL
+
     // suspend so a running pipeline can actually be cancelled mid-scan (BUG-07) — this used
     // to be a plain blocking call with no suspension point, so Stop did nothing until the
     // whole folder had been hashed.
-    suspend fun deduplicateFolder(folderPath: Path, dryRun: Boolean): List<DedupeResult> {
+    suspend fun deduplicateFolder(
+        folderPath: Path,
+        dryRun: Boolean,
+        favorites: Set<String> = emptySet(),
+    ): List<DedupeResult> {
         if (!fileSystem.metadata(folderPath).isDirectory) return emptyList()
 
         data class FileEntry(val path: Path, val size: Long?)
         val files = fileSystem.list(folderPath).mapNotNull { p ->
             val m = fileSystem.metadata(p)
-            if (m.isRegularFile && !isProtected(p)) FileEntry(p, m.size) else null
+            if (m.isRegularFile && !isProtected(p) && isMemory(p)) FileEntry(p, m.size) else null
         }
         if (files.size < 2) return emptyList()
 
@@ -68,12 +79,15 @@ class Deduplicator(
         for ((_, filepaths) in fileHashes) {
             currentCoroutineContext().ensureActive()
             if (filepaths.size > 1) {
-                // Deterministic keep: the lexicographically-first name. Pipeline filenames
-                // start with YYYY-MM-DD, so this keeps the earliest-dated copy of the
-                // duplicated bytes rather than whichever the filesystem listed first.
+                // Favorited copies are never deleted — byte equality protects the pixels, not
+                // the user's choice, and a favorite is in no export (D04). Among the rest the
+                // keep stays deterministic: the lexicographically-first name, which for
+                // pipeline filenames (YYYY-MM-DD…) is the earliest-dated copy rather than
+                // whichever the filesystem listed first.
                 val sorted = filepaths.sortedBy { it.name }
-                val primary = sorted.first()
-                val toDelete = sorted.drop(1)
+                val (favorited, plain) = sorted.partition { it.name in favorites }
+                val primary = favorited.firstOrNull() ?: plain.first()
+                val toDelete = plain - primary
 
                 if (toDelete.isNotEmpty()) {
                     val actuallyDeleted = mutableListOf<String>()

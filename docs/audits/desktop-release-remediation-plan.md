@@ -283,6 +283,12 @@ made the underlying defaults safe. Fix D22 first within this batch.
   recognized media (not arbitrary regular files).
 - **Fix direction:** consult favorites before choosing which duplicate to keep; restrict the
   scan to owned/recognized media.
+- **Status:** landed — favorited copies are never deleted (read from disk at dedupe time), and
+  only formats the Library shows are candidates.
+- **Deferred — trash/quarantine instead of permanent delete:** the audit also recommends moving
+  duplicates to the OS trash or a quarantine folder. That is a new capability with its own
+  per-platform questions (Desktop.moveToTrash support, quarantine location and cleanup), not a
+  scope fix; dry run remains the default safeguard until it exists.
 
 ---
 

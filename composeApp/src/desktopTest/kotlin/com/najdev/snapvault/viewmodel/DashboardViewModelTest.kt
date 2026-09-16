@@ -420,7 +420,8 @@ class DashboardViewModelTest {
         )
         runBlocking { withTimeout(5_000) { startedSignal.await() } }
 
-        assertFalse(
+        assertEquals(
+            DashboardViewModel.IndexResetOutcome.RunInProgress,
             runBlocking { viewModel.resetVaultIndex() },
             "must refuse to reset the vault index while a run is in progress",
         )
@@ -452,7 +453,7 @@ class DashboardViewModelTest {
         )
         viewModel.pickOutputFolder()
 
-        assertTrue(runBlocking { viewModel.resetVaultIndex() })
+        assertEquals(DashboardViewModel.IndexResetOutcome.Cleared, runBlocking { viewModel.resetVaultIndex() })
 
         val after = VaultIndex.read(fs, "/out")
         assertEquals(setOf("kept.jpg"), after.keys, "only the favorite survives a reset")
@@ -479,7 +480,7 @@ class DashboardViewModelTest {
         )
         viewModel.pickOutputFolder()
 
-        assertTrue(runBlocking { viewModel.resetVaultIndex() })
+        assertEquals(DashboardViewModel.IndexResetOutcome.Cleared, runBlocking { viewModel.resetVaultIndex() })
 
         assertFalse(fs.exists("/out/vault_index.json".toPath()))
     }
@@ -1197,5 +1198,56 @@ class DashboardViewModelTest {
         assertEquals("Pipeline Complete", viewModel.progressText)
         assertEquals(0, viewModel.warningCount)
         assertEquals(0, viewModel.failureCount)
+    }
+
+    // D12: the reset's result was a Boolean App discarded. Each way it can not happen needs its
+    // own answer, because each has a different fix for the user.
+    @Test
+    fun aResetThatCannotHappenSaysWhy() {
+        val noFolder = DashboardViewModel(
+            zipPipelineRunner = NoOpZipPipelineRunner,
+            mediaProcessor = FakeMediaProcessor(),
+            fileSystem = FakeFileSystem(),
+            pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+            outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+        )
+        assertEquals(DashboardViewModel.IndexResetOutcome.NoFolder, runBlocking { noFolder.resetVaultIndex() })
+        assertEquals(DashboardViewModel.IndexResetOutcome.NoFolder, noFolder.lastIndexReset, "the screen reads the outcome from here")
+
+        // A damaged index is refused rather than replaced (D05) — which here must read as a
+        // failure, not as a successful clear.
+        val disk = FakeFileSystem().apply {
+            createDirectories("/out".toPath())
+            write("/out/vault_index.json".toPath()) { writeUtf8("{ not json") }
+        }
+        val damaged = DashboardViewModel(
+            zipPipelineRunner = NoOpZipPipelineRunner,
+            mediaProcessor = FakeMediaProcessor(),
+            fileSystem = disk,
+            pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+            outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+        ).apply { pickOutputFolder() }
+        assertEquals(DashboardViewModel.IndexResetOutcome.Failed, runBlocking { damaged.resetVaultIndex() })
+        assertEquals("{ not json", disk.read("/out/vault_index.json".toPath()) { readUtf8() })
+    }
+
+    // The outcome describes one folder. Left in place after switching, it would report on a
+    // folder the user is no longer looking at.
+    @Test
+    fun choosingAnotherFolderClearsTheLastResetOutcome() {
+        val viewModel = DashboardViewModel(
+            zipPipelineRunner = NoOpZipPipelineRunner,
+            mediaProcessor = FakeMediaProcessor(),
+            fileSystem = FakeFileSystem().apply { createDirectories("/out".toPath()) },
+            pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+            outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+        )
+        viewModel.pickOutputFolder()
+        runBlocking { viewModel.resetVaultIndex() }
+        assertEquals(DashboardViewModel.IndexResetOutcome.Cleared, viewModel.lastIndexReset)
+
+        viewModel.pickOutputFolder()
+
+        assertEquals(null, viewModel.lastIndexReset)
     }
 }

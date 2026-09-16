@@ -89,6 +89,7 @@ fun PhoneRoot(
                     onResetIndex = { resetScope.launch { dashboardViewModel.resetVaultIndex() } },
                     onEditOutputPath = { dashboardViewModel.pickOutputFolder() },
                     outputFolderChangeable = dashboardViewModel.outputFolderChangeable,
+                    resetOutcome = dashboardViewModel.lastIndexReset,
                     themeMode = themeMode,
                     onThemeModeChange = onThemeModeChange,
                     layoutOverride = layoutOverride,

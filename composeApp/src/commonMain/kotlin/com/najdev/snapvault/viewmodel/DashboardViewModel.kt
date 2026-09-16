@@ -248,7 +248,12 @@ class DashboardViewModel(
     // Checked again when the picker answers: a dialog opened before Start can close after it.
     fun pickOutputFolder() {
         if (!outputFolderChangeable) return
-        pickers.pickOutputFolder { path -> if (path != null && outputFolderChangeable) downloadFolder = path }
+        pickers.pickOutputFolder { path ->
+            if (path != null && outputFolderChangeable) {
+                downloadFolder = path
+                lastIndexReset = null
+            }
+        }
     }
     fun pickZipFolder() = pickers.pickZipFolder { it?.let { path -> zipFolder = path; selectedZipFiles = emptyList() } }
     fun pickMultipleZips() = pickers.pickMultipleZips { paths -> if (paths.isNotEmpty()) { selectedZipFiles = paths; zipFolder = null } }
@@ -523,20 +528,41 @@ class DashboardViewModel(
         pickers.releaseAllSecurityAccess()
     }
 
-    suspend fun resetVaultIndex(): Boolean {
+    enum class IndexResetOutcome { Cleared, RunInProgress, NoFolder, Failed }
+
+    /**
+     * How the last press of Settings' Clear Badges went.
+     *
+     * The result used to be a Boolean that App discarded, so the button did something or
+     * nothing with no way to tell which (D12). Cleared when the folder changes, since it
+     * describes the previous one.
+     */
+    var lastIndexReset by mutableStateOf<IndexResetOutcome?>(null)
+        private set
+
+    suspend fun resetVaultIndex(): IndexResetOutcome {
+        val outcome = resetVaultIndexOutcome()
+        lastIndexReset = outcome
+        return outcome
+    }
+
+    private suspend fun resetVaultIndexOutcome(): IndexResetOutcome {
         // A running pipeline reads/writes vault_index.json at multiple points and holds its
         // own in-memory copy — deleting the on-disk file out from under it (e.g. from
         // Settings, reachable while a sync is in progress) risks losing entries the run is
         // about to persist. Model-level guard so this is safe regardless of which screen can
         // reach it (BUG-16).
-        if (isRunning) return false
-        val folder = downloadFolder ?: return false
+        if (isRunning) return IndexResetOutcome.RunInProgress
+        val folder = downloadFolder ?: return IndexResetOutcome.NoFolder
         return runCatching {
-            // Keeps favorites: they are the one thing in the index the next run cannot
-            // rebuild, and reset exists to force re-processing, not to discard user data.
+            // Keeps favorites: they are the one thing in the index no run can rebuild, and
+            // clearing badges is no reason to discard user data.
             VaultIndex.resetKeepingFavorites(fileSystem, folder)
-            true
-        }.getOrDefault(false)
+            IndexResetOutcome.Cleared
+        }.getOrElse { e ->
+            log("[ERROR] Could not clear the vault index: ${e.message}")
+            IndexResetOutcome.Failed
+        }
     }
 
     private fun formatEta(seconds: Long): String = when {

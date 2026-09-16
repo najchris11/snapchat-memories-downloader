@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.*
+import com.najdev.snapvault.viewmodel.DashboardViewModel
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -42,6 +43,7 @@ fun SettingsScreen(
     layoutOverride: LayoutOverride,
     onLayoutOverrideChange: (LayoutOverride) -> Unit,
     outputFolderChangeable: Boolean = true,
+    resetOutcome: DashboardViewModel.IndexResetOutcome? = null,
 ) {
     Column(
         modifier = Modifier
@@ -250,6 +252,23 @@ fun SettingsScreen(
                     ) {
                         Text(stringResource(Res.string.set_reset_index_btn), style = MaterialTheme.typography.bodySmall)
                     }
+                }
+
+                // The press used to leave no trace either way (D12). Each refusal names its fix.
+                resetOutcome?.let { outcome ->
+                    val cleared = outcome == DashboardViewModel.IndexResetOutcome.Cleared
+                    Text(
+                        stringResource(
+                            when (outcome) {
+                                DashboardViewModel.IndexResetOutcome.Cleared -> Res.string.set_reset_result_cleared
+                                DashboardViewModel.IndexResetOutcome.RunInProgress -> Res.string.set_reset_result_running
+                                DashboardViewModel.IndexResetOutcome.NoFolder -> Res.string.set_reset_result_no_folder
+                                DashboardViewModel.IndexResetOutcome.Failed -> Res.string.set_reset_result_failed
+                            }
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (cleared) SnapVaultColors.success else MaterialTheme.colorScheme.error,
+                    )
                 }
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

@@ -163,6 +163,7 @@ fun App(
                                         onResetIndex = { scope.launch { dashboardViewModel.resetVaultIndex() } },
                                         onEditOutputPath = { dashboardViewModel.pickOutputFolder() },
                                         outputFolderChangeable = dashboardViewModel.outputFolderChangeable,
+                                        resetOutcome = dashboardViewModel.lastIndexReset,
                                         themeMode = themeMode,
                                         onThemeModeChange = { themeMode = it; saveThemeModePreference(it) },
                                         layoutOverride = layoutOverride,

@@ -193,6 +193,10 @@
     <string name="set_reset_index_label">Clear Library Badges</string>
     <string name="set_reset_index_desc">Forgets the GPS and Combined badges recorded for this folder, until a sync records them again. Favorites are kept. No files are changed, downloaded or processed.</string>
     <string name="set_reset_index_btn">Clear Badges</string>
+    <string name="set_reset_result_cleared">Badges cleared. Favorites were kept.</string>
+    <string name="set_reset_result_running">Not cleared: a sync is running. Try again when it finishes.</string>
+    <string name="set_reset_result_no_folder">Not cleared: choose an output folder first.</string>
+    <string name="set_reset_result_failed">Not cleared: the index could not be changed. The Dashboard log has the reason.</string>
     <string name="close_unsaved_title">Favorites still saving</string>
     <plurals name="close_unsaved_body">
         <item quantity="one">%1$d favorite has not been saved yet. It exists nowhere else — quitting now will lose it.</item>

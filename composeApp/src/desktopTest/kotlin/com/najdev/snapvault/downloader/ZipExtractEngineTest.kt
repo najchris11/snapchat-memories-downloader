@@ -340,4 +340,53 @@ class ZipExtractEngineTest {
         val finalContent = File(outDir, "shared.jpg").readText()
         assertTrue(finalContent == "v1" || finalContent == "v2")
     }
+
+    // ── D13: space, before a byte is written ─────────────────────────────────
+
+    // D13: nothing checked whether an import would fit. A large export into a nearly full disk
+    // extracted until writes failed, leaving thousands of files and a folder too full for the
+    // metadata and combine steps that follow. The budget counts what extraction would actually
+    // write: every entry's declared size, except where a finished file is already on disk. A
+    // zip bomb declares its size honestly in the directory and is still enormous, so this is
+    // also what turns one away before extraction rather than after the disk is full.
+    @Test
+    fun theBudgetCountsWhatExtractionWouldWriteAgainstTheSpaceAvailable() {
+        val zip = createZip(
+            "export.zip",
+            mapOf(
+                "memories/2023-10-12_ABC-main.jpg" to ByteArray(700),
+                "memories/2023-10-12_ABC-overlay.png" to ByteArray(300),
+                "memories/2023-10-13_DEF-main.jpg" to ByteArray(2_000),
+            ),
+        )
+        // Already extracted by an earlier run: writes nothing.
+        File(outDir, "2023-10-13_DEF-main.jpg").writeBytes(ByteArray(2_000))
+        var askedAbout: File? = null
+        val engine = ZipExtractEngine(usableSpace = { askedAbout = it; 12_345L })
+
+        val budget = engine.extractionBudget(
+            mapOf(
+                zip.absolutePath to listOf(
+                    entry("2023-10-12_ABC-main.jpg", "2023-10-12_ABC-overlay.png"),
+                    entry("2023-10-13_DEF-main.jpg"),
+                ),
+            ),
+            outDir.absolutePath,
+        )
+
+        assertEquals(1_000L, budget.requiredBytes, "700 + 300; the file already on disk costs nothing")
+        assertEquals(12_345L, budget.availableBytes)
+        assertEquals(outDir.absolutePath, askedAbout?.absolutePath, "space has to be measured where the files will go")
+    }
+
+    @Test
+    fun anEmptyPlaceholderIsCountedAsStillToBeWritten() {
+        val zip = createZip("export.zip", mapOf("memories/2023-10-12_ABC-main.jpg" to ByteArray(500)))
+        File(outDir, "2023-10-12_ABC-main.jpg").writeBytes(ByteArray(0))
+
+        val budget = ZipExtractEngine(usableSpace = { 0L })
+            .extractionBudget(mapOf(zip.absolutePath to listOf(entry("2023-10-12_ABC-main.jpg"))), outDir.absolutePath)
+
+        assertEquals(500L, budget.requiredBytes, "an empty file is replaced (D14), so it still has to be written")
+    }
 }

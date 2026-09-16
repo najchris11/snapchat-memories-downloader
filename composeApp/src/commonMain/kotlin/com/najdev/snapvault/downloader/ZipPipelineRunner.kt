@@ -25,8 +25,17 @@ data class CombineResult(
     val metadataCarried: Boolean = true,
 )
 
+/** What a ZIP import would write, against the space there is to write it in. */
+data class ExtractionBudget(
+    val requiredBytes: Long,
+    val availableBytes: Long,
+)
+
 interface ZipPipelineRunner {
     fun listZipFiles(folderPath: String): List<String>
+
+    // Null where the platform cannot tell; the import then proceeds as it always did.
+    fun extractionBudget(itemsByZip: Map<String, List<HtmlMemoryEntry>>, outputDir: String): ExtractionBudget? = null
 
     suspend fun extractAll(
         itemsByZip: Map<String, List<HtmlMemoryEntry>>,

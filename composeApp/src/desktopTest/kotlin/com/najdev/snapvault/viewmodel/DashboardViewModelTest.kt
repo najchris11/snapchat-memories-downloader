@@ -10,6 +10,7 @@ import com.najdev.snapvault.model.FileMeta
 import com.najdev.snapvault.PlatformPickers
 import com.najdev.snapvault.downloader.CombineResult
 import com.najdev.snapvault.downloader.ExtractResult
+import com.najdev.snapvault.downloader.ExtractionBudget
 import com.najdev.snapvault.downloader.NoOpZipPipelineRunner
 import com.najdev.snapvault.downloader.ZipPipelineRunner
 import com.najdev.snapvault.metadata.MediaProcessor
@@ -1290,5 +1291,74 @@ class DashboardViewModelTest {
 
         assertTrue(disk.exists("/out/2023-11-30_ZZZ.jpg".toPath()), "the favorited copy was deleted")
         assertFalse(disk.exists("/out/2021-05-01_AAA.jpg".toPath()), "the plain duplicate should have gone")
+    }
+
+    // D13 at the pipeline: an import that will not fit is refused before extraction writes
+    // anything, in words that say how much is needed and what to do about it.
+    private class BudgetRunner(private val zip: String, private val budget: ExtractionBudget?) : ZipPipelineRunner {
+        @Volatile var extractCalled = false
+        override fun listZipFiles(folderPath: String): List<String> = listOf(zip)
+        override fun extractionBudget(itemsByZip: Map<String, List<HtmlMemoryEntry>>, outputDir: String) = budget
+        override suspend fun extractAll(
+            itemsByZip: Map<String, List<HtmlMemoryEntry>>,
+            outputDir: String,
+            workerCount: Int,
+            onProgress: (ExtractResult) -> Unit,
+        ) {
+            extractCalled = true
+        }
+        override suspend fun combineAll(
+            outputDir: String,
+            deleteOriginals: Boolean,
+            workerCount: Int,
+            onStart: (total: Int) -> Unit,
+            onMetaStart: (total: Int) -> Unit,
+            onMetaError: ((String) -> Unit)?,
+            onProgress: (CombineResult) -> Unit,
+        ) = Unit
+    }
+
+    @Test
+    fun anImportThatWillNotFitIsRefusedBeforeExtraction() {
+        val zip = realZip("memories/2023-10-12_AAA-main.jpg" to "photo")
+        val runner = BudgetRunner(zip, ExtractionBudget(requiredBytes = 40L * GIB, availableBytes = 3L * GIB))
+        val viewModel = outcomeViewModel(runner, mode = ImportMode.Zip)
+
+        viewModel.runWith(combine = false)
+
+        assertEquals("Failed", viewModel.progressText)
+        assertFalse(runner.extractCalled, "extraction started on a disk that could not hold it")
+        val message = viewModel.logs.last()
+        assertTrue("40" in message && "3" in message && "GB" in message, "the refusal must give both sizes: $message")
+    }
+
+    // Filling the disk to the last byte is not "fits": exiftool writes a temporary copy of each
+    // file it tags, and the combine step writes whole new files. A reserve stays free.
+    @Test
+    fun anImportThatWouldLeaveNoRoomToProcessIsRefusedToo() {
+        val zip = realZip("memories/2023-10-12_AAA-main.jpg" to "photo")
+        val runner = BudgetRunner(zip, ExtractionBudget(requiredBytes = 10L * GIB, availableBytes = 10L * GIB))
+        val viewModel = outcomeViewModel(runner, mode = ImportMode.Zip)
+
+        viewModel.runWith(combine = false)
+
+        assertFalse(runner.extractCalled)
+    }
+
+    @Test
+    fun anImportThatFitsWithRoomToSpareProceeds() {
+        val zip = realZip("memories/2023-10-12_AAA-main.jpg" to "photo")
+        for (budget in listOf(ExtractionBudget(requiredBytes = 1L * GIB, availableBytes = 50L * GIB), null)) {
+            val runner = BudgetRunner(zip, budget)
+            val viewModel = outcomeViewModel(runner, mode = ImportMode.Zip)
+
+            viewModel.runWith(combine = false)
+
+            assertTrue(runner.extractCalled, "budget $budget should have proceeded")
+        }
+    }
+
+    private companion object {
+        const val GIB = 1024L * 1024L * 1024L
     }
 }

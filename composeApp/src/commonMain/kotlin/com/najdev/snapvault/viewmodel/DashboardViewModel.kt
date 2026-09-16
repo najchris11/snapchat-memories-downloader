@@ -27,6 +27,15 @@ private class PipelineAbortException(message: String) : Exception(message)
 
 internal const val CLOSE_SAVE_TIMEOUT_MS = 5_000L
 
+internal const val EXTRACTION_SPACE_RESERVE_BYTES = 1L * 1024 * 1024 * 1024
+
+internal fun formatBytes(bytes: Long): String {
+    val gib = bytes / (1024.0 * 1024.0 * 1024.0)
+    if (gib >= 1.0) return "${(gib * 10).toLong() / 10.0} GB"
+    val mib = bytes / (1024.0 * 1024.0)
+    return "${(mib * 10).toLong() / 10.0} MB"
+}
+
 class DashboardViewModel(
     private val zipPipelineRunner: ZipPipelineRunner,
     private val mediaProcessor: MediaProcessor,
@@ -649,6 +658,21 @@ class DashboardViewModel(
         }
 
         val downloadedMeta: MutableMap<String, FileMeta> = VaultIndex.read(fileSystem, outDir).toMutableMap()
+
+        // Refused before a byte is written. Nothing used to check, so a large export into a
+        // nearly full disk extracted until writes failed, leaving thousands of files and a
+        // folder too full for the metadata and combine steps after it (D13). The reserve is
+        // room for those steps: exiftool writes a temporary copy of every file it tags, and
+        // combining writes whole new files.
+        zipPipelineRunner.extractionBudget(itemsByZip, outDir)?.let { budget ->
+            if (budget.requiredBytes + EXTRACTION_SPACE_RESERVE_BYTES > budget.availableBytes) {
+                throw PipelineAbortException(
+                    "This import needs about ${formatBytes(budget.requiredBytes)} of free space in the output folder, " +
+                        "plus ${formatBytes(EXTRACTION_SPACE_RESERVE_BYTES)} to process it, and only " +
+                        "${formatBytes(budget.availableBytes)} is available. Free up space or choose another output folder.",
+                )
+            }
+        }
 
         log("[INFO] Extracting media files…")
         var extractedCount = 0

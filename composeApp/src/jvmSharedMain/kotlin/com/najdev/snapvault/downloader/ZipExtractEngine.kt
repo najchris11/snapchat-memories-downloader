@@ -14,7 +14,39 @@ import kotlinx.coroutines.sync.withPermit
 import java.io.File
 import java.util.zip.ZipFile
 
-class ZipExtractEngine {
+class ZipExtractEngine(
+    private val usableSpace: (File) -> Long = { it.usableSpace },
+) {
+
+    /**
+     * What [extractAll] would write for [itemsByZip], and the space [outputDir] has for it.
+     *
+     * Read from each archive's central directory, so nothing is decompressed to find out. An
+     * entry whose destination already holds a finished file costs nothing, matching the skip
+     * in [extractEntry]; an empty placeholder is replaced there, so it is counted here. An
+     * entry that is missing, or whose size the directory does not record, is left out — the
+     * extraction itself reports it.
+     */
+    fun extractionBudget(itemsByZip: Map<String, List<HtmlMemoryEntry>>, outputDir: String): ExtractionBudget {
+        val outDir = File(outputDir)
+        var required = 0L
+        for ((zipPath, entries) in itemsByZip) {
+            ZipFile(zipPath).use { zf ->
+                for (entry in entries) {
+                    val names = listOfNotNull(entry.fileName, entry.overlayFileName.takeIf { entry.hasOverlay })
+                    for (name in names) {
+                        val dest = File(outDir, name)
+                        if (dest.isFile && dest.length() > 0L) continue
+                        val size = zf.getEntry("memories/$name")?.size ?: continue
+                        if (size > 0) required += size
+                    }
+                }
+            }
+        }
+        // The folder may not exist yet; measure the nearest ancestor that does.
+        val measured = generateSequence(outDir.absoluteFile) { it.parentFile }.firstOrNull { it.exists() } ?: outDir
+        return ExtractionBudget(requiredBytes = required, availableBytes = usableSpace(measured))
+    }
 
     suspend fun extractAll(
         itemsByZip: Map<String, List<HtmlMemoryEntry>>,

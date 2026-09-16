@@ -30,11 +30,16 @@ interface ZipPipelineRunner {
     )
 
     // Legacy pipeline: memories with overlays download as small .zip archives (media +
-    // overlay PNG). Extracts every *.zip in outputDir flat as <base>-main.<ext> /
+    // overlay PNG). Extracts each archive in `archivePaths` flat as <base>-main.<ext> /
     // <base>-overlay.<ext> — the same naming combineAll's pair discovery uses — and
-    // deletes each archive once fully extracted. Returns the extracted file paths.
+    // deletes an archive once every one of its entries is accounted for. Returns the
+    // extracted file paths.
+    //
+    // The caller passes the archives this run downloaded. It must not list outputDir:
+    // an unrelated ZIP the user happens to keep there is not ours to flatten or delete.
     suspend fun extractDownloadedArchives(
         outputDir: String,
+        archivePaths: List<String>,
         onWarn: (String) -> Unit = {},
     ): List<String> = emptyList()
 

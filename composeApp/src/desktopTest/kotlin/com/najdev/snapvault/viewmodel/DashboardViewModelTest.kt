@@ -95,7 +95,7 @@ private class HangingZipPipelineRunner(
         workerCount: Int,
         onProgress: (ExtractResult) -> Unit,
     ) = Unit
-    override suspend fun extractDownloadedArchives(outputDir: String, onWarn: (String) -> Unit): List<String> {
+    override suspend fun extractDownloadedArchives(outputDir: String, archivePaths: List<String>, onWarn: (String) -> Unit): List<String> {
         startedSignal.complete(Unit)
         awaitCancellation()
     }
@@ -126,7 +126,7 @@ private class RaceZipPipelineRunner(
         workerCount: Int,
         onProgress: (ExtractResult) -> Unit,
     ) = Unit
-    override suspend fun extractDownloadedArchives(outputDir: String, onWarn: (String) -> Unit): List<String> {
+    override suspend fun extractDownloadedArchives(outputDir: String, archivePaths: List<String>, onWarn: (String) -> Unit): List<String> {
         if (callIndex++ == 0) {
             startedSignal.complete(Unit)
             withContext(NonCancellable) { delay(50) }

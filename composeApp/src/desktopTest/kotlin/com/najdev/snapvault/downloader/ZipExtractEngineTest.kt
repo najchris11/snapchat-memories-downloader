@@ -42,6 +42,19 @@ class ZipExtractEngineTest {
         return zipFile
     }
 
+    /** A legacy downloaded memory archive, written into the output directory as the download phase leaves it. */
+    private fun legacyArchive(name: String, entries: Map<String, String>): File {
+        val archive = File(outDir, name)
+        ZipOutputStream(archive.outputStream()).use { zos ->
+            for ((entryName, text) in entries) {
+                zos.putNextEntry(ZipEntry(entryName))
+                zos.write(text.toByteArray())
+                zos.closeEntry()
+            }
+        }
+        return archive
+    }
+
     private fun entry(fileName: String, overlayFileName: String? = null) = HtmlMemoryEntry(
         fileName = fileName,
         uuid = fileName.substringAfter('_').substringBefore('-').substringBefore('.'),
@@ -121,16 +134,20 @@ class ZipExtractEngineTest {
 
     @Test
     fun extractsLegacyArchiveAsMainOverlayPairAndDeletesIt() {
-        val archive = File(outDir, "20231012_153000_abc.zip")
-        ZipOutputStream(archive.outputStream()).use { zos ->
-            zos.putNextEntry(ZipEntry("media~xyz.mp4")); zos.write("video-bytes".toByteArray()); zos.closeEntry()
-            zos.putNextEntry(ZipEntry("overlay~xyz.png")); zos.write("overlay-bytes".toByteArray()); zos.closeEntry()
-            zos.putNextEntry(ZipEntry("thumbnail~xyz.jpg")); zos.write("thumb".toByteArray()); zos.closeEntry()
-        }
+        val archive = legacyArchive(
+            "20231012_153000_abc.zip",
+            linkedMapOf(
+                "media~xyz.mp4" to "video-bytes",
+                "overlay~xyz.png" to "overlay-bytes",
+                "thumbnail~xyz.jpg" to "thumb",
+            ),
+        )
 
         val warnings = mutableListOf<String>()
         val extracted = runBlocking {
-            ZipExtractEngine().extractDownloadedArchives(outDir.absolutePath) { warnings.add(it) }
+            ZipExtractEngine().extractDownloadedArchives(
+                outDir.absolutePath, listOf(archive.absolutePath),
+            ) { warnings.add(it) }
         }
 
         assertEquals(2, extracted.size, "media + overlay extracted, thumbnail skipped; warnings: $warnings")
@@ -140,13 +157,81 @@ class ZipExtractEngineTest {
         assertTrue(warnings.isEmpty(), "no warnings expected: $warnings")
     }
 
+    // Regression (D01): the archive basename is the only thing that distinguishes an
+    // extracted file, so two same-extension entries both flatten to "<base>-main.jpg".
+    // The second one used to come back "skipped" — indistinguishable from "already
+    // extracted on a previous run" — leaving allOk true and deleting the archive with
+    // only the first photo on disk. The second photo existed nowhere else.
+    @Test
+    fun archiveWhoseEntriesCollideIsKeptIntact() {
+        val archive = legacyArchive(
+            "20231012_153000_abc.zip",
+            linkedMapOf("one.jpg" to "first-photo", "two.jpg" to "second-photo"),
+        )
+        val before = archive.readBytes()
+
+        val warnings = mutableListOf<String>()
+        val extracted = runBlocking {
+            ZipExtractEngine().extractDownloadedArchives(
+                outDir.absolutePath, listOf(archive.absolutePath),
+            ) { warnings.add(it) }
+        }
+
+        assertTrue(archive.exists(), "colliding archive must be kept; it holds the only copy of both photos")
+        assertEquals(before.toList(), archive.readBytes().toList(), "kept archive must be byte-identical")
+        assertTrue(extracted.isEmpty(), "nothing may be extracted from an archive that cannot be flattened safely")
+        assertTrue(warnings.any { "one.jpg" in it || "two.jpg" in it }, "collision must be warned: $warnings")
+    }
+
+    // Regression (D01): every entry was a thumbnail, so the extraction loop skipped them
+    // all, allOk stayed true, and the archive was deleted having produced no output.
+    @Test
+    fun thumbnailOnlyArchiveIsKeptIntact() {
+        val archive = legacyArchive("20231012_153000_abc.zip", linkedMapOf("thumbnail~xyz.jpg" to "only-copy"))
+
+        val warnings = mutableListOf<String>()
+        val extracted = runBlocking {
+            ZipExtractEngine().extractDownloadedArchives(
+                outDir.absolutePath, listOf(archive.absolutePath),
+            ) { warnings.add(it) }
+        }
+
+        assertTrue(archive.exists(), "archive that produced no output must never be deleted")
+        assertTrue(extracted.isEmpty())
+        assertTrue(warnings.isNotEmpty(), "silently deleting it was the bug; say why it was kept")
+    }
+
+    // Regression (D01): extraction used to enumerate every *.zip in the output directory.
+    // Pointing the output at Downloads (or at the export folder itself) put unrelated
+    // archives through the flatten-and-delete path.
+    @Test
+    fun archivesNotOwnedByThisRunAreNeverTouched() {
+        val mine = legacyArchive("20231012_153000_abc.zip", linkedMapOf("media~xyz.mp4" to "video-bytes"))
+        val theirs = legacyArchive("tax-returns-2023.zip", linkedMapOf("form.pdf" to "irreplaceable"))
+        val theirsBefore = theirs.readBytes()
+
+        val warnings = mutableListOf<String>()
+        runBlocking {
+            ZipExtractEngine().extractDownloadedArchives(
+                outDir.absolutePath, listOf(mine.absolutePath),
+            ) { warnings.add(it) }
+        }
+
+        assertTrue(theirs.exists(), "an archive this run did not download must not be read or deleted")
+        assertEquals(theirsBefore.toList(), theirs.readBytes().toList())
+        assertTrue(!File(outDir, "tax-returns-2023-main.pdf").exists(), "unrelated archive must not be flattened")
+        assertTrue(!mine.exists(), "the run's own fully-extracted archive is still cleaned up")
+    }
+
     @Test
     fun corruptArchiveIsKeptAndWarned() {
         val bogus = File(outDir, "20231012_153000_bad.zip").apply { writeText("not a zip") }
 
         val warnings = mutableListOf<String>()
         val extracted = runBlocking {
-            ZipExtractEngine().extractDownloadedArchives(outDir.absolutePath) { warnings.add(it) }
+            ZipExtractEngine().extractDownloadedArchives(
+                outDir.absolutePath, listOf(bogus.absolutePath),
+            ) { warnings.add(it) }
         }
 
         assertTrue(extracted.isEmpty())

@@ -81,36 +81,74 @@ class ZipExtractEngine {
     // matching picks the pair up unchanged. Mirrors the legacy Python behavior
     // (extract_and_cleanup_zip): thumbnails are skipped and the archive is deleted after
     // a fully successful extraction, kept for retry otherwise.
+    //
+    // `archivePaths` is the set of archives *this run* downloaded, not a listing of
+    // outputDir. Sweeping the directory (D01) meant choosing Downloads or the export
+    // folder as the destination put every unrelated ZIP on disk through flatten-and-delete.
+    // Ownership is the caller's knowledge; it cannot be recovered from a file extension.
     suspend fun extractDownloadedArchives(
         outputDir: String,
+        archivePaths: List<String>,
         onWarn: (String) -> Unit,
     ): List<String> = kotlinx.coroutines.withContext(Dispatchers.IO) {
         val outDir = File(outputDir)
-        val archives = outDir.listFiles { f -> f.isFile && f.extension.lowercase() == "zip" }
-            ?: return@withContext emptyList()
         val extracted = mutableListOf<String>()
 
-        for (archive in archives) {
+        for (path in archivePaths) {
             currentCoroutineContext().ensureActive()
+            val archive = File(path)
+            if (!archive.isFile) {
+                onWarn("archive ${archive.name} is no longer present — skipped")
+                continue
+            }
             val base = archive.nameWithoutExtension
             try {
-                var allOk = true
+                // Deleting the archive is only safe once every entry it holds is accounted
+                // for, so the whole plan is built and checked before a single byte is
+                // written. `deletable` stays false unless that plan ran to completion.
+                var deletable = false
                 ZipFile(archive).use { zf ->
                     val entries = zf.entries().toList().filter { !it.isDirectory }
                     if (entries.isEmpty()) {
                         onWarn("archive ${archive.name} is empty — kept as-is")
-                        allOk = false
                         return@use
                     }
+
+                    val planned = linkedMapOf<String, String>() // destName -> entry name
+                    var unflattenable = false
                     for (entry in entries) {
                         val entryLeaf = entry.name.substringAfterLast('/')
                         val lower = entryLeaf.lowercase()
-                        if ("thumbnail" in lower) continue
+                        if ("thumbnail" in lower) continue // deliberately not extracted
                         val ext = entryLeaf.substringAfterLast('.', "")
-                        if (ext.isEmpty()) continue
+                        if (ext.isEmpty()) {
+                            // Dropping it silently and then deleting the archive would
+                            // destroy the only copy of a file we chose not to write.
+                            onWarn("${archive.name}: entry '$entryLeaf' has no extension — archive kept")
+                            unflattenable = true
+                            continue
+                        }
                         val role = if ("overlay" in lower) "overlay" else "main"
                         val destName = "$base-$role.$ext"
-                        when (val res = extractEntry(zf, entry.name, destName, outDir)) {
+                        val prior = planned.put(destName, entry.name)
+                        if (prior != null) {
+                            // Two entries want one output name. Extracting either would
+                            // report the loser as "skipped", which is indistinguishable
+                            // from "already extracted", and the archive would be deleted.
+                            onWarn("${archive.name}: '$prior' and '$entryLeaf' both flatten to $destName — archive kept")
+                            unflattenable = true
+                        }
+                    }
+
+                    if (unflattenable) return@use
+                    if (planned.isEmpty()) {
+                        onWarn("archive ${archive.name} holds no extractable media — kept as-is")
+                        return@use
+                    }
+
+                    var allOk = true
+                    for ((destName, entryName) in planned) {
+                        when (val res = extractEntry(zf, entryName, destName, outDir)) {
                             "ok", "skipped" -> extracted.add(File(outDir, destName).absolutePath)
                             else -> {
                                 allOk = false
@@ -118,8 +156,10 @@ class ZipExtractEngine {
                             }
                         }
                     }
+                    deletable = allOk
                 }
-                if (allOk && !archive.delete()) {
+                // Outside the use block: Windows will not delete a file that is still open.
+                if (deletable && !archive.delete()) {
                     onWarn("could not delete extracted archive ${archive.name}")
                 }
             } catch (e: Exception) {

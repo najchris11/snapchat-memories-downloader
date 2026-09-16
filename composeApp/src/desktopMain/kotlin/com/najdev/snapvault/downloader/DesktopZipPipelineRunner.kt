@@ -35,8 +35,9 @@ class DesktopZipPipelineRunner(mediaProcessor: MediaProcessor) : ZipPipelineRunn
 
     override suspend fun extractDownloadedArchives(
         outputDir: String,
+        archivePaths: List<String>,
         onWarn: (String) -> Unit
-    ): List<String> = extractor.extractDownloadedArchives(outputDir, onWarn)
+    ): List<String> = extractor.extractDownloadedArchives(outputDir, archivePaths, onWarn)
 
     override suspend fun combineAll(
         outputDir: String,

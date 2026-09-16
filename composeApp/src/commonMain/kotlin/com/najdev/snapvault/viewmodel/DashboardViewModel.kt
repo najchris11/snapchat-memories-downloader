@@ -665,8 +665,15 @@ class DashboardViewModel(
 
         // Memories with overlays arrive as small .zip archives; extract them flat as
         // -main/-overlay pairs (legacy Python parity) so the combine phase can find them.
+        //
+        // Only the archives this run put on disk are eligible. presentItems covers both
+        // fresh downloads and ones already present from an interrupted run, so resume
+        // still works — but a ZIP the user keeps in the destination for their own reasons
+        // is never opened, flattened, or deleted (D01).
         progressText = "Extracting downloaded archives…"
-        val extractedFiles = zipPipelineRunner.extractDownloadedArchives(outDir) { msg ->
+        val ownedArchives = presentItems.mapNotNull { it.downloadedPath }
+            .filter { it.substringAfterLast('.', "").lowercase() == "zip" }
+        val extractedFiles = zipPipelineRunner.extractDownloadedArchives(outDir, ownedArchives) { msg ->
             log("[WARN] [archive] $msg")
         }
         if (extractedFiles.isNotEmpty()) {

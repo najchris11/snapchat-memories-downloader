@@ -190,9 +190,9 @@
     <string name="set_general_title">General Settings</string>
     <string name="set_theme_label">Application Theme</string>
     <string name="set_advanced_title">Advanced Tools</string>
-    <string name="set_reset_index_label">Reset Local Index</string>
-    <string name="set_reset_index_desc">Clears vault_index.json so the next download re-processes all memories from scratch. Favorites are kept.</string>
-    <string name="set_reset_index_btn">Reset Download Index</string>
+    <string name="set_reset_index_label">Clear Library Badges</string>
+    <string name="set_reset_index_desc">Forgets the GPS and Combined badges recorded for this folder, until a sync records them again. Favorites are kept. No files are changed, downloaded or processed.</string>
+    <string name="set_reset_index_btn">Clear Badges</string>
     <string name="close_unsaved_title">Favorites still saving</string>
     <plurals name="close_unsaved_body">
         <item quantity="one">%1$d favorite has not been saved yet. It exists nowhere else — quitting now will lose it.</item>

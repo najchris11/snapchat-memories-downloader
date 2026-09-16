@@ -1,6 +1,10 @@
 package com.najdev.snapvault.viewmodel
 
 import com.najdev.snapvault.ImportMode
+import com.najdev.snapvault.OutputDirectoryInUseException
+import com.najdev.snapvault.OutputDirectoryLock
+import com.najdev.snapvault.OutputDirectoryLocker
+import com.najdev.snapvault.UnenforcedOutputDirectoryLocker
 import com.najdev.snapvault.VaultIndex
 import com.najdev.snapvault.model.FileMeta
 import com.najdev.snapvault.PlatformPickers
@@ -164,6 +168,7 @@ class DashboardViewModelTest {
             mediaProcessor = FakeMediaProcessor(),
             fileSystem = fs,
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+            outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
         )
         viewModel.changeImportMode(ImportMode.Legacy)
         viewModel.pickHtmlFile()
@@ -316,6 +321,7 @@ class DashboardViewModelTest {
             mediaProcessor = FakeMediaProcessor(),
             fileSystem = fs,
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+            outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
         )
 
         assertTrue(viewModel.isRiffMislabeledAsPng("/out/overlay.png"))
@@ -340,6 +346,7 @@ class DashboardViewModelTest {
             mediaProcessor = FakeMediaProcessor(),
             fileSystem = fs,
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+            outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
         )
         viewModel.changeImportMode(ImportMode.Legacy)
         viewModel.pickHtmlFile()
@@ -391,6 +398,7 @@ class DashboardViewModelTest {
             mediaProcessor = FakeMediaProcessor(),
             fileSystem = fs,
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+            outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
         )
         viewModel.changeImportMode(ImportMode.Legacy)
         viewModel.pickHtmlFile()
@@ -434,6 +442,7 @@ class DashboardViewModelTest {
             mediaProcessor = FakeMediaProcessor(),
             fileSystem = fs,
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+            outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
         )
         viewModel.pickOutputFolder()
 
@@ -460,6 +469,7 @@ class DashboardViewModelTest {
             mediaProcessor = FakeMediaProcessor(),
             fileSystem = fs,
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+            outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
         )
         viewModel.pickOutputFolder()
 
@@ -492,6 +502,7 @@ class DashboardViewModelTest {
             mediaProcessor = FakeMediaProcessor(),
             fileSystem = fs,
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+            outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
         )
         viewModel.changeImportMode(ImportMode.Legacy)
         viewModel.pickHtmlFile()
@@ -512,5 +523,139 @@ class DashboardViewModelTest {
             VaultIndex.read(fs, "/out")["kept.jpg"]?.favorited,
             "the run wrote its own map over the index and took the favorite with it",
         )
+    }
+
+    // ── D07: one writer per output directory ─────────────────────────────────
+
+    // A refused run must be refused before it touches anything. The point of the lock is that
+    // the second window does no work at all, so the runner erroring is the assertion.
+    private class NeverRunZipPipelineRunner : ZipPipelineRunner {
+        override fun listZipFiles(folderPath: String): List<String> =
+            error("a refused run must not reach the pipeline")
+
+        override suspend fun extractAll(
+            itemsByZip: Map<String, List<HtmlMemoryEntry>>,
+            outputDir: String,
+            workerCount: Int,
+            onProgress: (ExtractResult) -> Unit,
+        ) = error("a refused run must not reach the pipeline")
+
+        override suspend fun extractDownloadedArchives(
+            outputDir: String,
+            archivePaths: List<String>,
+            onWarn: (String) -> Unit,
+        ): List<String> = error("a refused run must not reach the pipeline")
+
+        override suspend fun combineAll(
+            outputDir: String,
+            deleteOriginals: Boolean,
+            workerCount: Int,
+            onStart: (total: Int) -> Unit,
+            onMetaStart: (total: Int) -> Unit,
+            onMetaError: ((String) -> Unit)?,
+            onProgress: (CombineResult) -> Unit,
+        ) = error("a refused run must not reach the pipeline")
+    }
+
+    private class RefusingOutputDirectoryLocker : OutputDirectoryLocker {
+        override fun lock(folder: String, onWarn: (String) -> Unit): OutputDirectoryLock =
+            throw OutputDirectoryInUseException(folder)
+    }
+
+    private class RecordingOutputDirectoryLocker : OutputDirectoryLocker {
+        var locked: String? = null
+            private set
+
+        @Volatile
+        var released = false
+            private set
+
+        override fun lock(folder: String, onWarn: (String) -> Unit): OutputDirectoryLock {
+            locked = folder
+            return object : OutputDirectoryLock {
+                override fun release() {
+                    released = true
+                }
+            }
+        }
+    }
+
+    private fun lockingViewModel(
+        runner: ZipPipelineRunner,
+        locker: OutputDirectoryLocker,
+    ): DashboardViewModel {
+        val fs = FakeFileSystem()
+        fs.createDirectories("/out".toPath())
+        fs.write("/history.json".toPath()) { writeUtf8(historyJson) }
+        return DashboardViewModel(
+            zipPipelineRunner = runner,
+            mediaProcessor = FakeMediaProcessor(),
+            fileSystem = fs,
+            pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+            outputDirectoryLocker = locker,
+        ).also {
+            it.changeImportMode(ImportMode.Legacy)
+            it.pickHtmlFile()
+            it.pickOutputFolder()
+        }
+    }
+
+    private fun DashboardViewModel.start() = startSync(
+        runDownload = false,
+        runMetadata = false,
+        experimentalMetadataMatching = false,
+        runCombine = true,
+        runDedupe = false,
+        dryRun = false,
+    )
+
+    // D07: two SnapVault windows on one library share no lock, semaphore or mutex — every
+    // guard the app has is process-local. The second run has to stop at the door, and say why
+    // in words a user can act on rather than failing somewhere deep in the pipeline.
+    @Test
+    fun aRunIsRefusedWhileAnotherWindowHoldsTheOutputDirectory() {
+        val viewModel = lockingViewModel(NeverRunZipPipelineRunner(), RefusingOutputDirectoryLocker())
+
+        viewModel.start()
+        awaitCompletion(viewModel)
+
+        assertEquals("Failed", viewModel.progressText)
+        assertEquals(0, viewModel.currentStep)
+        assertFalse(viewModel.isRunning)
+        assertTrue(
+            viewModel.logs.last().contains("already being updated"),
+            "the refusal must name its reason, was: ${viewModel.logs.last()}",
+        )
+    }
+
+    // A lock held past the end of a run is a library the user can never sync again — and the
+    // one that never gets released is the one whose run failed, so the release cannot live on
+    // the success path.
+    @Test
+    fun theOutputDirectoryIsReleasedWhenTheRunEnds() {
+        val locker = RecordingOutputDirectoryLocker()
+        val viewModel = lockingViewModel(FakeZipPipelineRunner(emptyList()), locker)
+
+        viewModel.start()
+        awaitCompletion(viewModel)
+
+        assertEquals("/out", locker.locked, "the run must claim the directory it writes")
+        assertTrue(locker.released, "a finished run must hand the directory back")
+    }
+
+    // Stopping is the most likely way a long run ends, so it is the path most likely to strand
+    // the lock. Cancellation unwinds through `finally`, which is why the release belongs there.
+    @Test
+    fun theOutputDirectoryIsReleasedWhenTheRunIsCancelled() {
+        val startedSignal = CompletableDeferred<Unit>()
+        val locker = RecordingOutputDirectoryLocker()
+        val viewModel = lockingViewModel(HangingZipPipelineRunner(startedSignal), locker)
+
+        viewModel.start()
+        runBlocking { withTimeout(5_000) { startedSignal.await() } }
+        viewModel.stopSync()
+        awaitCompletion(viewModel)
+
+        assertTrue(locker.released, "a cancelled run must hand the directory back too")
     }
 }

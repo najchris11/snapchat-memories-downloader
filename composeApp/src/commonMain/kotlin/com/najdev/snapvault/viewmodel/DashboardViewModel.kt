@@ -29,6 +29,10 @@ class DashboardViewModel(
     private val mediaProcessor: MediaProcessor,
     private val fileSystem: FileSystem,
     private val pickers: PlatformPickers,
+    // Injected rather than reached for statically so a test can drive the "another window
+    // already has this library" branch without needing a second process — and so the tests
+    // that run against a FakeFileSystem path never touch a real directory to lock it.
+    private val outputDirectoryLocker: OutputDirectoryLocker = platformOutputDirectoryLocker,
 ) {
     // ── Input selection state ────────────────────────────────────────────────
     var htmlFile by mutableStateOf<String?>(null)
@@ -265,18 +269,33 @@ class DashboardViewModel(
         thisJob = scope.launch {
             try {
                 val outDir = downloadFolder ?: throw PipelineAbortException("No output folder selected.")
-                if (importMode == ImportMode.Zip) {
-                    runZipPipeline(
-                        outDir,
-                        runMetadata,
-                        experimentalMetadataMatching,
-                        runCombine,
-                        runDedupe,
-                        dryRun,
-                        workerCount,
-                    )
-                } else {
-                    runLegacyPipeline(outDir, runDownload, runMetadata, runCombine, runDedupe, dryRun, workerCount)
+                // Claimed before any work starts, so a second window is turned away at the
+                // door rather than halfway through rewriting the same files (D07). Every
+                // other guard in the app — the extractor's move lock, the FFmpeg semaphore,
+                // VaultIndex's mutex — only arbitrates within one process.
+                val directoryLock = try {
+                    withContext(ioDispatcher) { outputDirectoryLocker.lock(outDir) { log("[WARN] $it") } }
+                } catch (e: OutputDirectoryInUseException) {
+                    throw PipelineAbortException(e.message ?: "This library is already being updated.")
+                }
+                try {
+                    if (importMode == ImportMode.Zip) {
+                        runZipPipeline(
+                            outDir,
+                            runMetadata,
+                            experimentalMetadataMatching,
+                            runCombine,
+                            runDedupe,
+                            dryRun,
+                            workerCount,
+                        )
+                    } else {
+                        runLegacyPipeline(outDir, runDownload, runMetadata, runCombine, runDedupe, dryRun, workerCount)
+                    }
+                } finally {
+                    // A lock held past the end of a run is a library that can never be synced
+                    // again, so this has to survive cancellation as well as failure.
+                    directoryLock.release()
                 }
                 progress = 1.0f
                 indeterminate = false

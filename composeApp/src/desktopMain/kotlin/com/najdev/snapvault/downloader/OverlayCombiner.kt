@@ -20,7 +20,21 @@ import java.awt.image.BufferedImage
 import java.io.File
 import javax.imageio.ImageIO
 
-class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
+/**
+ * Outcome of copying the original's metadata onto the combined output. `Unavailable` and
+ * `Failed` are deliberately different: with no exiftool on the machine there was never any
+ * metadata to move, and combineAll's date-only fallback covers it, but a copy that ran and
+ * failed means the original still holds capture data the combined file does not — deleting
+ * it would destroy the only copy.
+ */
+enum class MetadataCopy { Copied, Unavailable, Failed }
+
+class OverlayCombiner(
+    private val mediaProcessor: MediaProcessor,
+    // Seam: the copy shells out to exiftool, which a test cannot make fail on demand.
+    // Deleting the originals is gated on this result, so it has to be forceable.
+    private val copyMetadata: (source: String, dest: String) -> MetadataCopy = ::copyExifWithExiftool,
+) {
 
     // ffmpeg spawns multi-threaded processes that saturate the CPU on their own;
     // serialize them so only one runs at a time regardless of workerCount.
@@ -85,6 +99,7 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
     ) {
         val pairs = findPairs(outputDir)
         onStart(pairs.size)
+        val staging = openStaging(File(outputDir))
         val channel = Channel<CombineResult>(Channel.UNLIMITED)
         val semaphore = Semaphore(workerCount)
         // needsDateFallback is the subset of successful pairs whose combined output still has
@@ -106,7 +121,7 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
                         // Warnings are collected per-pair and shipped inside the result so the
                         // single channel consumer is the only thread touching caller state.
                         val warnings = mutableListOf<String>()
-                        val status = processPair(pair, deleteOriginals) { msg -> warnings.add("[combine] $msg") }
+                        val status = processPair(pair, deleteOriginals, staging) { msg -> warnings.add("[combine] $msg") }
                         if (status == "combined" && !hasDateTag(pair.outputFile.absolutePath, pair.isVideo)) {
                             synchronized(lock) { needsDateFallback.add(pair) }
                         }
@@ -140,9 +155,30 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
                 }
             }
         }
+
+        closeStaging(staging)
     }
 
-    private suspend fun processPair(pair: OverlayPair, deleteOriginals: Boolean, onWarning: (String) -> Unit = {}): String {
+    private suspend fun processPair(
+        pair: OverlayPair,
+        deleteOriginals: Boolean,
+        staging: File,
+        onWarning: (String) -> Unit = {},
+    ): String {
+        // An output that already exists is either a previous run's result or a combined
+        // file the user has since edited. Neither is ours to overwrite (D02), and finding
+        // one is not a reason to delete the originals.
+        if (pair.outputFile.exists()) {
+            onWarning("output already exists, pair left alone: ${pair.outputFile.name}")
+            return "skipped: output already exists"
+        }
+
+        // Everything is built in our staging directory and committed only once it is
+        // verified. The encoder never sees the final path, so a killed ffmpeg cannot leave
+        // a truncated file where MediaScanner will index it as a finished memory.
+        val staged = File(staging, pair.outputFile.name)
+        staged.delete()
+
         return try {
             // runInterruptible lets pipeline cancellation interrupt the blocking ffmpeg/ImageIO
             // work; the process helpers kill the child on interrupt (see waitForOrKill).
@@ -152,18 +188,18 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
                         if (mediaProcessor.combineVideoWithOverlay(
                                 pair.mainFile.absolutePath,
                                 pair.overlayFile.absolutePath,
-                                pair.outputFile.absolutePath
+                                staged.absolutePath
                             )
                         ) null else "video combine failed"
                     }
                 }
             } else {
                 // Two-tier: ImageIO (fast, handles JPG/PNG) → FFmpeg (universal fallback)
-                val imageIoErr = runInterruptible { combineImages(pair.mainFile, pair.overlayFile, pair.outputFile) }
+                val imageIoErr = runInterruptible { combineImages(pair.mainFile, pair.overlayFile, staged) }
                 imageIoErr?.let {
                     ffmpegSemaphore.withPermit {
                         runInterruptible {
-                            combineImagesFfmpeg(pair.mainFile, pair.overlayFile, pair.outputFile)
+                            combineImagesFfmpeg(pair.mainFile, pair.overlayFile, staged)
                         }
                     }
                 }
@@ -172,20 +208,38 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
             if (err != null) return if (err.startsWith("skipped:")) err else "error: $err"
 
             // Verify output was actually written before destroying originals
-            if (!pair.outputFile.exists() || pair.outputFile.length() == 0L) {
+            if (!staged.exists() || staged.length() == 0L) {
                 return "error: output missing after combine — ${pair.outputFile.name}"
             }
 
             // Preserve the original's metadata on the combined image (the video path does
             // this inside combineVideoWithOverlay); must happen before originals are deleted.
+            var metadataFailed = false
             if (!pair.isVideo) {
-                val copied = runInterruptible { copyExif(pair.mainFile.absolutePath, pair.outputFile.absolutePath) }
-                if (!copied) onWarning("could not copy metadata onto combined output: ${pair.outputFile.name}")
+                when (runInterruptible { copyExif(pair.mainFile.absolutePath, staged.absolutePath) }) {
+                    // Nothing was at risk: with no exiftool there was never any metadata to
+                    // move, and combineAll's date-only fallback covers the result.
+                    MetadataCopy.Copied, MetadataCopy.Unavailable -> {}
+                    MetadataCopy.Failed -> {
+                        metadataFailed = true
+                        onWarning("could not copy metadata onto combined output: ${pair.outputFile.name}")
+                    }
+                }
+            }
+
+            if (!commit(staged, pair.outputFile)) {
+                return "error: could not move combined output into place — ${pair.outputFile.name}"
             }
 
             if (deleteOriginals) {
-                if (!pair.mainFile.delete()) onWarning("could not delete main: ${pair.mainFile.name}")
-                if (!pair.overlayFile.delete()) onWarning("could not delete overlay: ${pair.overlayFile.name}")
+                if (metadataFailed) {
+                    // The originals hold capture data the combined file now lacks, and it
+                    // exists nowhere else. Losing it was D02.
+                    onWarning("originals kept: metadata could not be copied onto ${pair.outputFile.name}")
+                } else {
+                    if (!pair.mainFile.delete()) onWarning("could not delete main: ${pair.mainFile.name}")
+                    if (!pair.overlayFile.delete()) onWarning("could not delete overlay: ${pair.overlayFile.name}")
+                }
             }
 
             "combined"
@@ -193,8 +247,16 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
             throw e
         } catch (e: Exception) {
             "error: ${e.message}"
+        } finally {
+            // No-op after a successful commit; clears the partial file on every other path.
+            staged.delete()
         }
     }
+
+    // Re-checks the destination rather than trusting the check at the top of processPair:
+    // pairs are combined concurrently, and a same-named output can appear in between.
+    private fun commit(staged: File, dest: File): Boolean =
+        !dest.exists() && staged.renameTo(dest)
 
     // Returns null on success or a reason string on failure.
     private fun combineImages(mainFile: File, overlayFile: File, outputFile: File): String? {
@@ -273,21 +335,8 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
     // before waiting on the process, matching the guard already applied to every other
     // exiftool invocation in the codebase (the pipe otherwise fills and waitFor() blocks
     // forever on verbose output).
-    private fun copyExif(sourcePath: String, destPath: String): Boolean {
-        val exiftoolPath = BinaryExtractor.checkCommand("exiftool") ?: return false
-        return try {
-            val proc = ProcessBuilder(
-                exiftoolPath, "-overwrite_original", "-q",
-                "-TagsFromFile", sourcePath, "-all:all", destPath
-            ).redirectErrorStream(true).start()
-            proc.inputStream.bufferedReader().readText()
-            proc.waitForOrKill() == 0
-        } catch (e: InterruptedException) {
-            throw e
-        } catch (_: Exception) {
-            false
-        }
-    }
+    private fun copyExif(sourcePath: String, destPath: String): MetadataCopy =
+        copyMetadata(sourcePath, destPath)
 
     // A combined output already has a real capture timestamp when copyExif (images) or the
     // TagsFromFile copy inside combineVideoWithOverlay (videos) propagated one from the
@@ -314,5 +363,24 @@ class OverlayCombiner(private val mediaProcessor: MediaProcessor) {
         if (afterDate.isEmpty()) return null
         return afterDate.substringBefore("-main").substringBefore("-overlay")
             .takeIf { it.isNotEmpty() }
+    }
+}
+
+// Drains stdout/stderr before waiting on the process, matching the guard already applied to
+// every other exiftool invocation in the codebase (the pipe otherwise fills and waitFor()
+// blocks forever on verbose output).
+private fun copyExifWithExiftool(sourcePath: String, destPath: String): MetadataCopy {
+    val exiftoolPath = BinaryExtractor.checkCommand("exiftool") ?: return MetadataCopy.Unavailable
+    return try {
+        val proc = ProcessBuilder(
+            exiftoolPath, "-overwrite_original", "-q",
+            "-TagsFromFile", sourcePath, "-all:all", destPath
+        ).redirectErrorStream(true).start()
+        proc.inputStream.bufferedReader().readText()
+        if (proc.waitForOrKill() == 0) MetadataCopy.Copied else MetadataCopy.Failed
+    } catch (e: InterruptedException) {
+        throw e
+    } catch (_: Exception) {
+        MetadataCopy.Failed
     }
 }

@@ -45,10 +45,16 @@ class OverlayCombinerTest {
         return f
     }
 
-    private fun combineAll(processor: MediaProcessor, deleteOriginals: Boolean = true): List<CombineResult> {
+    private fun combineAll(
+        processor: MediaProcessor,
+        deleteOriginals: Boolean = true,
+        // Default mirrors a machine where exiftool is present and the copy works, so the
+        // deletion tests below do not silently depend on what is installed.
+        copyMetadata: (String, String) -> MetadataCopy = { _, _ -> MetadataCopy.Copied },
+    ): List<CombineResult> {
         val results = mutableListOf<CombineResult>()
         runBlocking {
-            OverlayCombiner(processor).combineAll(
+            OverlayCombiner(processor, copyMetadata).combineAll(
                 dir.absolutePath,
                 deleteOriginals = deleteOriginals,
                 workerCount = 2,
@@ -142,6 +148,80 @@ class OverlayCombinerTest {
 
         assertTrue(main.exists() && overlay.exists())
         assertTrue(File(dir, "2023-10-12_AAA.png").exists())
+    }
+
+    // Regression (D02): ImageIO wrote straight to the final path and ffmpeg ran with -y,
+    // so a re-import silently overwrote a combined file the user had already edited — and
+    // the originals were deleted afterwards, leaving no way back.
+    @Test
+    fun existingCombinedOutputIsNeverOverwritten() {
+        val main = writePng("2023-10-12_AAA-main.png", 8, 8)
+        val overlay = writePng("2023-10-12_AAA-overlay.png", 4, 4)
+        val edited = File(dir, "2023-10-12_AAA.png").apply { writeText("the user's edited combined image") }
+        val before = edited.readBytes()
+
+        val results = combineAll(FakeProcessor())
+
+        assertEquals(before.toList(), edited.readBytes().toList(), "existing output must survive untouched")
+        assertTrue(main.exists() && overlay.exists(), "a conflict must not cost the originals either")
+        assertTrue(
+            results.single().status.let { it.startsWith("skipped") || it.startsWith("error") },
+            "a conflict must be reported, not counted as a clean combine: ${results.single().status}",
+        )
+    }
+
+    // Regression (D02): the combiner handed the processor the final output path, so a
+    // combine that died partway through — a killed ffmpeg — left a truncated file exactly
+    // where the library scans for finished media.
+    @Test
+    fun failedCombineLeavesNoPartialFileAtTheOutputPath() {
+        val main = File(dir, "2023-10-12_VVV-main.mp4").apply { writeBytes(byteArrayOf(1)) }
+        val overlay = writePng("2023-10-12_VVV-overlay.png")
+
+        val results = combineAll(FakeProcessor(onVideoCombine = { out ->
+            File(out).writeBytes(byteArrayOf(9)) // partial write, then failure
+            false
+        }))
+
+        assertTrue(results.single().status.startsWith("error"), "status: ${results.single().status}")
+        assertTrue(
+            !File(dir, "2023-10-12_VVV.mp4").exists(),
+            "a truncated combine must not be left where MediaScanner will index it as a finished memory",
+        )
+        assertTrue(main.exists() && overlay.exists(), "originals must survive")
+    }
+
+    // Regression (D02): a failed metadata copy only logged a warning and the originals were
+    // deleted anyway, so the capture time that existed nowhere else went with them.
+    @Test
+    fun originalsSurviveWhenMetadataCopyFails() {
+        val main = writePng("2023-10-12_AAA-main.png", 8, 8)
+        val overlay = writePng("2023-10-12_AAA-overlay.png", 4, 4)
+
+        val results = combineAll(FakeProcessor(), copyMetadata = { _, _ -> MetadataCopy.Failed })
+
+        assertTrue(
+            main.exists() && overlay.exists(),
+            "the original still holds metadata the combined file does not — it is the only copy",
+        )
+        assertTrue(
+            results.single().warnings.any { "metadata" in it.lowercase() },
+            "the reason the originals were kept must reach the user: ${results.single().warnings}",
+        )
+    }
+
+    // The counterpart: with no exiftool on the machine there was never any metadata to
+    // move, and combineAll's date-only fallback covers it. That must not be treated as a
+    // failure, or an ordinary run on a machine without exiftool would stop cleaning up.
+    @Test
+    fun unavailableMetadataToolStillAllowsCleanup() {
+        val main = writePng("2023-10-12_AAA-main.png", 8, 8)
+        val overlay = writePng("2023-10-12_AAA-overlay.png", 4, 4)
+
+        val results = combineAll(FakeProcessor(), copyMetadata = { _, _ -> MetadataCopy.Unavailable })
+
+        assertEquals(listOf("combined"), results.map { it.status })
+        assertTrue(!main.exists() && !overlay.exists(), "no metadata was ever at risk, so cleanup proceeds")
     }
 
     // ── BUG-01 regression: combine must not clobber a precise capture time ──

@@ -75,7 +75,7 @@ class ZipExtractEngine {
             channel.close()
         }
 
-        staging.delete() // no-op unless every staged file was moved into place
+        closeStaging(staging)
     }
 
     // Legacy pipeline: extracts each downloaded memory archive flat into outputDir with
@@ -169,7 +169,7 @@ class ZipExtractEngine {
                 onWarn("could not extract ${archive.name}: ${e.message}")
             }
         }
-        staging.delete() // no-op unless every staged file was moved into place
+        closeStaging(staging)
         extracted
     }
 
@@ -235,19 +235,7 @@ class ZipExtractEngine {
         }
     }
 
-    // In-progress extractions are staged in a directory of our own rather than beside the
-    // user's files. Cleanup used to delete every *.part in the destination, which treated
-    // a browser's in-flight download — or another SnapVault instance's live staging file —
-    // as ours to remove (D03). An extension is not proof of ownership; the directory is.
-    private fun openStaging(outDir: File): File {
-        val staging = File(outDir, STAGING_DIR_NAME).also { it.mkdirs() }
-        // Leftovers here are unambiguously ours, from a run that crashed mid-copy.
-        staging.listFiles { f -> f.isFile && f.name.endsWith(PART_SUFFIX) }?.forEach { it.delete() }
-        return staging
-    }
-
     private companion object {
         const val PART_SUFFIX = ".part"
-        const val STAGING_DIR_NAME = ".snapvault-staging"
     }
 }

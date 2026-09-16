@@ -21,11 +21,18 @@ import java.io.File
 import javax.imageio.ImageIO
 
 /**
- * Outcome of copying the original's metadata onto the combined output. `Unavailable` and
- * `Failed` are deliberately different: with no exiftool on the machine there was never any
- * metadata to move, and combineAll's date-only fallback covers it, but a copy that ran and
- * failed means the original still holds capture data the combined file does not — deleting
- * it would destroy the only copy.
+ * Outcome of copying the original's metadata onto the combined output.
+ *
+ * Only [Copied] clears the originals for deletion. The combined file is a fresh encode, so
+ * whatever the export embedded in the original lives on the original and nowhere else until
+ * this copy lands.
+ *
+ * [Unavailable] and [Failed] differ only in what the user should do about it, not in how
+ * they are treated. It is tempting to read "no exiftool" as "there was never any metadata to
+ * move" — it is not. Missing exiftool means no way to find out *and* no way to repair it:
+ * combineAll's date-only fallback ends at `writeDateMetadata`, which needs the same absent
+ * tool, so the combined file ends up carrying nothing at all. Nothing in the app prevents
+ * that run from starting either; a missing binary is a warning banner, not a blocked Start.
  */
 enum class MetadataCopy { Copied, Unavailable, Failed }
 
@@ -214,15 +221,26 @@ class OverlayCombiner(
 
             // Preserve the original's metadata on the combined image (the video path does
             // this inside combineVideoWithOverlay); must happen before originals are deleted.
-            var metadataFailed = false
+            // Cleanup is gated on the metadata having demonstrably made it across, not on
+            // the combine alone. The combined file is a fresh encode: whatever the export
+            // embedded in the original is on the original and nowhere else until this copy
+            // succeeds. Videos are exempt because combineVideoWithOverlay copies the tags
+            // itself, which is why copyExif is image-only.
+            var metadataMissing = false
             if (!pair.isVideo) {
                 when (runInterruptible { copyExif(pair.mainFile.absolutePath, staged.absolutePath) }) {
-                    // Nothing was at risk: with no exiftool there was never any metadata to
-                    // move, and combineAll's date-only fallback covers the result.
-                    MetadataCopy.Copied, MetadataCopy.Unavailable -> {}
+                    MetadataCopy.Copied -> {}
                     MetadataCopy.Failed -> {
-                        metadataFailed = true
+                        metadataMissing = true
                         onWarning("could not copy metadata onto combined output: ${pair.outputFile.name}")
+                    }
+                    // No exiftool is not "nothing to copy" — it is "no way to find out, and
+                    // no way to repair it either". combineAll's date-only fallback bottoms
+                    // out in writeDateMetadata, which needs the same missing tool, so the
+                    // combined file ends up with no metadata at all.
+                    MetadataCopy.Unavailable -> {
+                        metadataMissing = true
+                        onWarning("no metadata tool available to carry tags onto ${pair.outputFile.name}")
                     }
                 }
             }
@@ -232,10 +250,10 @@ class OverlayCombiner(
             }
 
             if (deleteOriginals) {
-                if (metadataFailed) {
+                if (metadataMissing) {
                     // The originals hold capture data the combined file now lacks, and it
                     // exists nowhere else. Losing it was D02.
-                    onWarning("originals kept: metadata could not be copied onto ${pair.outputFile.name}")
+                    onWarning("originals kept: metadata is not on ${pair.outputFile.name}")
                 } else {
                     if (!pair.mainFile.delete()) onWarning("could not delete main: ${pair.mainFile.name}")
                     if (!pair.overlayFile.delete()) onWarning("could not delete overlay: ${pair.overlayFile.name}")

@@ -26,8 +26,7 @@ actual fun saveThemeModePreference(mode: ThemeMode) {
     prefs.put("themeMode", mode.name)
 }
 
-actual fun computeWorkerCount(): Int =
-    (Runtime.getRuntime().availableProcessors() * 0.75).toInt().coerceAtLeast(1)
+actual fun computeWorkerCount(): Int = workerCountFor(Runtime.getRuntime().availableProcessors())
 
 actual fun loadLayoutOverride(): LayoutOverride {
     val name = prefs.get("layoutOverride", LayoutOverride.Auto.name)

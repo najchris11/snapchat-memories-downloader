@@ -11,6 +11,8 @@ import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.v2.runComposeUiTest
 import com.najdev.snapvault.WindowSize
+import com.najdev.snapvault.viewmodel.DEFAULT_DRY_RUN
+import com.najdev.snapvault.viewmodel.DEFAULT_PIPELINE_EXPANDED
 import com.najdev.snapvault.ui.theme.SnapVaultColors
 import com.najdev.snapvault.ui.theme.SnapVaultTheme
 import kotlin.test.Test

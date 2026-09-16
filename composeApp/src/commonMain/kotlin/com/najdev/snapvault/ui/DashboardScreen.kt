@@ -45,23 +45,10 @@ import com.najdev.snapvault.isAndroidBuild
 import com.najdev.snapvault.ui.theme.LogColors
 import com.najdev.snapvault.ui.theme.SnapVaultColors
 import com.najdev.snapvault.viewmodel.DashboardViewModel
+import com.najdev.snapvault.viewmodel.PipelineOptions
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import snapchat_memories_downloader.composeapp.generated.resources.*
-
-// Pipeline option defaults, named rather than inlined so they can be asserted. The N1
-// blocker was a combination of three of these — a destructive step enabled, its preview
-// off, and the whole card collapsed — and nothing would have caught a silent flip back.
-internal const val DEFAULT_RUN_DOWNLOAD = true
-internal const val DEFAULT_RUN_METADATA = true
-internal const val DEFAULT_PRECISE_MATCHING = true
-internal const val DEFAULT_RUN_COMBINE = true
-internal const val DEFAULT_RUN_DEDUPE = true
-
-// Deletion is an explicit opt-out: preview on, and the card open so the enabled steps are
-// visible before Start is pressed.
-internal const val DEFAULT_DRY_RUN = true
-internal const val DEFAULT_PIPELINE_EXPANDED = true
 
 internal fun usesCompactDashboardLayout(windowSize: WindowSize): Boolean =
     windowSize != WindowSize.Expanded
@@ -69,19 +56,6 @@ internal fun usesCompactDashboardLayout(windowSize: WindowSize): Boolean =
 // Both steppers count to this. It was a literal 4 in the compact layout and four hand-written
 // call sites in the expanded one, which is how they were free to disagree.
 internal const val DASHBOARD_STEP_COUNT = 4
-
-// Option state lives in one holder rather than seven loose `var`s, so the controls, the
-// action row and the status panel can be separate composables that the two layouts compose
-// in a different order.
-internal class PipelineOptions {
-    var runDownload by mutableStateOf(DEFAULT_RUN_DOWNLOAD)
-    var runMetadata by mutableStateOf(DEFAULT_RUN_METADATA)
-    var preciseMatching by mutableStateOf(DEFAULT_PRECISE_MATCHING)
-    var runCombine by mutableStateOf(DEFAULT_RUN_COMBINE)
-    var runDedupe by mutableStateOf(DEFAULT_RUN_DEDUPE)
-    var dryRun by mutableStateOf(DEFAULT_DRY_RUN)
-    var expanded by mutableStateOf(DEFAULT_PIPELINE_EXPANDED)
-}
 
 @Composable
 fun DashboardScreen(
@@ -91,7 +65,10 @@ fun DashboardScreen(
     hasFFmpeg: Boolean = true,
     windowSize: WindowSize = WindowSize.Expanded,
 ) {
-    val options = remember { PipelineOptions() }
+    // Owned by the view model, not remembered here: this composable leaves composition every
+    // time the user visits another screen or crosses a layout boundary, and remembered state
+    // leaves with it (D22).
+    val options = viewModel.pipelineOptions
 
     if (usesCompactDashboardLayout(windowSize)) {
         // One scrolling column. Compact cannot fit the two panels, and Medium retains the
@@ -411,7 +388,7 @@ private fun DashboardActions(
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Button(
-            onClick = { viewModel.startSync(options.runDownload, options.runMetadata, options.preciseMatching, options.runCombine, options.runDedupe, options.dryRun) },
+            onClick = { viewModel.startSync() },
             enabled = !viewModel.isRunning && canStart,
             modifier = Modifier.weight(1f).height(52.dp),
             shape = RoundedCornerShape(10.dp),

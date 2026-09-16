@@ -240,6 +240,15 @@ class DashboardViewModel(
     }
 
     // ── Pipeline control ─────────────────────────────────────────────────────
+
+    /** The switches for the next run. See [PipelineOptions] for why they live here. */
+    internal val pipelineOptions = PipelineOptions()
+
+    /** Starts a run with the current [pipelineOptions], captured now. */
+    fun startSync() = with(pipelineOptions) {
+        startSync(runDownload, runMetadata, preciseMatching, runCombine, runDedupe, dryRun)
+    }
+
     fun startSync(
         runDownload: Boolean,
         runMetadata: Boolean,

@@ -3,7 +3,7 @@ package com.najdev.snapvault.downloader
 import com.najdev.snapvault.BinaryExtractor
 import com.najdev.snapvault.metadata.MediaProcessor
 import com.najdev.snapvault.metadata.SupportedMediaExtensions
-import com.najdev.snapvault.waitForOrKill
+import com.najdev.snapvault.runCommand
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -188,7 +188,7 @@ class OverlayCombiner(
 
         return try {
             // runInterruptible lets pipeline cancellation interrupt the blocking ffmpeg/ImageIO
-            // work; the process helpers kill the child on interrupt (see waitForOrKill).
+            // work; the process helpers kill the child on interrupt (see ProcessUtil).
             val err = if (pair.isVideo) {
                 ffmpegSemaphore.withPermit {
                     runInterruptible {
@@ -322,9 +322,7 @@ class OverlayCombiner(
             outputFile.absolutePath
         )
         return try {
-            val proc = ProcessBuilder(args).redirectErrorStream(true).start()
-            val output = proc.inputStream.bufferedReader().readText()
-            val exitCode = proc.waitForOrKill()
+            val (exitCode, output) = runCommand(args)
             if (exitCode == 0) null
             else "ffmpeg exit $exitCode${if (output.isNotBlank()) ": ${output.takeLast(120)}" else ""}"
         } catch (e: InterruptedException) {
@@ -366,11 +364,11 @@ class OverlayCombiner(
         val exiftoolPath = BinaryExtractor.checkCommand("exiftool") ?: return false
         val tag = if (isVideo) "-CreateDate" else "-DateTimeOriginal"
         return try {
-            val proc = ProcessBuilder(exiftoolPath, "-s3", tag, filePath)
-                .redirectErrorStream(true)
-                .start()
-            val output = proc.inputStream.bufferedReader().readText()
-            proc.waitForOrKill() == 0 && output.isNotBlank()
+            val (exitCode, output) = runCommand(listOf(exiftoolPath, "-s3", tag, filePath))
+            exitCode == 0 && output.isNotBlank()
+        } catch (e: InterruptedException) {
+            // Swallowing this as "no date tag" would turn Stop into a date-fallback write.
+            throw e
         } catch (_: Exception) {
             false
         }
@@ -384,18 +382,13 @@ class OverlayCombiner(
     }
 }
 
-// Drains stdout/stderr before waiting on the process, matching the guard already applied to
-// every other exiftool invocation in the codebase (the pipe otherwise fills and waitFor()
-// blocks forever on verbose output).
 private fun copyExifWithExiftool(sourcePath: String, destPath: String): MetadataCopy {
     val exiftoolPath = BinaryExtractor.checkCommand("exiftool") ?: return MetadataCopy.Unavailable
     return try {
-        val proc = ProcessBuilder(
-            exiftoolPath, "-overwrite_original", "-q",
-            "-TagsFromFile", sourcePath, "-all:all", destPath
-        ).redirectErrorStream(true).start()
-        proc.inputStream.bufferedReader().readText()
-        if (proc.waitForOrKill() == 0) MetadataCopy.Copied else MetadataCopy.Failed
+        val (exitCode, _) = runCommand(
+            listOf(exiftoolPath, "-overwrite_original", "-q", "-TagsFromFile", sourcePath, "-all:all", destPath),
+        )
+        if (exitCode == 0) MetadataCopy.Copied else MetadataCopy.Failed
     } catch (e: InterruptedException) {
         throw e
     } catch (_: Exception) {

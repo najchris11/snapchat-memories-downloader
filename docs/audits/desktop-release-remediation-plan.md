@@ -348,6 +348,30 @@ memory-exhaustion test must never run against a real host.
 - **Fix direction:** upper-bound worker count; add byte/pixel/entry quotas; switch legacy
   download to Ktor's streaming `prepareGet` pattern if the bounded-memory test proves the
   current buffered path doesn't stream.
+- **Status:** landed — workers capped at 8; a ZIP import is refused before extraction when its
+  declared size plus a 1 GB processing reserve exceeds the usable space in the output folder;
+  downloads stream (moved to `prepareGet(...).execute { }` under D14), pinned by a test in which
+  the server withholds the rest of the body until the first half is on disk.
+- **Deferred:** image-dimension (pixel) limits before decoding in the combiner and thumbnailer
+  (thumbnails still decode the full image, then scale); bounding the per-item coroutine
+  fan-out in extraction and metadata; capping in-memory log growth; streaming the history
+  JSON instead of reading it whole; free-space preflight for the legacy download path, where
+  sizes are unknown until each response arrives.
+
+---
+
+### Open question found during Batch 4 — favorite saves racing an index read on Windows
+- **Found while:** fixing an intermittent `FavoriteWriteTest` failure. okio's FakeFileSystem
+  emulates Windows by refusing to move a file onto one that is open for reading, and the test
+  reproduced exactly that: a favorite save renamed `vault_index.json.tmp` onto the index while
+  another thread was reading it, and the save failed.
+- **Why it may be real:** `VaultIndex.read` is deliberately lock-free (writes are atomic
+  renames), and the Library scans the index while favorites save. On Windows a rename onto an
+  open file can fail where POSIX would succeed. The failure is not silent — the heart reverts
+  and the log says why — but a favorite pressed during a scan would not save.
+- **Not yet verified on Windows.** Next step: reproduce on a Windows machine (scan in a loop
+  while toggling favorites). If real, retry the move briefly, or read the index through a
+  handle opened with delete-sharing.
 
 ---
 

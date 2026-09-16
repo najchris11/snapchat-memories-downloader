@@ -6,6 +6,15 @@ import io.ktor.client.engine.mock.*
 import io.ktor.http.*
 import io.ktor.utils.io.ByteChannel
 import io.ktor.utils.io.writeStringUtf8
+import io.ktor.utils.io.writeFully
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
+import okio.Buffer
+import okio.ForwardingFileSystem
+import okio.ForwardingSink
+import okio.Path
+import okio.Sink
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
@@ -450,6 +459,50 @@ class DownloadEngineTest {
         assertTrue(result.status.startsWith("error"), "was: ${result.status}")
         assertEquals(emptyList(), fs.list("/output".toPath()).map { it.name })
     }
+
+    // D13: a download has to reach disk as it arrives. Executed the plain way, Ktor saves the
+    // whole response in memory before handing it over, so every concurrent worker could be
+    // holding an entire video at once. Here the server sends half the body and will not send
+    // the rest until those bytes are in the partial file — a client that buffers never writes
+    // anything until the end, and this times out.
+    @Test
+    fun aDownloadReachesDiskWhileTheResponseIsStillArriving() = runTest {
+        val chunk = ByteArray(64 * 1024) { 7 }
+        val firstChunkOnDisk = CompletableDeferred<Unit>()
+        val fs = object : ForwardingFileSystem(FakeFileSystem()) {
+            override fun sink(file: Path, mustCreate: Boolean): Sink {
+                val real = super.sink(file, mustCreate)
+                if (!file.name.endsWith(".part")) return real
+                return object : ForwardingSink(real) {
+                    var written = 0L
+                    override fun write(source: Buffer, byteCount: Long) {
+                        super.write(source, byteCount)
+                        written += byteCount
+                        if (written >= chunk.size) firstChunkOnDisk.complete(Unit)
+                    }
+                }
+            }
+        }
+        val body = ByteChannel(autoFlush = true)
+        val client = HttpClient(MockEngine { respond(body, headers = headersOf(HttpHeaders.ContentType, "video/mp4")) })
+
+        val server = launch(Dispatchers.Default) {
+            body.writeFully(chunk)
+            // Real time: the download runs on real threads, which the test scheduler cannot see.
+            withTimeout(10_000) { firstChunkOnDisk.await() }
+            body.writeFully(chunk)
+            body.flushAndClose()
+        }
+        // Stall bound above the server's wait, so a buffering client fails on the server's
+        // timeout rather than on its own.
+        val result = DownloadEngine(client, fs, stallTimeoutMillis = 15_000, ioContext = Dispatchers.Default.limitedParallelism(1))
+            .downloadFile(MemoryItem(id = "vid", url = "https://media.com/v.mp4?mid=vid", isGet = true, dateStr = null), "/output")
+        server.join()
+
+        assertTrue(server.isCompleted && !server.isCancelled, "the server gave up waiting: the body was buffered, not streamed")
+        assertEquals("downloaded", result.status)
+    }
 }
+
 
 private const val JPEG_BYTES = "jpeg-bytes"

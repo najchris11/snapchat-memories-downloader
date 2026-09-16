@@ -77,6 +77,8 @@ class DashboardViewModel(
     // can say how much failed rather than only that something did.
     var failureCount by mutableStateOf(0)
         private set
+    var warningCount by mutableStateOf(0)
+        private set
     // True during a sub-phase that has real work in flight but no per-item signal to report
     // (the post-combine date-fallback batch, dedupe scanning) — the UI shows an animated
     // indeterminate ring instead of a progress value that would otherwise sit at a
@@ -92,6 +94,12 @@ class DashboardViewModel(
     // state can tell "clean success" from "reported success but something failed" apart —
     // see hasWarnings. Reset per run in startSync.
     private var pipelineFailureCount = 0
+
+    // Things that went wrong without a step failing: originals kept because their metadata did
+    // not copy, an archive kept unextracted, export files skipped for an unrecognised name.
+    // Counted apart from failures so the outcome can say "completed with warnings" without
+    // claiming a step failed that did not (D10).
+    private var pipelineWarningCount = 0
 
     private val logLock = SyncLock()
 
@@ -273,8 +281,10 @@ class DashboardViewModel(
         etaText = "ETA: --"
         hasWarnings = false
         failureCount = 0
+        warningCount = 0
         indeterminate = false
         pipelineFailureCount = 0
+        pipelineWarningCount = 0
 
         // Captured so the finally block below can tell whether it's still the current run —
         // job.cancel() flips isActive false immediately, well before the cancelled
@@ -318,11 +328,12 @@ class DashboardViewModel(
                 currentStep = 4
                 speedText = "SPEED: --"
                 etaText = "ETA: --"
-                if (pipelineFailureCount > 0) {
+                if (pipelineFailureCount > 0 || pipelineWarningCount > 0) {
                     hasWarnings = true
                     failureCount = pipelineFailureCount
+                    warningCount = pipelineWarningCount
                     progressText = "Completed with warnings"
-                    log("[WARN] Sync complete — $pipelineFailureCount failure(s) occurred, see warnings above.")
+                    log("[WARN] Sync complete — $pipelineFailureCount failure(s) and $pipelineWarningCount warning(s), see above.")
                 } else {
                     progressText = "Pipeline Complete"
                     log("[SUCCESS] Sync complete!")
@@ -566,9 +577,20 @@ class DashboardViewModel(
             log("[INFO] $zipName: ${entries.size} memories, $parsedFileCount files parsed ($dateRange)")
             if (unmatchedCount > 0) {
                 log("[WARN] $zipName: $unmatchedCount file(s) in memories/ skipped — unexpected filename format. Examples: ${unmatchedSamples.joinToString(", ")}")
+                pipelineWarningCount += unmatchedCount
             }
         }
         log("[INFO] Indexed $totalMemoryCount memories across ${itemsByZip.size} zip(s).")
+
+        // Stop before touching the output folder. Carrying on ran metadata, combination and
+        // dedupe over whatever the folder already held, saved an empty index, and finished at
+        // "Pipeline Complete" — for an import that imported nothing (D10).
+        if (totalMemoryCount == 0) {
+            throw PipelineAbortException(
+                "Found no Snapchat memories in the selected ZIP file(s), so nothing was imported. " +
+                    "Choose the ZIP files from Snapchat's \"Download My Data\" export — their memories are in a memories/ folder.",
+            )
+        }
 
         if (runMetadata && experimentalMetadataMatching) {
             log("[INFO] Precise time + GPS matching is on (default). GPS is only applied where a file's exact capture timestamp uniquely matches a memories_history.json record; ambiguous matches fall back to date-only metadata. Turn the toggle off on the Dashboard to force date-only tags for every file.")
@@ -697,7 +719,12 @@ class DashboardViewModel(
             // exists only on disk. Writing the run's own map would wipe both.
             VaultIndex.writeMerging(fileSystem, outDir, downloadedMeta, derived.favoritesFrom, derived.goneSources)
             log("[INFO] Vault index saved (${downloadedMeta.size} entries).")
-        }.onFailure { e -> log("[WARN] Could not write vault index: ${e.message}") }
+        }.onFailure { e ->
+            // Every badge and favorite this run carried lives in that file; failing to save it
+            // is a failed step, not a footnote under "Sync complete!" (D10).
+            log("[ERROR] Could not write vault index: ${e.message}")
+            pipelineFailureCount++
+        }
 
         val summary = buildString {
             append("[SUCCESS] Done — $totalMemoryCount memories")
@@ -825,6 +852,7 @@ class DashboardViewModel(
             .filter { it.substringAfterLast('.', "").lowercase() == "zip" }
         val extractedFiles = zipPipelineRunner.extractDownloadedArchives(outDir, ownedArchives) { msg ->
             log("[WARN] [archive] $msg")
+            pipelineWarningCount++
         }
         if (extractedFiles.isNotEmpty()) {
             log("[INFO] Extracted ${extractedFiles.size} file(s) from downloaded overlay archives.")
@@ -847,7 +875,12 @@ class DashboardViewModel(
             // exists only on disk. Writing the run's own map would wipe both.
             VaultIndex.writeMerging(fileSystem, outDir, downloadedMeta, derived.favoritesFrom, derived.goneSources)
             log("[INFO] Vault index saved (${downloadedMeta.size} entries).")
-        }.onFailure { e -> log("[WARN] Could not write vault index: ${e.message}") }
+        }.onFailure { e ->
+            // Every badge and favorite this run carried lives in that file; failing to save it
+            // is a failed step, not a footnote under "Sync complete!" (D10).
+            log("[ERROR] Could not write vault index: ${e.message}")
+            pipelineFailureCount++
+        }
     }
 
     private suspend fun writeZipDateMetadata(
@@ -1096,7 +1129,11 @@ class DashboardViewModel(
             outDir,
             deleteOriginals = true,
             workerCount = workerCount,
-            onMetaError = { msg -> log("[WARN] $msg") },
+            onMetaError = { msg ->
+                // A combined file left without its date — a failed write, not a remark.
+                log("[ERROR] $msg")
+                pipelineFailureCount++
+            },
             onStart = { actual ->
                 combineTotal = actual.coerceAtLeast(1)
                 mediaProcessor.resetVideoEncodeStats()
@@ -1125,6 +1162,7 @@ class DashboardViewModel(
             }
         ) { result ->
             result.warnings.forEach { log("[WARN] $it") }
+            pipelineWarningCount += result.warnings.size
             when {
                 result.status == "combined" -> {
                     combinedCount++

@@ -980,4 +980,222 @@ class DashboardViewModelTest {
             "a source still on disk keeps its own entry",
         )
     }
+
+    // ── D10: "complete" has to mean something happened, and say what went wrong ─
+
+    private class OutcomeRunner(
+        private val zips: List<String> = emptyList(),
+        private val archiveWarnings: List<String> = emptyList(),
+        private val combineResults: List<CombineResult> = emptyList(),
+        private val dateFallbackErrors: List<String> = emptyList(),
+    ) : ZipPipelineRunner {
+        @Volatile var extractCalled = false
+        @Volatile var combineCalled = false
+        override fun listZipFiles(folderPath: String): List<String> = zips
+        override suspend fun extractAll(
+            itemsByZip: Map<String, List<HtmlMemoryEntry>>,
+            outputDir: String,
+            workerCount: Int,
+            onProgress: (ExtractResult) -> Unit,
+        ) {
+            extractCalled = true
+        }
+        override suspend fun extractDownloadedArchives(
+            outputDir: String,
+            archivePaths: List<String>,
+            onWarn: (String) -> Unit,
+        ): List<String> {
+            archiveWarnings.forEach(onWarn)
+            return emptyList()
+        }
+        override suspend fun combineAll(
+            outputDir: String,
+            deleteOriginals: Boolean,
+            workerCount: Int,
+            onStart: (total: Int) -> Unit,
+            onMetaStart: (total: Int) -> Unit,
+            onMetaError: ((String) -> Unit)?,
+            onProgress: (CombineResult) -> Unit,
+        ) {
+            combineCalled = true
+            onStart(combineResults.size)
+            combineResults.forEach(onProgress)
+            if (dateFallbackErrors.isNotEmpty()) {
+                onMetaStart(dateFallbackErrors.size)
+                dateFallbackErrors.forEach { onMetaError?.invoke(it) }
+            }
+        }
+    }
+
+    private class FolderPickers : PlatformPickers {
+        override fun pickHtmlFile(onResult: (String?) -> Unit) = onResult("/history.json")
+        override fun pickOutputFolder(onResult: (String?) -> Unit) = onResult("/out")
+        override fun pickZipFolder(onResult: (String?) -> Unit) = onResult("/zips")
+        override fun pickMultipleZips(onResult: (List<String>) -> Unit) = onResult(emptyList())
+    }
+
+    private fun realZip(vararg entries: Pair<String, String>): String {
+        val file = java.io.File.createTempFile("snapvault-d10-", ".zip").apply { deleteOnExit() }
+        java.util.zip.ZipOutputStream(file.outputStream()).use { zos ->
+            entries.forEach { (name, text) ->
+                zos.putNextEntry(java.util.zip.ZipEntry(name))
+                zos.write(text.toByteArray())
+                zos.closeEntry()
+            }
+        }
+        return file.absolutePath
+    }
+
+    private fun outcomeViewModel(
+        runner: ZipPipelineRunner,
+        disk: okio.FileSystem = FakeFileSystem().apply {
+            createDirectories("/out".toPath())
+            write("/history.json".toPath()) { writeUtf8(historyJson) }
+        },
+        mode: ImportMode = ImportMode.Legacy,
+    ) = DashboardViewModel(
+        zipPipelineRunner = runner,
+        mediaProcessor = FakeMediaProcessor(),
+        fileSystem = disk,
+        pickers = FolderPickers(),
+        outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+    ).also {
+        it.changeImportMode(mode)
+        it.pickHtmlFile()
+        it.pickOutputFolder()
+        it.pickZipFolder()
+    }
+
+    private fun DashboardViewModel.runWith(combine: Boolean = true) {
+        startSync(
+            runDownload = false,
+            runMetadata = false,
+            experimentalMetadataMatching = false,
+            runCombine = combine,
+            runDedupe = false,
+            dryRun = true,
+        )
+        awaitCompletion(this)
+    }
+
+    // D10, observed live: a ZIP holding only notes.txt went through metadata, combination and
+    // dedupe over the output folder, saved an empty index, and finished at "100% / Pipeline
+    // Complete / Done — 0 memories". Nothing was imported, and the one thing the user needed to
+    // hear — wrong file — was never said.
+    @Test
+    fun aZipWithNoMemoriesInItIsAnErrorBeforeAnythingTouchesTheOutputFolder() {
+        val runner = OutcomeRunner(zips = listOf(realZip("notes.txt" to "not an export")))
+        val viewModel = outcomeViewModel(runner, mode = ImportMode.Zip)
+
+        viewModel.runWith()
+
+        assertEquals("Failed", viewModel.progressText)
+        assertTrue(
+            viewModel.logs.last().contains("no Snapchat memories", ignoreCase = true),
+            "the error has to say what was wrong with the input, was: ${viewModel.logs.last()}",
+        )
+        assertFalse(runner.extractCalled, "nothing to extract")
+        assertFalse(runner.combineCalled, "the output folder must not be processed on behalf of an empty import")
+    }
+
+    // Losing the index write loses every badge this run earned, and it was logged as a warning
+    // under a "Sync complete!" headline.
+    //
+    // Both pipelines write the index at their own call site, so both are driven.
+    @Test
+    fun aVaultIndexThatCouldNotBeSavedIsAFailureNotASuccess() {
+        val zip = realZip("memories/2023-10-12_AAA-main.jpg" to "photo")
+        for (mode in ImportMode.entries) {
+            val disk = object : ForwardingFileSystem(FakeFileSystem().apply {
+                createDirectories("/out".toPath())
+                write("/history.json".toPath()) { writeUtf8(historyJson) }
+            }) {
+                override fun atomicMove(source: okio.Path, target: okio.Path) {
+                    if (target.name == VaultIndex.FILE_NAME) throw okio.IOException("Permission denied")
+                    super.atomicMove(source, target)
+                }
+            }
+            val viewModel = outcomeViewModel(OutcomeRunner(zips = listOf(zip)), disk, mode)
+
+            viewModel.runWith(combine = false)
+
+            assertEquals("Completed with warnings", viewModel.progressText, "$mode pipeline")
+            assertEquals(1, viewModel.failureCount, "$mode pipeline")
+        }
+    }
+
+    // The combiner's warnings — originals kept because metadata did not copy, an output left
+    // alone because one already existed — were logged and then forgotten by the outcome.
+    @Test
+    fun combineWarningsAreCountedInTheOutcome() {
+        val runner = OutcomeRunner(
+            combineResults = listOf(
+                CombineResult(
+                    uuid = "AAA",
+                    outputPath = "/out/2023-10-12_AAA.jpg",
+                    status = "combined",
+                    warnings = listOf("[combine] originals kept: metadata is not on 2023-10-12_AAA.jpg"),
+                ),
+            ),
+        )
+        val viewModel = outcomeViewModel(runner)
+
+        viewModel.runWith()
+
+        assertEquals("Completed with warnings", viewModel.progressText)
+        assertEquals(0, viewModel.failureCount, "the combine itself succeeded")
+        assertEquals(1, viewModel.warningCount)
+    }
+
+    // A downloaded archive the extractor had to keep is a memory that did not reach the
+    // Library, and the run said nothing about it beyond a log line.
+    @Test
+    fun archiveWarningsAreCountedInTheOutcome() {
+        val runner = OutcomeRunner(archiveWarnings = listOf("x.zip: two entries both flatten to x-main.jpg — archive kept"))
+        val viewModel = outcomeViewModel(runner)
+
+        viewModel.runWith(combine = false)
+
+        assertEquals("Completed with warnings", viewModel.progressText)
+        assertEquals(1, viewModel.warningCount)
+    }
+
+    @Test
+    fun dateFallbackErrorsAfterCombiningAreFailures() {
+        val runner = OutcomeRunner(dateFallbackErrors = listOf("[exiftool] 2023-10-12_AAA.jpg — Error: file not writable"))
+        val viewModel = outcomeViewModel(runner)
+
+        viewModel.runWith()
+
+        assertEquals("Completed with warnings", viewModel.progressText)
+        assertEquals(1, viewModel.failureCount)
+    }
+
+    // Mixed input: some entries import, some are skipped for an unrecognised name. The run is
+    // not a failure — but "complete" with files silently left behind is not the whole story.
+    @Test
+    fun zipEntriesThatCouldNotBeImportedAreCountedInTheOutcome() {
+        val zip = realZip(
+            "memories/2023-10-12_AAA-main.jpg" to "photo",
+            "memories/holiday-photo.jpg" to "unrecognised name",
+        )
+        val viewModel = outcomeViewModel(OutcomeRunner(zips = listOf(zip)), mode = ImportMode.Zip)
+
+        viewModel.runWith(combine = false)
+
+        assertEquals("Completed with warnings", viewModel.progressText)
+        assertEquals(1, viewModel.warningCount)
+    }
+
+    // Companion: a run with nothing to report still reports clean success.
+    @Test
+    fun aRunWithNothingToReportIsStillACleanSuccess() {
+        val viewModel = outcomeViewModel(OutcomeRunner())
+
+        viewModel.runWith()
+
+        assertEquals("Pipeline Complete", viewModel.progressText)
+        assertEquals(0, viewModel.warningCount)
+        assertEquals(0, viewModel.failureCount)
+    }
 }

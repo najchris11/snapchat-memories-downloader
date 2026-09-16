@@ -47,6 +47,7 @@ import com.najdev.snapvault.ui.theme.SnapVaultColors
 import com.najdev.snapvault.viewmodel.DashboardViewModel
 import com.najdev.snapvault.viewmodel.PipelineOptions
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import snapchat_memories_downloader.composeapp.generated.resources.*
 
@@ -496,13 +497,10 @@ private fun DashboardStatus(
     // step 4's circle turning amber, which reads as a slightly different success.
     AnimatedVisibility(visible = viewModel.hasWarnings) {
         Box(modifier = Modifier.padding(top = 12.dp)) {
-            InlineBanner(
-                icon = Icons.Outlined.WarningAmber,
-                accent = SnapVaultColors.warning,
-                title = stringResource(Res.string.warn_run_failures_title, viewModel.failureCount),
-                body = stringResource(Res.string.warn_run_failures_body),
-                actionLabel = stringResource(Res.string.btn_view_log),
-                onAction = { logsExpanded = true },
+            RunOutcomeBanner(
+                failureCount = viewModel.failureCount,
+                warningCount = viewModel.warningCount,
+                onViewLog = { logsExpanded = true },
             )
         }
     }
@@ -630,6 +628,31 @@ private fun DashboardStatus(
  * banner, a missing-dependency warning, and a finished run that reported failures — so all
  * three read as the same kind of message rather than three bespoke layouts.
  */
+/**
+ * The headline for a run that finished with something to report.
+ *
+ * A run can now finish with warnings and no failures (D10) — originals kept, an archive left
+ * unextracted — and the old banner could only say "N step(s) failed", which would have read
+ * "0 step(s) failed" over exactly those runs. Failures lead when there are any; the log carries
+ * the rest either way.
+ */
+@Composable
+internal fun RunOutcomeBanner(failureCount: Int, warningCount: Int, onViewLog: () -> Unit) {
+    val failed = failureCount > 0
+    InlineBanner(
+        icon = Icons.Outlined.WarningAmber,
+        accent = SnapVaultColors.warning,
+        title = if (failed) {
+            pluralStringResource(Res.plurals.warn_run_failures_title, failureCount, failureCount)
+        } else {
+            pluralStringResource(Res.plurals.warn_run_warnings_title, warningCount, warningCount)
+        },
+        body = stringResource(if (failed) Res.string.warn_run_failures_body else Res.string.warn_run_warnings_body),
+        actionLabel = stringResource(Res.string.btn_view_log),
+        onAction = onViewLog,
+    )
+}
+
 @Composable
 fun InlineBanner(
     icon: androidx.compose.ui.graphics.vector.ImageVector,

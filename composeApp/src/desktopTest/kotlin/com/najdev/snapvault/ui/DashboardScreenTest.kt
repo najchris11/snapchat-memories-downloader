@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.v2.runComposeUiTest
@@ -146,5 +147,31 @@ class DashboardScreenTest {
 
         onNodeWithText("Android Preview").assertIsDisplayed()
         onAllNodes(hasClickAction()).assertCountEquals(0)
+    }
+
+    // D10: a run can now finish with warnings and no failures. The banner only knew how to say
+    // "N step(s) failed", which over those runs would have read "0 step(s) failed" — a headline
+    // that is both alarming and wrong.
+    @Test
+    fun aRunWithOnlyWarningsIsNotHeadlinedAsFailedSteps() = runComposeUiTest {
+        setContent {
+            SnapVaultTheme(darkMode = true) {
+                RunOutcomeBanner(failureCount = 0, warningCount = 3, onViewLog = {})
+            }
+        }
+
+        onNodeWithText("Finished with 3 warnings").assertIsDisplayed()
+        onAllNodes(hasText("step", substring = true)).assertCountEquals(0)
+    }
+
+    @Test
+    fun failuresLeadTheBannerWhenThereAreAny() = runComposeUiTest {
+        setContent {
+            SnapVaultTheme(darkMode = true) {
+                RunOutcomeBanner(failureCount = 1, warningCount = 4, onViewLog = {})
+            }
+        }
+
+        onNodeWithText("1 step failed").assertIsDisplayed()
     }
 }

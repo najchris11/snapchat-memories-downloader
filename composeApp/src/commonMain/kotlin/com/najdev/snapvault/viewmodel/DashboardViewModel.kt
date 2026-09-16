@@ -236,7 +236,20 @@ class DashboardViewModel(
 
     // ── Picker actions ───────────────────────────────────────────────────────
     fun pickHtmlFile() = pickers.pickHtmlFile { it?.let { path -> htmlFile = path } }
-    fun pickOutputFolder() = pickers.pickOutputFolder { it?.let { path -> downloadFolder = path } }
+    /**
+     * Whether the output folder may change right now.
+     *
+     * A run captures its folder when it starts. Changing the folder mid-run from Library or
+     * Settings left the run writing to one folder while the Library and every new favorite
+     * followed another (D12). One guard here, shared by every screen that offers the change.
+     */
+    val outputFolderChangeable: Boolean get() = !isRunning
+
+    // Checked again when the picker answers: a dialog opened before Start can close after it.
+    fun pickOutputFolder() {
+        if (!outputFolderChangeable) return
+        pickers.pickOutputFolder { path -> if (path != null && outputFolderChangeable) downloadFolder = path }
+    }
     fun pickZipFolder() = pickers.pickZipFolder { it?.let { path -> zipFolder = path; selectedZipFiles = emptyList() } }
     fun pickMultipleZips() = pickers.pickMultipleZips { paths -> if (paths.isNotEmpty()) { selectedZipFiles = paths; zipFolder = null } }
 

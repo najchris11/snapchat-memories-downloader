@@ -147,6 +147,7 @@ fun App(
                                     Screen.Library -> LibraryScreen(
                                         downloadFolder = dashboardViewModel.downloadFolder,
                                         onOpenFolder = dashboardViewModel::pickOutputFolder,
+                                        folderChangeable = dashboardViewModel.outputFolderChangeable,
                                         windowSize = windowSize,
                                         favoriteOverrides = dashboardViewModel.favoriteOverrides,
                                         onToggleFavorite = { item, favorited ->
@@ -161,6 +162,7 @@ fun App(
                                         downloadFolder = dashboardViewModel.downloadFolder,
                                         onResetIndex = { scope.launch { dashboardViewModel.resetVaultIndex() } },
                                         onEditOutputPath = { dashboardViewModel.pickOutputFolder() },
+                                        outputFolderChangeable = dashboardViewModel.outputFolderChangeable,
                                         themeMode = themeMode,
                                         onThemeModeChange = { themeMode = it; saveThemeModePreference(it) },
                                         layoutOverride = layoutOverride,

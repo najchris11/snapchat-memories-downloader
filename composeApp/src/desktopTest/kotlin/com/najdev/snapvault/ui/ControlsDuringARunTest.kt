@@ -1,5 +1,17 @@
 package com.najdev.snapvault.ui
 
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsEnabled
@@ -86,6 +98,8 @@ class ControlsDuringARunTest {
         pickOutputFolder()
     }
 
+    private fun hasRole(role: Role) = SemanticsMatcher.expectValue(SemanticsProperties.Role, role)
+
     private fun ComposeUiTest.switches(vararg labels: String) = labels.map { onNode(hasText(it) and isToggleable()) }
 
     // D12: a run captures its options when it starts, but every switch stayed live. Turning
@@ -112,5 +126,143 @@ class ControlsDuringARunTest {
         waitForIdle()
         switches(*labels).forEach { it.assertIsEnabled() }
         viewModel.dispose()
+    }
+
+    // D12: the Dashboard's folder picker disabled during a run, but Library and Settings could
+    // still change the folder. The run kept writing to the folder it captured while the
+    // Library and every new favorite followed the new one — two destinations, one of them
+    // invisible. The guard lives on the view model so every entry point shares it.
+    @Test
+    fun theOutputFolderCannotBeChangedWhileARunIsInProgress() {
+        val started = CompletableDeferred<Unit>()
+        var nextPick = "/out"
+        val viewModel = DashboardViewModel(
+            zipPipelineRunner = HangingRunner(started),
+            mediaProcessor = Tools(),
+            fileSystem = FakeFileSystem().apply {
+                createDirectories("/out".toPath())
+                write("/history.json".toPath()) {
+                    writeUtf8("""{"Saved Media": [{"Download Link": "https://example.com/x", "Date": "2024-01-01 00:00:00 UTC"}]}""")
+                }
+            },
+            pickers = object : PlatformPickers {
+                override fun pickHtmlFile(onResult: (String?) -> Unit) = onResult("/history.json")
+                override fun pickOutputFolder(onResult: (String?) -> Unit) = onResult(nextPick)
+                override fun pickZipFolder(onResult: (String?) -> Unit) = onResult(null)
+                override fun pickMultipleZips(onResult: (List<String>) -> Unit) = onResult(emptyList())
+            },
+            outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+        ).apply {
+            changeImportMode(ImportMode.Legacy)
+            pickHtmlFile()
+            pickOutputFolder()
+        }
+        viewModel.startSync()
+        kotlinx.coroutines.runBlocking { kotlinx.coroutines.withTimeout(10_000) { started.await() } }
+
+        nextPick = "/somewhere-else"
+        viewModel.pickOutputFolder()
+
+        kotlin.test.assertEquals("/out", viewModel.downloadFolder)
+        kotlin.test.assertFalse(viewModel.outputFolderChangeable)
+
+        viewModel.stopSync()
+        kotlinx.coroutines.runBlocking { kotlinx.coroutines.withTimeout(10_000) { while (viewModel.isRunning) kotlinx.coroutines.delay(10) } }
+        kotlin.test.assertTrue(viewModel.outputFolderChangeable)
+        viewModel.dispose()
+    }
+
+    // The screens have to say so too: a button that silently does nothing is the same problem
+    // in a different place.
+    @Test
+    fun settingsDoesNotOfferToChangeTheFolderDuringARun() = runComposeUiTest {
+        setContent {
+            SnapVaultTheme(darkMode = true) {
+                SettingsScreen(
+                    hasExifTool = true,
+                    hasFFmpeg = true,
+                    onVerifyDependencies = {},
+                    downloadFolder = "/out",
+                    onResetIndex = {},
+                    onEditOutputPath = {},
+                    themeMode = com.najdev.snapvault.ThemeMode.SYSTEM,
+                    onThemeModeChange = {},
+                    layoutOverride = com.najdev.snapvault.LayoutOverride.Auto,
+                    onLayoutOverrideChange = {},
+                    outputFolderChangeable = false,
+                )
+            }
+        }
+
+        onNode(hasText("Edit") and androidx.compose.ui.test.hasClickAction()).assertIsNotEnabled()
+    }
+
+    @Test
+    fun theEmptyLibraryDoesNotOfferToChangeTheFolderDuringARun() = runComposeUiTest {
+        setContent {
+            SnapVaultTheme(darkMode = true) {
+                LibraryEmptyState(
+                    reason = LibraryEmptyReason.NoMedia,
+                    downloadFolder = "/out",
+                    onOpenFolder = {},
+                    onRefresh = {},
+                    onClearFilters = {},
+                    folderChangeable = false,
+                )
+            }
+        }
+
+        onNode(hasText("Change output folder")).assertIsNotEnabled()
+        onNode(hasText("Refresh")).assertIsEnabled()
+    }
+
+    // Both roots have to pass the guard on — the sidebar layout and the compact one each wire
+    // Settings themselves, and a screen that is not told defaults to "changeable".
+    @Test
+    fun bothLayoutsWithholdTheFolderChangeDuringARealRun() = runComposeUiTest {
+        val started = CompletableDeferred<Unit>()
+        var width by androidx.compose.runtime.mutableStateOf(1280.dp)
+        setContent {
+            androidx.compose.foundation.layout.Box(
+                androidx.compose.ui.Modifier.width(width).height(900.dp),
+            ) {
+                com.najdev.snapvault.App(
+                    pickers = Pickers(),
+                    mediaProcessor = Tools(),
+                    zipPipelineRunner = HangingRunner(started),
+                    fileSystem = FakeFileSystem().apply {
+                        createDirectories("/out".toPath())
+                        write("/history.json".toPath()) {
+                            writeUtf8("""{"Saved Media": [{"Download Link": "https://example.com/x", "Date": "2024-01-01 00:00:00 UTC"}]}""")
+                        }
+                    },
+                )
+            }
+        }
+        onNodeWithText("Legacy (HTML/JSON)").performClick()
+        onNodeWithText("memories_history.json").performScrollTo().performClick()
+        onNodeWithText("Select destination folder").performScrollTo().performClick()
+        onNode(hasText("Download Memories") and isToggleable()).performScrollTo().performClick()
+        onNodeWithText("Start Download").performClick()
+        waitUntil(timeoutMillis = 10_000) { started.isCompleted }
+
+        onNode(hasRole(Role.Tab) and hasText("Settings")).performClick()
+        waitForIdle()
+        onNode(hasText("Edit") and hasClickAction()).assertIsNotEnabled()
+        // "/out" exists only in the fake filesystem, so the Library scan finds nothing and
+        // shows its empty state — which is where it offers to change the folder.
+        onNode(hasRole(Role.Tab) and hasText("Library")).performClick()
+        waitUntil(timeoutMillis = 10_000) { onAllNodes(hasText("Change output folder")).fetchSemanticsNodes().isNotEmpty() }
+        onNode(hasText("Change output folder")).assertIsNotEnabled()
+
+        width = 400.dp
+        waitForIdle()
+        waitUntil(timeoutMillis = 10_000) { onAllNodes(hasText("Change output folder")).fetchSemanticsNodes().isNotEmpty() }
+        onNode(hasText("Change output folder")).assertIsNotEnabled()
+        onNode(hasRole(Role.Tab) and hasText("Settings")).performClick()
+        waitForIdle()
+        onNode(hasText("Edit") and hasClickAction()).assertIsNotEnabled()
+        // No Stop: it is not on this screen, and disposing the composition disposes the view
+        // model, which cancels the hanging run.
     }
 }

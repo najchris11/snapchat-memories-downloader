@@ -41,6 +41,7 @@ fun SettingsScreen(
     onThemeModeChange: (ThemeMode) -> Unit,
     layoutOverride: LayoutOverride,
     onLayoutOverrideChange: (LayoutOverride) -> Unit,
+    outputFolderChangeable: Boolean = true,
 ) {
     Column(
         modifier = Modifier
@@ -262,6 +263,8 @@ fun SettingsScreen(
                 ) {
                     TextButton(
                         onClick = onEditOutputPath,
+                        // A run captured the folder it writes to; see outputFolderChangeable.
+                        enabled = outputFolderChangeable,
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(stringResource(Res.string.set_output_path_edit), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)

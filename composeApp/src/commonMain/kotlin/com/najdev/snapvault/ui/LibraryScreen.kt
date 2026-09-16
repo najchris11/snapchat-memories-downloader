@@ -218,6 +218,7 @@ internal fun LibraryEmptyState(
     onRefresh: () -> Unit,
     onClearFilters: () -> Unit,
     modifier: Modifier = Modifier,
+    folderChangeable: Boolean = true,
 ) {
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         Column(
@@ -255,9 +256,10 @@ internal fun LibraryEmptyState(
                     LibraryEmptyReason.NoFolder -> EmptyStateAction(
                         label = stringResource(Res.string.lib_select_folder),
                         onClick = onOpenFolder,
+                        enabled = folderChangeable,
                     )
                     LibraryEmptyReason.NoMedia -> {
-                        EmptyStateAction(stringResource(Res.string.lib_change_folder), onOpenFolder)
+                        EmptyStateAction(stringResource(Res.string.lib_change_folder), onOpenFolder, enabled = folderChangeable)
                         EmptyStateAction(stringResource(Res.string.lib_refresh_action), onRefresh)
                     }
                     LibraryEmptyReason.FilteredOut ->
@@ -269,12 +271,12 @@ internal fun LibraryEmptyState(
 }
 
 @Composable
-private fun EmptyStateAction(label: String, onClick: () -> Unit) {
-    TextButton(onClick = onClick) {
+private fun EmptyStateAction(label: String, onClick: () -> Unit, enabled: Boolean = true) {
+    TextButton(onClick = onClick, enabled = enabled) {
         Text(
             label,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.primary,
+            color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.SemiBold
         )
     }
@@ -352,6 +354,8 @@ fun LibraryScreen(
     downloadFolder: String?,
     onOpenFolder: () -> Unit,
     windowSize: WindowSize = WindowSize.Expanded,
+    // False while a run is in progress: the run captured its folder (D12).
+    folderChangeable: Boolean = true,
     // Favorites are owned by the view model, not by this screen: the write has to outlive the
     // composition (navigating away used to cancel it) and a failed write has to be able to
     // revert the heart and say so. Defaulted so the screen still renders standalone.
@@ -541,6 +545,7 @@ fun LibraryScreen(
                     onRefresh = { refreshKey++ },
                     onClearFilters = { selectedFilter = MediaFilter.All; searchQuery = "" },
                     modifier = Modifier.weight(1f).fillMaxWidth(),
+                    folderChangeable = folderChangeable,
                 )
             } else {
                 LibraryGrid(

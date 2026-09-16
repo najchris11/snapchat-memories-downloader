@@ -332,25 +332,31 @@ private fun DashboardControls(
             }
             AnimatedVisibility(visible = options.expanded) {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    // A run copies these values when it starts, so while one is in progress a
+                    // switch that still moves changes nothing — turning combination off mid-run
+                    // looked like it had stopped the step that deletes originals (D12).
+                    val editable = !viewModel.isRunning
                     if (viewModel.importMode == ImportMode.Legacy) {
-                        PipelineItem(Icons.Outlined.CloudDownload, stringResource(Res.string.opt_download_memories), options.runDownload) { options.runDownload = it }
+                        PipelineItem(Icons.Outlined.CloudDownload, stringResource(Res.string.opt_download_memories), options.runDownload, enabled = editable) { options.runDownload = it }
                     }
                     val isZipMode = viewModel.importMode != ImportMode.Legacy
                     PipelineItem(
                         icon = if (isZipMode) Icons.Outlined.CalendarMonth else Icons.Outlined.GpsFixed,
                         label = if (isZipMode) stringResource(Res.string.opt_write_date_metadata) else stringResource(Res.string.opt_inject_gps),
                         checked = options.runMetadata,
+                        enabled = editable,
                         onCheckedChange = { options.runMetadata = it }
                     )
                     AnimatedVisibility(visible = isZipMode && options.runMetadata) {
                         PipelineItem(
                             Icons.Outlined.Info,
                             stringResource(Res.string.opt_precise_matching),
-                            options.preciseMatching
+                            options.preciseMatching,
+                            enabled = editable,
                         ) { options.preciseMatching = it }
                     }
-                    PipelineItem(Icons.Outlined.Layers, stringResource(Res.string.opt_combine_overlays), options.runCombine) { options.runCombine = it }
-                    PipelineItem(Icons.Outlined.AutoDelete, stringResource(Res.string.opt_clean_duplicates), options.runDedupe) { options.runDedupe = it }
+                    PipelineItem(Icons.Outlined.Layers, stringResource(Res.string.opt_combine_overlays), options.runCombine, enabled = editable) { options.runCombine = it }
+                    PipelineItem(Icons.Outlined.AutoDelete, stringResource(Res.string.opt_clean_duplicates), options.runDedupe, enabled = editable) { options.runDedupe = it }
                     // Dedupe deletes files — give it a preview mode. The helper text is not
                     // decoration: this switch governs deduplication only, and its old
                     // "nothing deleted" wording read as a promise about the whole run (D09).
@@ -360,6 +366,7 @@ private fun DashboardControls(
                             stringResource(Res.string.opt_dedupe_dry_run),
                             options.dryRun,
                             helperText = stringResource(Res.string.opt_dedupe_dry_run_helper),
+                            enabled = editable,
                         ) { options.dryRun = it }
                     }
                 }
@@ -793,13 +800,14 @@ fun PipelineItem(
     // it reads like a global promise but governs only the deduplication step (D09).
     // Declared before onCheckedChange so existing trailing-lambda call sites still bind.
     helperText: String? = null,
+    enabled: Boolean = true,
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
-            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
+            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
             .minimumInteractiveComponentSize()
             .padding(vertical = 6.dp, horizontal = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -827,6 +835,7 @@ fun PipelineItem(
             // Null: the row above owns both the interaction and the semantics, so the
             // Switch must not announce itself as a second control for the same option.
             onCheckedChange = null,
+            enabled = enabled,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                 checkedTrackColor = MaterialTheme.colorScheme.primary,

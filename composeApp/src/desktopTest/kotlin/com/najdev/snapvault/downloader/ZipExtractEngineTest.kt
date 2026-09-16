@@ -126,8 +126,11 @@ class ZipExtractEngineTest {
 
         runExtract(zip, listOf(entry("2023-10-12_ABC-main.jpg")))
 
-        val leftovers = outDir.listFiles()!!.filter { it.name.endsWith(".part") }
+        // Walks the tree: temp files are staged in a subdirectory now, so a listing of
+        // outDir alone would pass without proving anything.
+        val leftovers = outDir.walkTopDown().filter { it.isFile && it.name.endsWith(".part") }.toList()
         assertTrue(leftovers.isEmpty(), "no .part temp files may remain, found: $leftovers")
+        assertTrue(!File(outDir, ".snapvault-staging").exists(), "empty staging directory must be removed")
     }
 
     // ── extractDownloadedArchives (legacy pipeline) ──────────────────────────
@@ -239,15 +242,35 @@ class ZipExtractEngineTest {
         assertTrue(warnings.isNotEmpty())
     }
 
+    // Leftovers inside our own staging directory are unambiguously ours — a run that
+    // crashed mid-copy — so they are still cleaned up. Only the guess-by-extension sweep
+    // of the whole destination went away (D03).
     @Test
     fun cleansStalePartFilesFromPreviousRun() {
-        val stale = File(outDir, "2023-10-12_ABC-main.jpg.x1y2.part").apply { writeText("truncated") }
+        val staging = File(outDir, ".snapvault-staging").apply { mkdirs() }
+        val stale = File(staging, "2023-10-12_ABC-main.jpg.x1y2.part").apply { writeText("truncated") }
         val zip = createZip("export.zip", mapOf("memories/2023-10-12_ABC-main.jpg" to "bytes".toByteArray()))
 
         runExtract(zip, listOf(entry("2023-10-12_ABC-main.jpg")))
 
         assertTrue(!stale.exists(), "stale .part file from an interrupted run must be removed")
         assertEquals("bytes", File(outDir, "2023-10-12_ABC-main.jpg").readText())
+    }
+
+    // Regression (D03): startup deleted every *.part file in the destination, inferring
+    // ownership from the extension alone. A browser's in-flight download, or another
+    // SnapVault instance's live staging file, sitting in the chosen folder was destroyed
+    // — and with an empty task list the run had no business writing there at all.
+    @Test
+    fun partFilesWeDoNotOwnAreNeverDeleted() {
+        val theirs = File(outDir, "browser-download.part").apply { writeText("user-download") }
+
+        runBlocking {
+            ZipExtractEngine().extractAll(emptyMap(), outDir.absolutePath, workerCount = 1) {}
+        }
+
+        assertTrue(theirs.exists(), "a .part file this run did not create must survive")
+        assertEquals("user-download", theirs.readText(), "and must not be truncated")
     }
 
     @Test

@@ -23,7 +23,7 @@ class ZipExtractEngine {
         onProgress: (ExtractResult) -> Unit
     ) {
         val outDir = File(outputDir).also { it.mkdirs() }
-        cleanStalePartFiles(outDir)
+        val staging = openStaging(outDir)
         val semaphore = Semaphore(workerCount)
 
         data class ExtractTask(val entryName: String, val destFileName: String, val uuid: String)
@@ -55,7 +55,7 @@ class ZipExtractEngine {
                         tasks.map { task ->
                             async(Dispatchers.IO) {
                                 semaphore.withPermit {
-                                    val result = extractEntry(zf, task.entryName, task.destFileName, outDir)
+                                    val result = extractEntry(zf, task.entryName, task.destFileName, outDir, staging)
                                     channel.send(
                                         ExtractResult(
                                             uuid = task.uuid,
@@ -74,6 +74,8 @@ class ZipExtractEngine {
 
             channel.close()
         }
+
+        staging.delete() // no-op unless every staged file was moved into place
     }
 
     // Legacy pipeline: extracts each downloaded memory archive flat into outputDir with
@@ -92,6 +94,7 @@ class ZipExtractEngine {
         onWarn: (String) -> Unit,
     ): List<String> = kotlinx.coroutines.withContext(Dispatchers.IO) {
         val outDir = File(outputDir)
+        val staging = openStaging(outDir)
         val extracted = mutableListOf<String>()
 
         for (path in archivePaths) {
@@ -148,7 +151,7 @@ class ZipExtractEngine {
 
                     var allOk = true
                     for ((destName, entryName) in planned) {
-                        when (val res = extractEntry(zf, entryName, destName, outDir)) {
+                        when (val res = extractEntry(zf, entryName, destName, outDir, staging)) {
                             "ok", "skipped" -> extracted.add(File(outDir, destName).absolutePath)
                             else -> {
                                 allOk = false
@@ -166,6 +169,7 @@ class ZipExtractEngine {
                 onWarn("could not extract ${archive.name}: ${e.message}")
             }
         }
+        staging.delete() // no-op unless every staged file was moved into place
         extracted
     }
 
@@ -173,14 +177,21 @@ class ZipExtractEngine {
     // full entry is copied and size-verified. A crash or cancellation mid-copy therefore
     // never leaves a truncated file under the final name (which the exists() skip-check
     // would otherwise treat as complete forever).
-    private fun extractEntry(zf: ZipFile, entryName: String, destFileName: String, outDir: File): String {
+    private fun extractEntry(
+        zf: ZipFile,
+        entryName: String,
+        destFileName: String,
+        outDir: File,
+        staging: File,
+    ): String {
         val destFile = File(outDir, destFileName)
         if (destFile.exists()) return "skipped"
 
         val entry = zf.getEntry(entryName) ?: return "error: entry not found: $entryName"
         // Unique temp name: the same destFileName can be extracted concurrently from
         // different zips; a shared temp name would let the writers clobber each other.
-        val tmpFile = File.createTempFile("$destFileName.", PART_SUFFIX, outDir)
+        // Staged inside our own directory so cleanup never has to guess who owns a file.
+        val tmpFile = File.createTempFile("$destFileName.", PART_SUFFIX, staging)
         return try {
             zf.getInputStream(entry).use { input ->
                 tmpFile.outputStream().use { output ->
@@ -224,11 +235,19 @@ class ZipExtractEngine {
         }
     }
 
-    private fun cleanStalePartFiles(outDir: File) {
-        outDir.listFiles { f -> f.isFile && f.name.endsWith(PART_SUFFIX) }?.forEach { it.delete() }
+    // In-progress extractions are staged in a directory of our own rather than beside the
+    // user's files. Cleanup used to delete every *.part in the destination, which treated
+    // a browser's in-flight download — or another SnapVault instance's live staging file —
+    // as ours to remove (D03). An extension is not proof of ownership; the directory is.
+    private fun openStaging(outDir: File): File {
+        val staging = File(outDir, STAGING_DIR_NAME).also { it.mkdirs() }
+        // Leftovers here are unambiguously ours, from a run that crashed mid-copy.
+        staging.listFiles { f -> f.isFile && f.name.endsWith(PART_SUFFIX) }?.forEach { it.delete() }
+        return staging
     }
 
     private companion object {
         const val PART_SUFFIX = ".part"
+        const val STAGING_DIR_NAME = ".snapvault-staging"
     }
 }

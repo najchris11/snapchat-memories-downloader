@@ -189,4 +189,129 @@ class DownloadEngineTest {
         val outFiles = fs.list("/output".toPath()).map { it.name }
         assertTrue(outFiles.isEmpty(), "a failed download must leave nothing behind, got: $outFiles")
     }
+
+    // ── Colliding download identities (D08) ─────────────────────────────────
+
+    private fun photoRow(url: String) = MemoryItem(
+        id = "abc-123",
+        url = url,
+        isGet = true,
+        dateStr = "2023-10-12 15:30:00 UTC",
+    )
+
+    private val photoName = "2023-10-12_153000_abc-123.jpg"
+
+    // D08: a Snapchat export repeats rows, and every repeat derives the same id from the same
+    // `mid` — so they build the same filename, and downloadAll used to schedule both. With
+    // more than one worker that is two responses streaming into one `<name>.part` and
+    // whichever finishes last committing the interleaving as if it were a file.
+    @Test
+    fun aRepeatedExportRowIsDownloadedOnceAndCommittedIntact() = runTest {
+        val fs = FakeFileSystem()
+        var requests = 0
+        val client = HttpClient(MockEngine {
+            requests++
+            respond("photo-bytes", headers = headersOf(HttpHeaders.ContentType, "image/jpeg"))
+        })
+        val row = photoRow("https://media.com/photo.jpg?mid=abc-123")
+
+        val results = DownloadEngine(client, fs).downloadAll(listOf(row, row), "/output", workers = 4)
+
+        assertEquals(1, requests, "a row repeated in the export is one file, not two downloads")
+        assertEquals(
+            listOf(photoName),
+            fs.list("/output".toPath()).map { it.name },
+            "one row, one file — and no temp file left over",
+        )
+        assertEquals("photo-bytes", fs.read("/output/$photoName".toPath()) { readUtf8() })
+
+        // Every row still has to be accounted for: the progress total is the export's row
+        // count, so a row that produces no result of its own stalls the bar short of 100%.
+        assertEquals(2, results.size)
+        assertEquals(listOf("downloaded", "skipped"), results.map { it.status })
+        assertTrue(
+            results.all { it.item.downloadedPath == "/output/$photoName" },
+            "both rows point at the file that was actually written, got: ${results.map { it.item.downloadedPath }}",
+        )
+    }
+
+    // The other half of D08: same identity, different links. These are not obviously the same
+    // media, so silently letting one overwrite the other is the worst available answer — the
+    // user is never told that a memory they exported was dropped.
+    @Test
+    fun twoRowsWithOneIdentityButDifferentLinksDoNotSilentlyPickAWinner() = runTest {
+        val fs = FakeFileSystem()
+        val served = mutableListOf<String>()
+        val client = HttpClient(MockEngine { request ->
+            served += request.url.toString()
+            respond(
+                "bytes-for-${request.url.parameters["v"]}",
+                headers = headersOf(HttpHeaders.ContentType, "image/jpeg"),
+            )
+        })
+        val first = photoRow("https://media.com/photo.jpg?mid=abc-123&v=1")
+        val second = photoRow("https://media.com/photo.jpg?mid=abc-123&v=2")
+
+        val results = DownloadEngine(client, fs).downloadAll(listOf(first, second), "/output", workers = 4)
+
+        assertEquals(1, served.size, "the conflicting row must not be fetched at all, got: $served")
+        assertEquals("downloaded", results[0].status)
+        assertTrue(
+            results[1].status.startsWith("error"),
+            "the losing row has to be reported as a failure, was: ${results[1].status}",
+        )
+        assertTrue(
+            results[1].status.contains(photoName),
+            "the failure must name the file both rows wanted, was: ${results[1].status}",
+        )
+        assertFalse(results[1].item.isDownloaded)
+        assertEquals("bytes-for-1", fs.read("/output/$photoName".toPath()) { readUtf8() })
+        assertEquals(listOf(photoName), fs.list("/output".toPath()).map { it.name })
+    }
+
+    // Defence behind the grouping above: even if two writers do reach the commit for one name,
+    // the second must not replace a finished file with its own. An overwrite here is
+    // indistinguishable from a successful download, which is how the corruption stayed
+    // invisible.
+    @Test
+    fun aFileThatAppearedDuringADownloadIsNotOverwritten() = runTest {
+        val fs = FakeFileSystem()
+        fs.createDirectories("/output".toPath())
+        val client = HttpClient(MockEngine {
+            // Somebody else finishes this exact file while our response is in flight.
+            fs.write("/output/$photoName".toPath()) { writeUtf8("the-other-writers-bytes") }
+            respond("our-bytes", headers = headersOf(HttpHeaders.ContentType, "image/jpeg"))
+        })
+
+        val result = DownloadEngine(client, fs)
+            .downloadFile(photoRow("https://media.com/photo.jpg?mid=abc-123"), "/output")
+
+        assertTrue(result.status.startsWith("error"), "was: ${result.status}")
+        assertEquals("the-other-writers-bytes", fs.read("/output/$photoName".toPath()) { readUtf8() })
+        val outFiles = fs.list("/output".toPath()).map { it.name }
+        assertTrue(outFiles.none { it.endsWith(".part") }, "no temp file may remain, got: $outFiles")
+    }
+
+    // Companion case: grouping by destination must not start collapsing distinct memories.
+    @Test
+    fun rowsForDifferentMemoriesAreAllStillDownloaded() = runTest {
+        val fs = FakeFileSystem()
+        var requests = 0
+        val client = HttpClient(MockEngine {
+            requests++
+            respond("bytes", headers = headersOf(HttpHeaders.ContentType, "image/jpeg"))
+        })
+        val items = listOf(
+            MemoryItem(id = "aaa", url = "https://media.com/a.jpg?mid=aaa", isGet = true, dateStr = "2023-10-12 15:30:00 UTC"),
+            MemoryItem(id = "bbb", url = "https://media.com/b.jpg?mid=bbb", isGet = true, dateStr = "2023-10-12 15:30:00 UTC"),
+            // Same memory id, different capture time — a different file, not a repeat.
+            MemoryItem(id = "aaa", url = "https://media.com/a.jpg?mid=aaa", isGet = true, dateStr = "2023-10-13 15:30:00 UTC"),
+        )
+
+        val results = DownloadEngine(client, fs).downloadAll(items, "/output", workers = 4)
+
+        assertEquals(3, requests)
+        assertEquals(listOf("downloaded", "downloaded", "downloaded"), results.map { it.status })
+        assertEquals(3, fs.list("/output".toPath()).size)
+    }
 }

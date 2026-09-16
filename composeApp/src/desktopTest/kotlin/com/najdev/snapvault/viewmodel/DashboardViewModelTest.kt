@@ -14,6 +14,11 @@ import com.najdev.snapvault.downloader.NoOpZipPipelineRunner
 import com.najdev.snapvault.downloader.ZipPipelineRunner
 import com.najdev.snapvault.metadata.MediaProcessor
 import com.najdev.snapvault.parser.HtmlMemoryEntry
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.http.HttpHeaders
+import io.ktor.http.headersOf
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
@@ -641,6 +646,84 @@ class DashboardViewModelTest {
 
         assertEquals("/out", locker.locked, "the run must claim the directory it writes")
         assertTrue(locker.released, "a finished run must hand the directory back")
+    }
+
+    // ── D08: a repeated export row is one file ───────────────────────────────
+
+    private class RecordingArchiveRunner : ZipPipelineRunner {
+        var archivePaths: List<String>? = null
+            private set
+
+        override fun listZipFiles(folderPath: String): List<String> = emptyList()
+        override suspend fun extractAll(
+            itemsByZip: Map<String, List<HtmlMemoryEntry>>,
+            outputDir: String,
+            workerCount: Int,
+            onProgress: (ExtractResult) -> Unit,
+        ) = Unit
+
+        override suspend fun extractDownloadedArchives(
+            outputDir: String,
+            archivePaths: List<String>,
+            onWarn: (String) -> Unit,
+        ): List<String> {
+            this.archivePaths = archivePaths
+            return emptyList()
+        }
+
+        override suspend fun combineAll(
+            outputDir: String,
+            deleteOriginals: Boolean,
+            workerCount: Int,
+            onStart: (total: Int) -> Unit,
+            onMetaStart: (total: Int) -> Unit,
+            onMetaError: ((String) -> Unit)?,
+            onProgress: (CombineResult) -> Unit,
+        ) = Unit
+    }
+
+    // D08's downstream half. Repeated rows now resolve to one file, and everything after the
+    // download phase is per *file*: handing the same archive to the extractor twice makes it
+    // report the second as missing (it deleted it the first time), and the metadata pass would
+    // re-run exiftool over it and inflate its own total.
+    @Test
+    fun aRepeatedExportRowIsOneFileForThePhasesAfterTheDownload() {
+        val repeatedRow = """{"Download Link": "https://example.com/mem.zip?mid=abc-123", """ +
+            """"Date": "2024-01-01 00:00:00 UTC"}"""
+        val fs = FakeFileSystem()
+        fs.createDirectories("/out".toPath())
+        fs.write("/history.json".toPath()) { writeUtf8("""{"Saved Media": [$repeatedRow, $repeatedRow]}""") }
+
+        val runner = RecordingArchiveRunner()
+        val viewModel = DashboardViewModel(
+            zipPipelineRunner = runner,
+            mediaProcessor = FakeMediaProcessor(),
+            fileSystem = fs,
+            pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+            outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+            httpClientFactory = {
+                HttpClient(MockEngine { respond("zip-bytes", headers = headersOf(HttpHeaders.ContentType, "application/zip")) })
+            },
+        )
+        viewModel.changeImportMode(ImportMode.Legacy)
+        viewModel.pickHtmlFile()
+        viewModel.pickOutputFolder()
+
+        viewModel.startSync(
+            runDownload = true,
+            runMetadata = false,
+            experimentalMetadataMatching = false,
+            runCombine = false,
+            runDedupe = false,
+            dryRun = false,
+        )
+        awaitCompletion(viewModel)
+
+        assertEquals(
+            listOf("/out/2024-01-01_000000_abc-123.zip"),
+            runner.archivePaths,
+            "the same archive must not be handed to the extractor twice",
+        )
     }
 
     // Stopping is the most likely way a long run ends, so it is the path most likely to strand

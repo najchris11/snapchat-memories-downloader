@@ -33,6 +33,10 @@ class DashboardViewModel(
     // already has this library" branch without needing a second process — and so the tests
     // that run against a FakeFileSystem path never touch a real directory to lock it.
     private val outputDirectoryLocker: OutputDirectoryLocker = platformOutputDirectoryLocker,
+    // A factory rather than a client, because the download phase closes what it opens. Its
+    // only reason to be a parameter is that the whole phase — what gets downloaded, what
+    // reaches the phases after it — was otherwise unreachable from a test.
+    private val httpClientFactory: () -> HttpClient = { HttpClient() },
 ) {
     // ── Input selection state ────────────────────────────────────────────────
     var htmlFile by mutableStateOf<String?>(null)
@@ -625,7 +629,7 @@ class DashboardViewModel(
 
         if (runDownload) {
             log("[INFO] Downloading files in parallel…")
-            val httpClient = HttpClient()
+            val httpClient = httpClientFactory()
             var downloadedCount = 0
             var skippedCount = 0
             var errorCount = 0
@@ -671,7 +675,16 @@ class DashboardViewModel(
                         }
                     }
                 }
-                presentItems.addAll(results.filter { it.item.downloadedPath != null }.map { it.item })
+                // By path, not by row: a repeated export row resolves to the file its twin
+                // downloaded (D08), and every phase after this one is per *file*. A duplicate
+                // here hands the same archive to the extractor twice — which reports the
+                // second as missing, having deleted it — and makes the metadata pass re-run
+                // exiftool over it against an inflated total.
+                presentItems.addAll(
+                    results.map { it.item }
+                        .filter { it.downloadedPath != null }
+                        .distinctBy { it.downloadedPath },
+                )
             } finally {
                 httpClient.close()
             }

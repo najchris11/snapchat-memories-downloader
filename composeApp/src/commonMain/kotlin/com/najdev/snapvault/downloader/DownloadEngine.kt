@@ -162,6 +162,13 @@ class DownloadEngine(
                         }
                     }
                 }
+                // The resume check above ran against a listing taken before the request; a
+                // file under this name now is one that arrived while the body was in flight.
+                // Replacing it would be indistinguishable from an ordinary success, which is
+                // how a clobbered download stayed invisible (D08).
+                if (fileSystem.exists(filepath)) {
+                    throw Exception("$filename was written by something else while this download was in flight")
+                }
                 fileSystem.atomicMove(tmpPath, filepath)
             } catch (e: Exception) {
                 runCatching { fileSystem.delete(tmpPath) }
@@ -180,6 +187,48 @@ class DownloadEngine(
         }
     }
 
+    /**
+     * How one export row relates to the file it wants.
+     *
+     * A Snapchat export repeats rows, and every repeat derives the same id from the same
+     * `mid` and so builds the same filename. Scheduling them all was the D08 bug: with more
+     * than one worker that is two responses streaming into one `<name>.part`, and whichever
+     * finishes last committing the interleaving as though it were a file.
+     */
+    private sealed interface RowPlan {
+        /** Fetches the file. Exactly one row per destination gets this. */
+        data class Fetch(val followers: MutableList<Int> = mutableListOf()) : RowPlan
+
+        /** The same link as a [Fetch] row: the same file, so it reports what that row reports. */
+        data class Repeat(val leader: Int) : RowPlan
+
+        /**
+         * The same destination as a [Fetch] row but a *different* link.
+         *
+         * Not obviously the same media, so there is no winner to pick quietly — one of the
+         * two would be dropped and the user would never learn which.
+         */
+        data class Conflict(val destination: String) : RowPlan
+    }
+
+    private fun planRows(items: List<MemoryItem>): List<RowPlan> {
+        val leaderOf = mutableMapOf<String, Int>()
+        val plans = mutableListOf<RowPlan>()
+        items.forEachIndexed { index, item ->
+            // The name as it can be known before the response arrives. Content-type can still
+            // change the extension, which is why the commit is no-clobber as well.
+            val destination = buildFilename(item, null)
+            val leader = leaderOf[destination]
+            plans += when {
+                leader == null -> RowPlan.Fetch().also { leaderOf[destination] = index }
+                items[leader].url == item.url ->
+                    RowPlan.Repeat(leader).also { (plans[leader] as RowPlan.Fetch).followers += index }
+                else -> RowPlan.Conflict(destination)
+            }
+        }
+        return plans
+    }
+
     // onProgress is invoked from a single consumer coroutine (never concurrently), so
     // callers can update UI state without their own synchronization.
     suspend fun downloadAll(
@@ -192,26 +241,61 @@ class DownloadEngine(
         if (!fileSystem.exists(outputFolderPath)) {
             fileSystem.createDirectories(outputFolderPath)
         }
-        // Snapshot the directory once for all resume checks (items never collide on id,
-        // so files created during this run don't need to appear in the snapshot).
+        // Snapshot the directory once for all resume checks. Files created during this run
+        // need not appear in it, because planRows guarantees one writer per destination.
         val existingNames = fileSystem.list(outputFolderPath).map { it.name }.toSet()
 
+        val plans = planRows(items)
+        // Indexed rather than accumulated, so results come back in the caller's row order
+        // however the workers interleave.
+        val results = arrayOfNulls<DownloadResult>(items.size)
         val semaphore = Semaphore(workers)
+
         return coroutineScope {
             val channel = Channel<DownloadResult>(Channel.UNLIMITED)
             val consumer = launch {
                 for (result in channel) onProgress?.invoke(result)
             }
-            val results = items.map { item ->
+
+            plans.forEachIndexed { index, plan ->
+                if (plan !is RowPlan.Conflict) return@forEachIndexed
+                val refused = DownloadResult(
+                    items[index].copy(isDownloaded = false),
+                    "error: another export entry already claims ${plan.destination}, " +
+                        "and this row's link is different — it was not downloaded",
+                )
+                results[index] = refused
+                channel.send(refused)
+            }
+
+            plans.mapIndexedNotNull { index, plan ->
+                if (plan !is RowPlan.Fetch) return@mapIndexedNotNull null
                 async {
                     semaphore.withPermit {
-                        downloadFile(item, outputDir, existingNames).also { channel.send(it) }
+                        val result = downloadFile(items[index], outputDir, existingNames)
+                        results[index] = result
+                        channel.send(result)
+                        // Repeats are the same file, reported as skips: every row still has to
+                        // produce a result, because the progress total is the export's row
+                        // count and a row that reports nothing leaves the bar short.
+                        for (follower in plan.followers) {
+                            val echo = DownloadResult(
+                                items[follower].copy(
+                                    isDownloaded = result.item.isDownloaded,
+                                    downloadedPath = result.item.downloadedPath,
+                                ),
+                                if (result.status == "downloaded") "skipped" else result.status,
+                            )
+                            results[follower] = echo
+                            channel.send(echo)
+                        }
                     }
                 }
             }.awaitAll()
+
             channel.close()
             consumer.join()
-            results
+            results.requireNoNulls().toList()
         }
     }
 }

@@ -888,4 +888,96 @@ class DashboardViewModelTest {
         assertTrue(locker.released, "the library must be released before the process exits")
         viewModel.dispose()
     }
+
+    // ── D11: what the index says about a combined file ───────────────────────
+
+    private fun combineViewModel(
+        disk: FakeFileSystem,
+        result: CombineResult,
+    ) = DashboardViewModel(
+        zipPipelineRunner = FakeZipPipelineRunner(listOf(result)),
+        mediaProcessor = FakeMediaProcessor(),
+        fileSystem = disk,
+        pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+        outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+    ).also {
+        it.changeImportMode(ImportMode.Legacy)
+        it.pickHtmlFile()
+        it.pickOutputFolder()
+    }
+
+    private fun pairOnDisk(favorited: Boolean): FakeFileSystem = FakeFileSystem().apply {
+        createDirectories("/out".toPath())
+        write("/history.json".toPath()) { writeUtf8(historyJson) }
+        // The combiner has already run: the output exists and the originals are gone.
+        write("/out/2023-10-12_AAA.jpg".toPath()) { writeUtf8("combined") }
+        write("/out/vault_index.json".toPath()) {
+            writeUtf8(
+                """{"2023-10-12_AAA-main.jpg":{"hasGps":true,"hasOverlay":true,"favorited":$favorited},""" +
+                    """"2023-10-12_AAA-overlay.png":{"hasGps":false,"hasOverlay":false}}""",
+            )
+        }
+    }
+
+    private fun combined(metadataCarried: Boolean = true) = CombineResult(
+        uuid = "AAA",
+        outputPath = "/out/2023-10-12_AAA.jpg",
+        status = "combined",
+        sourcePaths = listOf("/out/2023-10-12_AAA-main.jpg", "/out/2023-10-12_AAA-overlay.png"),
+        metadataCarried = metadataCarried,
+    )
+
+    private fun DashboardViewModel.runCombineOnly() {
+        startSync(
+            runDownload = false,
+            runMetadata = false,
+            experimentalMetadataMatching = false,
+            runCombine = true,
+            runDedupe = false,
+            dryRun = false,
+        )
+        awaitCompletion(this)
+    }
+
+    // D11: the index is keyed by file name, and the combine step never moved anything to the
+    // name it produced. The sources were then deleted, so the combined photo — the one the
+    // Library actually shows — came up with no GPS, not combined, and not favorited. A
+    // favorite is in no export; losing it to a rename is losing it.
+    @Test
+    fun aCombinedFileInheritsItsSourcesGpsAndFavoriteUnderItsRealName() {
+        val disk = pairOnDisk(favorited = true)
+        val viewModel = combineViewModel(disk, combined())
+
+        viewModel.runCombineOnly()
+
+        val index = VaultIndex.read(disk, "/out")
+        assertEquals(
+            FileMeta(hasGps = true, hasOverlay = true, favorited = true, combined = true),
+            index["2023-10-12_AAA.jpg"],
+            "the combined file's entry, under the name the Library looks it up by",
+        )
+        assertEquals(null, index["2023-10-12_AAA-main.jpg"], "an entry for a deleted source is a claim about nothing")
+        assertEquals(null, index["2023-10-12_AAA-overlay.png"])
+    }
+
+    // GPS is a claim about the file's tags. When the combiner could not copy them across, the
+    // combined file has none — whatever its source had.
+    @Test
+    fun aCombinedFileThatLostItsMetadataDoesNotClaimGps() {
+        val disk = pairOnDisk(favorited = true)
+        disk.write("/out/2023-10-12_AAA-main.jpg".toPath()) { writeUtf8("kept") } // originals kept
+        val viewModel = combineViewModel(disk, combined(metadataCarried = false))
+
+        viewModel.runCombineOnly()
+
+        val entry = VaultIndex.read(disk, "/out")["2023-10-12_AAA.jpg"]
+        assertEquals(false, entry?.hasGps, "no tags were carried, so there is no GPS on this file")
+        assertEquals(true, entry?.combined)
+        assertEquals(true, entry?.favorited, "the favorite belongs to the memory, not to its tags")
+        assertEquals(
+            true,
+            VaultIndex.read(disk, "/out")["2023-10-12_AAA-main.jpg"]?.favorited,
+            "a source still on disk keeps its own entry",
+        )
+    }
 }

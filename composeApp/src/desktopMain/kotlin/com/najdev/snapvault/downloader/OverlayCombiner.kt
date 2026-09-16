@@ -128,11 +128,28 @@ class OverlayCombiner(
                         // Warnings are collected per-pair and shipped inside the result so the
                         // single channel consumer is the only thread touching caller state.
                         val warnings = mutableListOf<String>()
-                        val status = processPair(pair, deleteOriginals, staging) { msg -> warnings.add("[combine] $msg") }
+                        var metadataCarried = true
+                        val status = processPair(
+                            pair,
+                            deleteOriginals,
+                            staging,
+                            onMetadataMissing = { metadataCarried = false },
+                        ) { msg -> warnings.add("[combine] $msg") }
                         if (status == "combined" && !hasDateTag(pair.outputFile.absolutePath, pair.isVideo)) {
                             synchronized(lock) { needsDateFallback.add(pair) }
                         }
-                        channel.send(CombineResult(uuid, pair.outputFile.absolutePath, status, warnings))
+                        channel.send(
+                            CombineResult(
+                                uuid = uuid,
+                                outputPath = pair.outputFile.absolutePath,
+                                status = status,
+                                warnings = warnings,
+                                // Main first: it is the file whose tags and favorite the combined
+                                // output inherits (D11).
+                                sourcePaths = listOf(pair.mainFile.absolutePath, pair.overlayFile.absolutePath),
+                                metadataCarried = metadataCarried,
+                            )
+                        )
                     }
                 }
             }.awaitAll()
@@ -170,6 +187,7 @@ class OverlayCombiner(
         pair: OverlayPair,
         deleteOriginals: Boolean,
         staging: File,
+        onMetadataMissing: () -> Unit = {},
         onWarning: (String) -> Unit = {},
     ): String {
         // An output that already exists is either a previous run's result or a combined
@@ -244,6 +262,8 @@ class OverlayCombiner(
                     }
                 }
             }
+
+            if (metadataMissing) onMetadataMissing()
 
             if (!commit(staged, pair.outputFile)) {
                 return "error: could not move combined output into place — ${pair.outputFile.name}"

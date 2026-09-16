@@ -17,6 +17,12 @@ data class CombineResult(
     // Non-fatal issues hit while processing this pair (e.g. could not delete an original).
     // Delivered with the result so the consumer handles them on a single thread.
     val warnings: List<String> = emptyList(),
+    // The pair this output was built from, main first. The index is keyed by file name, so
+    // without these the combined file could not inherit its source's entry (D11).
+    val sourcePaths: List<String> = emptyList(),
+    // False when the source's tags did not make it onto the output. GPS is a claim about the
+    // file's own tags, so the combined file must not inherit it in that case.
+    val metadataCarried: Boolean = true,
 )
 
 interface ZipPipelineRunner {

@@ -2,6 +2,7 @@ package com.najdev.snapvault.viewmodel
 
 import androidx.compose.runtime.*
 import com.najdev.snapvault.*
+import com.najdev.snapvault.downloader.CombineResult
 import com.najdev.snapvault.downloader.Deduplicator
 import com.najdev.snapvault.downloader.DownloadEngine
 import com.najdev.snapvault.downloader.ZipPipelineRunner
@@ -387,6 +388,39 @@ class DashboardViewModel(
         // isRunning flips in the pipeline's finally block once cancellation completes.
     }
 
+    /**
+     * Gives a combined output its own index entry, inherited from the pair it was built from.
+     *
+     * The index is keyed by file name and the Library looks entries up by the name on disk.
+     * The combine step writes a new name and deletes the sources, and nothing used to move the
+     * entry — so the file the user actually sees came up with no GPS, not combined, and not
+     * favorited (D11). Called from combineAll's single progress consumer, so [meta] and
+     * [derived] are only ever touched from one thread.
+     */
+    private fun recordCombinedOutput(
+        result: CombineResult,
+        meta: MutableMap<String, FileMeta>,
+        derived: CombineDerivatives,
+    ) {
+        val outputName = VaultIndex.keyOf(result.outputPath)
+        val mainName = result.sourcePaths.firstOrNull()?.let(VaultIndex::keyOf)
+        val source = mainName?.let { meta[it] }
+        meta[outputName] = FileMeta(
+            // GPS describes the file's own tags; if they did not make it across, it has none.
+            hasGps = result.metadataCarried && source?.hasGps == true,
+            hasOverlay = true,
+            combined = true,
+        )
+        if (mainName != null) derived.favoritesFrom[mainName] = outputName
+        result.sourcePaths.forEach { path ->
+            if (!fileSystem.exists(path.toPath())) {
+                val name = VaultIndex.keyOf(path)
+                meta.remove(name)
+                derived.goneSources += name
+            }
+        }
+    }
+
     // ── Closing ──────────────────────────────────────────────────────────────
 
     /**
@@ -647,8 +681,9 @@ class DashboardViewModel(
             }
         }
 
+        val derived = CombineDerivatives()
         if (runCombine) {
-            val (combined, skipped, errors) = runCombinePhase(outDir)
+            val (combined, skipped, errors) = runCombinePhase(outDir, downloadedMeta, derived)
             pipelineCombinedCount = combined
             pipelineCombineSkipped = skipped
             pipelineCombineErrors = errors
@@ -660,7 +695,7 @@ class DashboardViewModel(
             // writeMerging, not write: the FileMeta(…) entries above are built from scratch by
             // this run and carry `favorited = false`, and a favorite toggled *during* the run
             // exists only on disk. Writing the run's own map would wipe both.
-            VaultIndex.writeMerging(fileSystem, outDir, downloadedMeta)
+            VaultIndex.writeMerging(fileSystem, outDir, downloadedMeta, derived.favoritesFrom, derived.goneSources)
             log("[INFO] Vault index saved (${downloadedMeta.size} entries).")
         }.onFailure { e -> log("[WARN] Could not write vault index: ${e.message}") }
 
@@ -799,8 +834,9 @@ class DashboardViewModel(
             legacyMetadataPass(presentItems, extractedFiles, downloadedMeta)
         }
 
+        val derived = CombineDerivatives()
         if (runCombine) {
-            legacyCombinePass(outDir)
+            runCombinePhase(outDir, downloadedMeta, derived)
         }
 
         if (runDedupe) runDeduplication(outDir, dryRun)
@@ -809,7 +845,7 @@ class DashboardViewModel(
             // writeMerging, not write: the FileMeta(…) entries above are built from scratch by
             // this run and carry `favorited = false`, and a favorite toggled *during* the run
             // exists only on disk. Writing the run's own map would wipe both.
-            VaultIndex.writeMerging(fileSystem, outDir, downloadedMeta)
+            VaultIndex.writeMerging(fileSystem, outDir, downloadedMeta, derived.favoritesFrom, derived.goneSources)
             log("[INFO] Vault index saved (${downloadedMeta.size} entries).")
         }.onFailure { e -> log("[WARN] Could not write vault index: ${e.message}") }
     }
@@ -1005,9 +1041,19 @@ class DashboardViewModel(
         pipelineFailureCount += failCount
     }
 
+    /** What the index write needs to know about files the combine step derived. */
+    private class CombineDerivatives {
+        val favoritesFrom = mutableMapOf<String, String>()
+        val goneSources = mutableSetOf<String>()
+    }
+
     // Shared by both pipelines: combines every -main/-overlay pair in outDir.
     // Returns (combined, skipped, errors).
-    private suspend fun runCombinePhase(outDir: String): Triple<Int, Int, Int> {
+    private suspend fun runCombinePhase(
+        outDir: String,
+        meta: MutableMap<String, FileMeta>,
+        derived: CombineDerivatives,
+    ): Triple<Int, Int, Int> {
         var combinedCount = 0
         var combineErrorCount = 0
         var combineSkippedCount = 0
@@ -1080,7 +1126,10 @@ class DashboardViewModel(
         ) { result ->
             result.warnings.forEach { log("[WARN] $it") }
             when {
-                result.status == "combined" -> combinedCount++
+                result.status == "combined" -> {
+                    combinedCount++
+                    recordCombinedOutput(result, meta, derived)
+                }
                 result.status.startsWith("skipped:") -> combineSkippedCount++
                 result.status.startsWith("error") -> {
                     combineErrorCount++
@@ -1115,9 +1164,6 @@ class DashboardViewModel(
         return Triple(combinedCount, combineSkippedCount, combineErrorCount)
     }
 
-    private suspend fun legacyCombinePass(outDir: String) {
-        runCombinePhase(outDir)
-    }
 
     //META legacy metadata pass: full date+TIME from the history file's dateStr, plus GPS
     //META when the history file provided coordinates — richer than the ZIP path's date-only tags.

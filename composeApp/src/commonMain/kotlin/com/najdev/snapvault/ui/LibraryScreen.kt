@@ -340,6 +340,8 @@ data class LibraryItem(
     val title: String,
     val type: String,
     val hasGps: Boolean,
+    // True only when an overlay has been combined into this file — it is drawn as "Combined".
+    // Scanners fill it from FileMeta.combined, not FileMeta.hasOverlay (D11).
     val hasOverlay: Boolean,
     val favorited: Boolean = false,
     val fileSizeBytes: Long = 0L

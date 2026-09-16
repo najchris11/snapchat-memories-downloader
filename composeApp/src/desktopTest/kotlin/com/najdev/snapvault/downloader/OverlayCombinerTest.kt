@@ -294,4 +294,33 @@ class OverlayCombinerTest {
             "BUG-01 regression: the precise time-of-day must survive the combine phase, got: $tag",
         )
     }
+
+    // ── What a result tells the index (D11) ──────────────────────────────────
+
+    // The index is keyed by file name, and the combined file has a new one. Without naming its
+    // sources the result gave the pipeline no way to move their entry across, so the file the
+    // Library shows lost its GPS badge and its favorite.
+    @Test
+    fun aCombinedResultNamesItsSourcesMainFirst() {
+        val main = writePng("2023-10-12_AAA-main.png", 8, 8)
+        val overlay = writePng("2023-10-12_AAA-overlay.png", 4, 4)
+
+        val result = combineAll(FakeProcessor()).single()
+
+        assertEquals(listOf(main.absolutePath, overlay.absolutePath), result.sourcePaths)
+        assertTrue(result.metadataCarried)
+    }
+
+    // GPS on the combined file is only true if the tags made it across; the result has to say
+    // when they did not, or the index repeats the source's claim about a file that lacks it.
+    @Test
+    fun aCombinedResultSaysWhenTheSourceMetadataDidNotMakeItAcross() {
+        writePng("2023-10-12_AAA-main.png", 8, 8)
+        writePng("2023-10-12_AAA-overlay.png", 4, 4)
+
+        val failed = combineAll(FakeProcessor(), copyMetadata = { _, _ -> MetadataCopy.Failed }).single()
+
+        assertEquals("combined", failed.status)
+        assertEquals(false, failed.metadataCarried)
+    }
 }

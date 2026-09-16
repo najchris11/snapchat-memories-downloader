@@ -3,6 +3,8 @@ package com.najdev.snapvault
 
 import androidx.compose.ui.graphics.ImageBitmap
 import com.najdev.snapvault.ui.LibraryItem
+import okio.FileSystem
+import okio.Path.Companion.toPath
 import kotlin.jvm.JvmName
 
 expect fun scanMediaFiles(folderPath: String): List<LibraryItem>
@@ -33,10 +35,15 @@ object ThumbnailCache {
 }
 
 fun getCachedThumbnail(path: String): ImageBitmap? {
-    ThumbnailCache.get(path)?.let { return it }
+    // Keyed by the file's size and modification time as well as its path. Keyed by path alone,
+    // a file replaced under the same name kept its old thumbnail for the rest of the session,
+    // however correct the disk cache underneath had become (D19).
+    val meta = FileSystem.SYSTEM.metadataOrNull(path.toPath())
+    val key = "$path|${meta?.size}|${meta?.lastModifiedAtMillis}"
+    ThumbnailCache.get(key)?.let { return it }
     val bitmap = loadThumbnail(path)
     if (bitmap != null) {
-        ThumbnailCache.put(path, bitmap)
+        ThumbnailCache.put(key, bitmap)
     }
     return bitmap
 }

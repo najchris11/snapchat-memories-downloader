@@ -598,6 +598,40 @@ fun LibraryScreen(
     }
 }
 
+/**
+ * Where a thumbnail load has got to.
+ *
+ * A bare nullable could not tell "still loading" from "nothing can be shown", so a memory no
+ * decoder could read looked like one mid-load forever — a faint icon with no word that the
+ * file itself was fine (D19).
+ */
+internal sealed interface ThumbnailLoad {
+    data object Loading : ThumbnailLoad
+    data class Ready(val bitmap: ImageBitmap) : ThumbnailLoad
+    data object Unavailable : ThumbnailLoad
+}
+
+@Composable
+internal fun rememberThumbnail(path: String): ThumbnailLoad {
+    val load by produceState<ThumbnailLoad>(ThumbnailLoad.Loading, path) {
+        value = withContext(ioDispatcher) { getCachedThumbnail(path) }
+            ?.let { ThumbnailLoad.Ready(it) }
+            ?: ThumbnailLoad.Unavailable
+    }
+    return load
+}
+
+@Composable
+private fun PreviewUnavailableLabel() {
+    Text(
+        stringResource(Res.string.lib_preview_unavailable),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+    )
+}
+
 @Composable
 internal fun InspectorItemDetail(
     item: LibraryItem,
@@ -611,9 +645,8 @@ internal fun InspectorItemDetail(
     onToggleFavorite: (Boolean) -> Unit = {},
 ) {
     val isVideo = item.type == "video"
-    val thumbnail by produceState<ImageBitmap?>(null, item.id) {
-        value = withContext(ioDispatcher) { getCachedThumbnail(item.id) }
-    }
+    val thumbnailLoad = rememberThumbnail(item.id)
+    val thumbnail = (thumbnailLoad as? ThumbnailLoad.Ready)?.bitmap
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
@@ -652,12 +685,15 @@ internal fun InspectorItemDetail(
                     )
                 }
             } else {
-                Icon(
-                    imageVector = if (isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.Image,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
-                    modifier = Modifier.size(48.dp)
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = if (isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.Image,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
+                        modifier = Modifier.size(48.dp)
+                    )
+                    if (thumbnailLoad == ThumbnailLoad.Unavailable) PreviewUnavailableLabel()
+                }
             }
 
             // Close / deselect
@@ -1121,9 +1157,8 @@ fun MediaPreviewDialog(
 @Composable
 fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit = {}) {
     val isVideo = item.type == "video"
-    val thumbnail by produceState<ImageBitmap?>(null, item.id) {
-        value = withContext(ioDispatcher) { getCachedThumbnail(item.id) }
-    }
+    val thumbnailLoad = rememberThumbnail(item.id)
+    val thumbnail = (thumbnailLoad as? ThumbnailLoad.Ready)?.bitmap
 
     Card(
         // `clickable` rather than a tap gesture, and that is load-bearing beyond the ripple:
@@ -1167,12 +1202,15 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                 )
 
                 if (thumbnail == null) {
-                    Icon(
-                        imageVector = if (isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.Image,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f),
-                        modifier = Modifier.size(44.dp)
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = if (isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.Image,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f),
+                            modifier = Modifier.size(44.dp)
+                        )
+                        if (thumbnailLoad == ThumbnailLoad.Unavailable) PreviewUnavailableLabel()
+                    }
                 }
 
                 // Type badge

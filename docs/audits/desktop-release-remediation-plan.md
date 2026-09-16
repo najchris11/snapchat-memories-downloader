@@ -323,6 +323,12 @@ memory-exhaustion test must never run against a real host.
 - **Fix direction:** versioned tool directories, recorded checksums, staged extraction with
   atomic install, expose actual resolved path/version in Settings (ties into D17's "under-
   specified provenance" but the version-exposure UI is a small, separate, testable piece).
+- **Status:** landed — tools install per bundled-archive SHA-256 under `~/.snapvault/bin/<tool>/`,
+  via staged extraction with a completion marker and rename, with entry-path containment and
+  cleanup of superseded versions. A tool on the user's PATH still takes precedence.
+- **Deferred:** showing the resolved tool path/version in Settings; and removing the flat
+  `~/.snapvault/bin/{ffmpeg,exiftool,exiftool-dist}` left by earlier builds, which is no longer
+  read but still occupies disk.
 
 ### Task 4.3 — D13: bound resource consumption
 - **Files:** `computeWorkerCount()` is an `expect`/`actual` — declared in

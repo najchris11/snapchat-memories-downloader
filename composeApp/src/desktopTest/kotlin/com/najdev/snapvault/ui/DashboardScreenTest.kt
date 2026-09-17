@@ -5,12 +5,15 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.v2.runComposeUiTest
+import com.najdev.snapvault.ImportMode
 import com.najdev.snapvault.WindowSize
 import com.najdev.snapvault.viewmodel.DEFAULT_DRY_RUN
 import com.najdev.snapvault.viewmodel.DEFAULT_PIPELINE_EXPANDED
@@ -173,5 +176,33 @@ class DashboardScreenTest {
         }
 
         onNodeWithText("1 step failed").assertIsDisplayed()
+    }
+
+    // D18: precise matching writes each memory's GPS position into the file itself, and it is
+    // on by default. Nothing said so, and a location inside a photo travels with every copy of
+    // it that is shared. The notice has to be on screen before Start can be pressed at all —
+    // with nothing picked yet — and has to follow the options that actually write a location.
+    @Test
+    fun theLocationNoticeIsShownBeforeAnImportCanStartAndOnlyWhenGpsWillBeWritten() = runComposeUiTest {
+        val notice = stringResource("opt_gps_disclosure")
+        val viewModel = idleDashboardViewModel()
+        setContent {
+            SnapVaultTheme(darkMode = true) { DashboardScreen(viewModel = viewModel, onNavigateToSettings = {}) }
+        }
+
+        // ZIP import, defaults: precise time + GPS matching is on.
+        onNode(hasText("Start", substring = true) and hasClickAction()).assertIsNotEnabled()
+        onNodeWithText(notice).assertIsDisplayed()
+
+        // Date-only metadata writes no location, so the notice would be false.
+        onNode(hasText("Precise time + GPS matching") and isToggleable()).performClick()
+        waitForIdle()
+        onAllNodes(hasText(notice)).assertCountEquals(0)
+
+        // Legacy import writes GPS from the export's location data whenever metadata is on.
+        viewModel.changeImportMode(ImportMode.Legacy)
+        waitForIdle()
+        onNodeWithText(notice).assertIsDisplayed()
+        viewModel.dispose()
     }
 }

@@ -340,10 +340,15 @@ private fun DashboardControls(
                         PipelineItem(Icons.Outlined.CloudDownload, stringResource(Res.string.opt_download_memories), options.runDownload, enabled = editable) { options.runDownload = it }
                     }
                     val isZipMode = viewModel.importMode != ImportMode.Legacy
+                    // A position written into a file travels with every copy shared from it, so
+                    // say so under whichever switch is the one writing it — and only while it
+                    // is: date-only ZIP metadata writes no location (D18).
+                    val gpsDisclosure = stringResource(Res.string.opt_gps_disclosure)
                     PipelineItem(
                         icon = if (isZipMode) Icons.Outlined.CalendarMonth else Icons.Outlined.GpsFixed,
                         label = if (isZipMode) stringResource(Res.string.opt_write_date_metadata) else stringResource(Res.string.opt_inject_gps),
                         checked = options.runMetadata,
+                        helperText = gpsDisclosure.takeIf { !isZipMode && options.runMetadata },
                         enabled = editable,
                         onCheckedChange = { options.runMetadata = it }
                     )
@@ -352,6 +357,7 @@ private fun DashboardControls(
                             Icons.Outlined.Info,
                             stringResource(Res.string.opt_precise_matching),
                             options.preciseMatching,
+                            helperText = gpsDisclosure.takeIf { options.preciseMatching },
                             enabled = editable,
                         ) { options.preciseMatching = it }
                     }

@@ -159,6 +159,11 @@
     <string name="lib_detail_overlay">OVERLAY</string>
     <string name="lib_gps_tagged">Tagged</string>
     <string name="lib_gps_none">No data</string>
+    <!-- Desktop hands videos to the system player rather than playing them in the app. -->
+    <string name="video_open_in_player">Open in your video player</string>
+    <string name="video_opening">Opening…</string>
+    <string name="video_open_failed">Could not open this video: %1$s</string>
+    <string name="video_preview_cd">Video preview</string>
     <string name="lib_preview_unavailable">Preview unavailable — open the original</string>
     <string name="lib_overlay_combined">Combined</string>
     <string name="lib_overlay_none">None</string>

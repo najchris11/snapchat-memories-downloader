@@ -565,7 +565,7 @@ private fun DashboardStatus(
                 onClick = {
                     @Suppress("DEPRECATION")
                     clipboardManager.setText(
-                        AnnotatedString(viewModel.logs.joinToString("\n"))
+                        AnnotatedString(viewModel.supportLogText())
                     )
                     logsCopied = true
                     logScope.launch {

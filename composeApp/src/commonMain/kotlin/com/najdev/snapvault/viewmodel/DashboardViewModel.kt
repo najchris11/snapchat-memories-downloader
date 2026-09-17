@@ -119,6 +119,13 @@ class DashboardViewModel(
         logLock.withLock { logs.add(message) }
     }
 
+    /**
+     * The log as "Copy logs" hands it out: every line through [redactForSupport], so a pasted
+     * support log carries no download-link credentials or account names (D18).
+     */
+    fun supportLogText(): String =
+        logLock.withLock { logs.toList() }.joinToString("\n") { redactForSupport(it) }
+
     // ── Favorites ────────────────────────────────────────────────────────────
 
     /**

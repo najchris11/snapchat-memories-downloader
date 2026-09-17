@@ -414,6 +414,46 @@ this plan.
   entry sizes, interrupted verification, crash before/after commit, cleanup default off,
   etc.) — use that list directly as your test plan once the design is settled. Default this
   feature **off**.
+
+  **Agreed with the user (2026-09-16):** build it, after Batch 5, as a "low-space mode" that
+  the D13 preflight *offers* when a normal run will not fit. Design notes from that
+  discussion — carry them into the design pass:
+
+  - **Where space goes today.** The ZIP pipeline runs phase-by-phase across *all* archives:
+    extract everything (ZIPs all retained; media is already compressed, so extracted ≈ ZIP
+    size) → metadata (exiftool writes a temp copy per file, ≤ `MAX_WORKERS` at once, and
+    `memories_history.json` is read *from the ZIPs* at this phase, after extraction) →
+    combine (writes each output while its originals exist; originals removed only after
+    verification; re-encoded video can be larger) → dedupe (frees space only at the end).
+    Peak ≈ all ZIPs + all extracted media + working room.
+  - **The realistic floor** is final library + largest single ZIP + working room. A ZIP
+    cannot shrink as entries come out, so an archive can only be deleted once it is wholly
+    done — "delete as we unzip" means per archive, not per entry. The ZIPs are the only
+    large reclaimable thing: combine originals are already removed once verified, temp files
+    are per-worker and short-lived, thumbnails can wait until after the run.
+  - **When not to offer it.** If the finished library alone will not fit, no mode helps — say
+    so and suggest another drive. If the ZIPs are on a different volume from the output,
+    deleting them frees nothing where the library is written — do not offer the mode.
+  - **Required restructuring.** Deleting ZIPs after the extract phase would break GPS
+    matching (history JSON still needed) and leave nothing to re-extract from if a later
+    phase fails. The pipeline must run *per archive*: extract → tag → combine → verify →
+    write a durable per-archive commit record → only then delete that ZIP. Read and persist
+    the history JSON (and whatever the index/HTML parse needs for a rerun) before any ZIP is
+    deleted. Any archive with a failure, skipped, unmatched or conflicting entry is retained.
+  - **Open questions to check against a real export first.** (1) Can a main and its overlay
+    land in *different* ZIPs? If so, an archive is not independently completable and pairs
+    need a cross-archive hold. (2) Can duplicates span archives, and does dedupe need to see
+    all of them before anything is deleted?
+  - **Trash vs permanent delete.** On macOS, moving to Trash does not free space until it is
+    emptied, so this mode must delete permanently, and the confirmation must say so plainly.
+    Do not silently empty the Trash.
+  - **The prompt.** Replaces the flat D13 refusal when normal mode will not fit but low-space
+    mode would (same volume): list the exact archives and bytes to be deleted, state the
+    deletion cannot be undone, and show the estimated peak for both modes. If neither fits,
+    refuse and suggest another destination.
+  - **Mobile note.** On iOS/Android the picked ZIP may be a sandbox/SAF copy or live in cloud
+    storage, where deleting it may not free local space — confirm before enabling the mode
+    there; desktop first.
 - **D21 — native decorated macOS window for AeroSpace compatibility.** Candidate fix: stop
   using `undecorated = true` / custom traffic lights on macOS, keep the native title bar and
   fullscreen control. Write a failing test asserting the macOS window is decorated with a

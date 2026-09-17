@@ -73,6 +73,10 @@ The app version is set in `gradle.properties` (`app.version`). Releases are cut 
 
 The original Python-based CLI scripts are preserved in [`legacy/`](legacy/) for reference. They are not actively maintained.
 
+## Support SnapVault
+
+SnapVault is free to use. If it helps you, you can [leave an optional tip on Ko-fi](https://ko-fi.com/najdev) to support development and distribution.
+
 ## Credits
 
 Forked from [ManuelPuchner/snapchat-memories-downloader](https://github.com/ManuelPuchner/snapchat-memories-downloader). Thanks to Manuel and [Nick](https://github.com/nrc2358) for the original implementation.

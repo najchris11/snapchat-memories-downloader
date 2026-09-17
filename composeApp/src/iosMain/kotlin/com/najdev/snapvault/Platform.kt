@@ -8,6 +8,7 @@ import platform.Foundation.NSURL
 import platform.UIKit.UIApplication
 
 actual val isAndroidBuild: Boolean = false
+actual val platformSupportPageUrl: String? = null
 actual fun binaryInstallHint(): String = ""
 
 actual fun openUrl(url: String) {

@@ -205,4 +205,14 @@
     </plurals>
     <string name="close_keep_open">Keep SnapVault open</string>
     <string name="close_quit_anyway">Quit anyway</string>
+    <string name="support_title">Support SnapVault</string>
+    <string name="support_description">SnapVault is free to use. Optional tips help support development and distribution.</string>
+    <string name="support_action">Support me on Ko-fi</string>
+    <string name="support_accessible_label">Support me on Ko-fi. Optional tip; opens Ko-fi in your browser.</string>
+    <string name="support_browser_hint">Opens Ko-fi in your browser.</string>
+    <string name="support_sidebar_hint">Optional tip · Opens your browser</string>
+    <string name="support_open_failed">Could not open your browser. Copy the link and open it manually.</string>
+    <string name="support_copy_link">Copy link</string>
+    <string name="support_copied">Link copied.</string>
+    <string name="support_copy_failed">Could not copy the link. Select the address above and copy it manually.</string>
 </resources>

@@ -18,6 +18,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.najdev.snapvault.Screen
+import com.najdev.snapvault.platformSupportPageUrl
+import com.najdev.snapvault.ui.SupportAction
 import com.najdev.snapvault.ui.navIconActive
 import com.najdev.snapvault.ui.navIconInactive
 import com.najdev.snapvault.ui.navLabel
@@ -31,6 +33,9 @@ fun AppSidebar(
     isRunning: Boolean,
     currentStep: Int,
     onNavigate: (Screen) -> Unit,
+    supportPageUrl: String? = platformSupportPageUrl,
+    onOpenSupportPage: (suspend (String) -> Unit)? = null,
+    onCopySupportPage: ((String) -> Unit)? = null,
 ) {
     Surface(
         modifier = Modifier.width(220.dp).fillMaxHeight(),
@@ -59,6 +64,7 @@ fun AppSidebar(
 
             Spacer(Modifier.weight(1f))
             StatusChip(isRunning = isRunning, currentStep = currentStep)
+            SupportAction(supportPageUrl, onOpenSupportPage, onCopySupportPage)
         }
     }
 }

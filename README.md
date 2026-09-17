@@ -1,6 +1,8 @@
 # SnapVault
 
-**SnapVault** is an open-source desktop app for downloading, organizing, and processing your Snapchat memories. Works entirely offline after your export is ready — no Python, no CLI, no manual setup.
+**SnapVault** is an open-source desktop app for downloading, organizing, and processing your Snapchat memories. No Python or command line needed.
+
+**What runs where:** ZIP imports run locally. Legacy link imports require internet access. Linux requires FFmpeg and Perl.
 
 Built with Kotlin Multiplatform + Compose Desktop. Ships as a native installer for macOS, Windows, and Linux.
 
@@ -16,7 +18,7 @@ Built with Kotlin Multiplatform + Compose Desktop. Ships as a native installer f
 1. **Download** the latest release for your OS from the [Releases](../../releases) page
 2. **Install** the `.dmg` (macOS), `.msi` (Windows), or `.deb` (Linux)
    > **Note:** releases are not yet code-signed. On macOS, Gatekeeper will warn that the app is from an unidentified developer — right-click the app → **Open** → **Open** (or run `xattr -d com.apple.quarantine /Applications/SnapVault.app`). On Windows, SmartScreen may show "Windows protected your PC" — click **More info** → **Run anyway**. See [docs/CODE_SIGNING.md](docs/CODE_SIGNING.md) for the signing roadmap.
-3. On Linux, install FFmpeg with your package manager (e.g. `sudo apt install ffmpeg`); on macOS/Windows both tools are bundled
+3. On Linux, install FFmpeg and Perl with your package manager (e.g. `sudo apt install ffmpeg perl`); on macOS/Windows both tools are bundled
 4. On the **Dashboard**, choose your Snapchat ZIP(s) and an output folder
 5. Configure pipeline options and click **Start Download**
 
@@ -32,9 +34,11 @@ Built with Kotlin Multiplatform + Compose Desktop. Ships as a native installer f
 | **Download Memories** | (Legacy mode) Downloads every memory from the links in your history file |
 | **Write Date Metadata** | Tags each file with its Snapchat capture date via ExifTool. In ZIP mode, precise time + GPS matching (on by default; can be turned off) also recovers time-of-day and GPS from `memories_history.json`. Legacy mode writes time-of-day and GPS where the history file provides them |
 | **Merge Video Overlays** | Combines `-main` + `-overlay` pairs (photos and videos) into a single composited output, using GPU-accelerated encoding when the hardware supports it (NVENC/VideoToolbox/QSV/VAAPI/AMF, verified by a runtime probe with automatic software fallback) |
-| **Clean Duplicate Files** | Removes byte-identical duplicates, keeping the earliest-dated copy; enable the dry-run toggle to preview deletions first |
+| **Clean Duplicate Files** | Removes byte-identical duplicates, keeping the earliest-dated copy and never removing a favorited file; enable the dry-run toggle to preview deletions first |
 
 > **How does ZIP mode recover time-of-day and GPS?** Snapchat's filenames only carry the capture date, but each file's exact capture timestamp is stored in the ZIP archive's extended-timestamp metadata. The matcher (on by default) pairs that timestamp second-for-second against `memories_history.json`, recovering full time-of-day and GPS. It never guesses: when two records share the same timestamp and their locations disagree, GPS is omitted for those files, and files without a timestamp match fall back to date-only tags. The **Precise time + GPS matching** toggle on the Dashboard can be switched off to force conservative date-only tagging for every file.
+
+> **Location privacy:** with precise matching on (ZIP mode) or metadata on (Legacy mode), each memory's GPS position is written into the photo or video file itself. Anyone you share those files with can read where they were taken. In ZIP mode, turn precise matching off for date-only tags; otherwise, strip location before sharing.
 
 ## System Requirements
 

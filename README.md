@@ -15,7 +15,7 @@ Built with Kotlin Multiplatform + Compose Desktop. Ships as a native installer f
 
 ## Quickstart
 
-1. **Download** the latest release for your OS from the [Releases](../../releases) page
+1. **Download** the latest release for your OS from the [Releases](../../releases) page. On a Mac, choose `macos-arm64` for Apple Silicon (M-series) or `macos-x64` for Intel. `SHA256SUMS.txt` on the release lists each download's checksum.
 2. **Install** the `.dmg` (macOS), `.msi` (Windows), or `.deb` (Linux)
    > **Note:** releases are not yet code-signed. On macOS, Gatekeeper will warn that the app is from an unidentified developer — right-click the app → **Open** → **Open** (or run `xattr -d com.apple.quarantine /Applications/SnapVault.app`). On Windows, SmartScreen may show "Windows protected your PC" — click **More info** → **Run anyway**. See [docs/CODE_SIGNING.md](docs/CODE_SIGNING.md) for the signing roadmap.
 3. On Linux, install FFmpeg and Perl with your package manager (e.g. `sudo apt install ffmpeg perl`); on macOS/Windows both tools are bundled

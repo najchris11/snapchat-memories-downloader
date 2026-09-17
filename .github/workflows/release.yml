@@ -1,101 +1,115 @@
 name: Release
 
-# Releases are cut manually (Actions → Release → Run workflow) so that merging a PR
-# never auto-publishes installers. The workflow bumps the version, tags, runs the
-# desktop test suite on all three OSes, and only then packages and uploads.
+# Releases are cut manually (Actions → Release → Run workflow) so that merging a PR never
+# auto-publishes installers.
+#
+# Nothing is tagged, pushed or published until every installer has been built, tested and
+# checked (D16). The order is:
+#
+#   prepare  — work out the version and refuse one that is not above every release
+#   build    — per platform: run the test suite, package the installer, verify it
+#   publish  — only if every build succeeded: commit the version, tag, and publish them together
+#
+# The previous workflow tagged and pushed before any test ran, and each platform uploaded its
+# own installer to the release as it finished, so one platform could publish while another
+# failed.
+#
+# Dry runs (the default) do everything except publish, from any branch. Use one to test a
+# change to this workflow; `simulate_failure` fails one platform's build to show that nothing
+# is published when any platform fails.
 on:
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run: build, test and package every installer, but tag and publish nothing"
+        type: boolean
+        default: true
+      simulate_failure:
+        description: "Dry runs only: fail this platform's build, to confirm nothing would publish"
+        type: choice
+        default: none
+        options: [none, macos-arm64, macos-x64, windows-x64, linux-x64]
+
+# One release at a time. A second run queues rather than cancelling one that may be mid-push.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  bump-version:
+  prepare:
     runs-on: ubuntu-latest
     outputs:
-      new_tag: ${{ steps.version.outputs.new_tag }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      sha: ${{ steps.version.outputs.sha }}
     steps:
+      # Publishing pushes the version commit to main, so only main may publish.
+      - name: Refuse to publish from a branch other than main
+        if: ${{ !inputs.dry_run && github.ref != 'refs/heads/main' }}
+        run: |
+          echo "::error::Releases publish from main only; this run was started from ${GITHUB_REF}. Start a dry run to test another branch."
+          exit 1
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Automated Version Bump
+      - name: Test the release version script
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+
+      # Refuses a version already released — e.g. a branch whose gradle.properties is behind
+      # the latest tag — instead of re-tagging it or shipping a lower version.
+      - name: Work out the version
         id: version
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          VERSION="$(python3 scripts/release_version.py next \
+            --commit-message "$(git log -1 --pretty=%B)" \
+            --tags $(git tag --list 'v*'))"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "Releasing v$VERSION from $(git rev-parse --short HEAD)"
 
-          COMMIT_MSG=$(git log -1 --pretty=%B)
-          echo "Commit message: $COMMIT_MSG"
-
-          if [[ "$COMMIT_MSG" == *"MAJOR:"* ]]; then
-            BUMP="major"
-          elif [[ "$COMMIT_MSG" == *"MINOR:"* ]] || [[ "$COMMIT_MSG" == *"FEAT:"* ]]; then
-            BUMP="minor"
-          else
-            BUMP="patch"
-          fi
-
-          echo "Bumping version ($BUMP)..."
-
-          NEW_VERSION=$(python3 -c "
-          import re, sys
-          with open('gradle.properties', 'r') as f:
-              prop_content = f.read()
-          version_match = re.search(r'app\.version\s*=\s*([^\r\n]+)', prop_content)
-          if not version_match:
-              sys.exit('app.version not found in gradle.properties')
-          version = version_match.group(1).strip()
-          version_core = version.split('-')[0]
-          major, minor, patch = map(int, version_core.split('.'))
-          bump = '$BUMP'
-          if bump == 'major':
-              major += 1; minor = 0; patch = 0
-          elif bump == 'minor':
-              minor += 1; patch = 0
-          else:
-              patch += 1
-          new_version = f'{major}.{minor}.{patch}'
-
-          prop_content = re.sub(r'app\.version\s*=\s*.*', f'app.version={new_version}', prop_content)
-          with open('gradle.properties', 'w') as f:
-              f.write(prop_content)
-
-          with open('composeApp/build.gradle.kts', 'r') as f:
-              build_content = f.read()
-          code_match = re.search(r'versionCode\s*=\s*(\d+)', build_content)
-          if code_match:
-              code = int(code_match.group(1)) + 1
-              build_content = re.sub(r'versionCode\s*=\s*\d+', f'versionCode = {code}', build_content)
-              with open('composeApp/build.gradle.kts', 'w') as f:
-                  f.write(build_content)
-
-          print(new_version)
-          ")
-
-          NEW_TAG="v$NEW_VERSION"
-          echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
-
-          git add gradle.properties composeApp/build.gradle.kts
-          git commit -m "chore: release $NEW_TAG [skip ci]"
-          git tag $NEW_TAG
-          git push origin main
-          git push origin $NEW_TAG
-
-  build-release:
-    needs: bump-version
-    runs-on: ${{ matrix.os }}
+  build:
+    needs: prepare
+    name: build (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
     strategy:
+      # Every platform runs to the end even when one fails, so a single run reports every
+      # broken platform. Publishing is gated on all of them regardless.
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+        include:
+          # One job per macOS architecture (D17). jpackage bundles the JDK of the machine that
+          # builds the app, so a DMG only runs natively on the architecture it was built on.
+          - target: macos-arm64
+            runner: macos-15
+            arch: arm64
+          - target: macos-x64
+            runner: macos-15-intel
+            arch: x86_64
+          - target: windows-x64
+            runner: windows-latest
+          - target: linux-x64
+            runner: ubuntu-latest
+
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
 
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.bump-version.outputs.new_tag }}
+          ref: ${{ needs.prepare.outputs.sha }}
+
+      - name: Simulated failure (dry run)
+        if: ${{ inputs.dry_run && inputs.simulate_failure == matrix.target }}
+        shell: bash
+        run: |
+          echo "::error::Simulated failure for ${{ matrix.target }}. Nothing downstream of this build should run."
+          exit 1
 
       # JBR satisfies Compose Desktop's implicit {vendor=JetBrains} toolchain
       # requirement for packaging tasks. Zulu/Temurin do not, causing Gradle
@@ -128,18 +142,19 @@ jobs:
         run: chmod +x gradlew
 
       # macOS and Windows binaries are committed to the repo; no download needed.
-      # Linux bundles only exiftool (gitignored; built fresh here). FFmpeg is not
-      # bundled on Linux — the app resolves it from the system PATH at runtime.
+      # Linux bundles only exiftool (gitignored; built fresh here, hash-verified by the
+      # script). FFmpeg is not bundled on Linux — the app resolves it from the system PATH.
       - name: Prepare bundled runtime (Linux only)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update && sudo apt-get install -y zip unzip
           bash scripts/prepare-runtime-linux.sh
 
-      # A release must never ship from a commit with failing tests.
+      # The version is passed on the command line rather than committed: nothing is pushed
+      # until every platform has passed. -P overrides gradle.properties.
       - name: Run desktop test suite
         shell: bash
-        run: ./gradlew :composeApp:desktopTest -Pcompose.javaHome="$JAVA_HOME"
+        run: ./gradlew :composeApp:desktopTest -Pcompose.javaHome="$JAVA_HOME" -Papp.version="$VERSION"
 
       # packageRelease* is the "release" build type Gradle-side, but ProGuard is disabled
       # for it (composeApp/build.gradle.kts) — the default shrink pass corrupts merged
@@ -148,15 +163,112 @@ jobs:
       # what was actually validated.
       - name: Build & package desktop distribution (release variant)
         shell: bash
-        run: ./gradlew packageReleaseDistributionForCurrentOS -Pcompose.javaHome="$JAVA_HOME"
+        run: ./gradlew packageReleaseDistributionForCurrentOS -Pcompose.javaHome="$JAVA_HOME" -Papp.version="$VERSION"
 
-      - name: Upload release assets
-        uses: softprops/action-gh-release@v2
+      - name: Verify the DMG architecture
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          dmgs=(composeApp/build/compose/binaries/main-release/dmg/*.dmg)
+          [[ ${#dmgs[@]} -eq 1 ]] || { echo "::error::expected one DMG, found ${#dmgs[@]}"; exit 1; }
+          bash scripts/verify-macos-arch.sh "${dmgs[0]}" "${{ matrix.arch }}"
+
+      # Named for platform and architecture, so the Intel and Apple Silicon DMGs cannot
+      # overwrite each other on the release and a user can tell which to download.
+      - name: Name the installer
+        shell: bash
+        run: |
+          shopt -s nullglob
+          installers=(composeApp/build/compose/binaries/main-release/{dmg/*.dmg,msi/*.msi,deb/*.deb})
+          [[ ${#installers[@]} -eq 1 ]] || { echo "::error::expected one installer, found ${#installers[@]}"; exit 1; }
+          mkdir -p dist
+          cp "${installers[0]}" "dist/SnapVault-${VERSION}-${{ matrix.target }}.${installers[0]##*.}"
+          ls -l dist
+
+      - name: Stage the installer
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ needs.bump-version.outputs.new_tag }}
-          files: |
-            composeApp/build/compose/binaries/main-release/dmg/*.dmg
-            composeApp/build/compose/binaries/main-release/msi/*.msi
-            composeApp/build/compose/binaries/main-release/deb/*.deb
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: installer-${{ matrix.target }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    # `needs` succeeds only when every matrix build succeeded, so one failed platform
+    # publishes nothing.
+    needs: [prepare, build]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      # The installers were built and tested from prepare's commit. If main has moved since,
+      # tagging main now would label code that was never tested.
+      - name: Refuse if main moved since the build
+        run: |
+          if [[ "$(git rev-parse HEAD)" != "${{ needs.prepare.outputs.sha }}" ]]; then
+            echo "::error::main moved from ${{ needs.prepare.outputs.sha }} to $(git rev-parse HEAD) during the build. Run the release again."
+            exit 1
+          fi
+
+      - name: Collect the installers
+        uses: actions/download-artifact@v4
+        with:
+          pattern: installer-*
+          merge-multiple: true
+          path: dist
+
+      # Checksums for every download, plus the provenance of the tools bundled inside them.
+      - name: Checksums and tool manifest
+        run: |
+          cp composeApp/src/desktopMain/resources/bin/manifest.json dist/bundled-tools-manifest.json
+          (cd dist && sha256sum -- * > SHA256SUMS.txt)
+          cat dist/SHA256SUMS.txt
+
+      - name: Commit the version and tag it
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          python3 scripts/release_version.py apply "$VERSION"
+          git add gradle.properties composeApp/build.gradle.kts
+          git commit -m "chore: release $TAG [skip ci]"
+          git tag "$TAG"
+          git push origin HEAD:main
+          git push origin "$TAG"
+
+      - name: Publish the release
+        run: gh release create "$TAG" dist/* --title "$TAG" --verify-tag
+
+  dry-run-summary:
+    needs: [prepare, build]
+    if: ${{ inputs.dry_run }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Collect the installers
+        uses: actions/download-artifact@v4
+        with:
+          pattern: installer-*
+          merge-multiple: true
+          path: dist
+
+      - name: Report what would have been published
+        run: |
+          {
+            echo "### Dry run: v${{ needs.prepare.outputs.version }} was not published"
+            echo
+            echo "Every platform built, tested and packaged. A real run would have published:"
+            echo
+            echo '```'
+            (cd dist && sha256sum -- *)
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

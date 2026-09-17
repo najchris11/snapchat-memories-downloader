@@ -46,21 +46,32 @@ internal class ToolInstaller(
         val staging = File(toolDir, "$STAGING_PREFIX${System.nanoTime()}")
         try {
             if (!extract(archive, staging)) return null
-            val exe = File(staging, exeName)
-            if (!exe.isFile) return null
+            val installRoot = installRootOf(staging, exeName) ?: return null
             if (!platform.startsWith("windows")) {
-                staging.walkTopDown().filter { it.isFile }.forEach { it.setExecutable(true, false) }
+                installRoot.walkTopDown().filter { it.isFile }.forEach { it.setExecutable(true, false) }
             }
-            File(staging, COMPLETE_MARKER).writeText(sha256(archive))
+            File(installRoot, COMPLETE_MARKER).writeText(sha256(archive))
 
             // Another process may have installed the same version while this one extracted.
-            if (!staging.renameTo(versionDir) && !isComplete(versionDir, exeName)) return null
+            if (!installRoot.renameTo(versionDir) && !isComplete(versionDir, exeName)) return null
         } finally {
             staging.deleteRecursively()
         }
 
         removeOtherVersions(toolDir, keep = versionDir)
         return File(versionDir, exeName)
+    }
+
+    // The directory holding the executable: the archive root, or the one folder an archive
+    // wraps its contents in. The committed Windows archives are the second kind — made by
+    // zipping a folder, with Finder's __MACOSX and .DS_Store alongside — and requiring the root
+    // meant bundled tools never installed on Windows at all. Anything else is ambiguous, and
+    // nothing is installed.
+    private fun installRootOf(extracted: File, exeName: String): File? {
+        if (File(extracted, exeName).isFile) return extracted
+        val entries = extracted.listFiles()?.filterNot { it.name == "__MACOSX" || it.name.startsWith(".") }.orEmpty()
+        val folder = entries.singleOrNull()?.takeIf { it.isDirectory } ?: return null
+        return folder.takeIf { File(it, exeName).isFile }
     }
 
     private fun isComplete(versionDir: File, exeName: String): Boolean =

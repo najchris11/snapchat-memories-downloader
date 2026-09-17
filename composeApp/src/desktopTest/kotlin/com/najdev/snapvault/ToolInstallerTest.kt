@@ -143,4 +143,29 @@ class ToolInstallerTest {
             return n
         }
     }
+
+    // An archive made by zipping a folder wraps everything in that folder, and one zipped in
+    // Finder adds __MACOSX beside it. The committed Windows archives are both; see
+    // ShippedToolBundlesTest for the archives themselves.
+    @Test
+    fun anArchiveThatWrapsTheToolInOneFolderInstallsFromThatFolder() {
+        val zip = zipOf(
+            "exiftool-13/exiftool" to "#!/bin/sh",
+            "exiftool-13/lib/Image.pm" to "perl",
+            "__MACOSX/exiftool-13/._exiftool" to "resource fork",
+        )
+
+        val exe = assertNotNull(installer(zip).install("exiftool"))
+
+        assertEquals("exiftool", exe.name)
+        assertTrue(File(exe.parentFile, "lib/Image.pm").isFile, "the folder's other files moved with it")
+    }
+
+    // Two folders could each be the tool; guessing would install whichever listed first.
+    @Test
+    fun anArchiveWithMoreThanOneCandidateFolderInstallsNothing() {
+        val zip = zipOf("a/exiftool" to "one", "b/exiftool" to "two")
+
+        assertNull(installer(zip).install("exiftool"))
+    }
 }

@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.AppBuildConfig
 import com.najdev.snapvault.binaryInstallHint
+import com.najdev.snapvault.platformSupportPageUrl
 import com.najdev.snapvault.ui.theme.SnapVaultColors
 import com.najdev.snapvault.LayoutOverride
 import com.najdev.snapvault.ThemeMode
@@ -44,6 +45,9 @@ fun SettingsScreen(
     onLayoutOverrideChange: (LayoutOverride) -> Unit,
     outputFolderChangeable: Boolean = true,
     resetOutcome: DashboardViewModel.IndexResetOutcome? = null,
+    supportPageUrl: String? = platformSupportPageUrl,
+    onOpenSupportPage: (suspend (String) -> Unit)? = null,
+    onCopySupportPage: ((String) -> Unit)? = null,
 ) {
     Column(
         modifier = Modifier
@@ -291,6 +295,8 @@ fun SettingsScreen(
                 }
             }
         }
+
+        SupportSection(supportPageUrl, onOpenSupportPage, onCopySupportPage)
 
         Spacer(Modifier.height(8.dp))
 

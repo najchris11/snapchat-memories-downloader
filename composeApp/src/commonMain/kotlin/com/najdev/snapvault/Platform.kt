@@ -21,6 +21,9 @@ expect fun binaryInstallHint(): String
 // the request — a failed Help click should not take the window down.
 expect fun openUrl(url: String)
 
+// Optional external tipping page for direct desktop distribution. Mobile builds omit it.
+expect val platformSupportPageUrl: String?
+
 // Shows [path] in the platform's file manager, selecting the file where that is supported
 // and opening its parent directory otherwise. Like openUrl, silently does nothing rather
 // than taking the window down.

@@ -398,6 +398,56 @@ verification before the next tag.
   export); relabel system-player video launch as "Open in your video player" and surface
   launch errors instead of a timed "Opening" message (testable at the ViewModel/UI level).
 
+### Batch 5 status (2026-09-16)
+
+- **D18 — landed.** Copied logs go through `redactForSupport` (link query strings, known
+  credential parameters, home-folder account names), asserted through the Copy button. The
+  desktop video panel reads "Open in your video player", shows "Opening…" only while the launch
+  runs, and keeps a failure's reason on screen. The GPS notice sits under whichever switch
+  writes a location, only while it does, and renders before Start is enabled. README states the
+  network/Linux boundaries, the location privacy caveat, and the per-architecture downloads.
+- **D17 — landed.** `bin/manifest.json` records version, pinned upstream URL + SHA-256,
+  archive/executable SHA-256, license and source for every bundled archive; each committed
+  executable was verified byte-identical to its upstream download. Fetch scripts pin those URLs
+  and stop on a hash mismatch (macOS and Linux scripts run end to end, and with a corrupted
+  hash; **the PowerShell script was edited but not run — no Windows/pwsh here**).
+  `ShippedToolManifestTest` fails on drift between archives, manifest and scripts.
+  Separate `macos-arm64`/`macos-x64` release jobs; `scripts/verify-macos-arch.sh` checks each DMG.
+- **Found while doing D17 — Windows bundled tools never installed** (every release). The
+  committed Windows archives wrap the executable in a folder; the installer required the zip
+  root. Fixed in `ToolInstaller`, with `ShippedToolBundlesTest` installing every real archive.
+- **D16 — landed, not yet exercised on GitHub.** `release.yml` is prepare → build (per
+  platform: test, package, verify, stage) → publish (only if all builds pass; refuses if main
+  moved; then commits the version, tags, and publishes installers + `SHA256SUMS.txt` + tool
+  manifest together). Dry run is the default and works from any branch; `simulate_failure`
+  fails one platform's build. `scripts/release_version.py` refuses a version not above every
+  `v*` tag (tested; runs in the PR check). The branch's `app.version` was brought up to main's
+  1.0.13 / versionCode 14. Lints clean with actionlint 1.7.12.
+  **Remaining acceptance step (user-run, it spends Actions minutes on the real repo):** a dry
+  run from this branch with no simulated failure (expect four installers in the summary, and
+  confirm the `macos-15-intel` runner is available), then one with `simulate_failure` set
+  (expect that build red and `dry-run-summary` skipped).
+- **Also fixed in passing:** four detekt findings earlier batches introduced (CI runs detekt;
+  it had not been run locally), and a JVM-only okio class in `commonTest` that broke the iOS
+  test compilation.
+- **Deferred.**
+  - Legacy URL policy (the audit's HTTPS/host note): Snapchat links redirect to CDN hosts, so
+    an allowlist needs real export URLs to design without breaking downloads.
+  - Automated dependency / native-binary vulnerability scanning before publish.
+  - Complete corresponding source for the third-party libraries statically linked into the
+    FFmpeg builds (the manifest records FFmpeg's own source and each builder); a compliance
+    question for the maintainer, not code.
+  - Signing/notarization (see `docs/CODE_SIGNING.md`) and installer smoke tests on clean
+    machines.
+  - Every installer carries every platform's tool archives, not just its own: the resources
+    jar holds all of `bin/` (checked in a local DMG — the Windows and other-architecture archives
+    are ~75 MB of dead weight per download). Filtering `bin/` per packaging target would fix it.
+  - `iosSimulatorArm64Test` fails at link time on this machine (`kotlinx-datetime` klib cache);
+    test *compilation* for iOS passes. Not investigated.
+  - A stale, gitignored `bin/linux-x64/ffmpeg.zip` (74 MB, June) sits in this working copy.
+    CI never sees it, but for the reason above any package built locally from this checkout,
+    on any OS, bundles it (confirmed in the local DMG).
+
 ---
 
 ## Batch 6 — Product requirements surfaced by the audit (D20, D21, restart/UX)

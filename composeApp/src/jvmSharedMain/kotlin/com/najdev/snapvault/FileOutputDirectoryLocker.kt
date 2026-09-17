@@ -47,7 +47,7 @@ object FileOutputDirectoryLocker : OutputDirectoryLocker {
             // This JVM already holds it. Different cause, identical consequence: somebody else
             // is writing this library, and the caller must not.
             handle.close()
-            throw OutputDirectoryInUseException(folder)
+            throw OutputDirectoryInUseException(folder, e)
         } catch (e: IOException) {
             handle.close()
             return unenforced(folder, e, onWarn)

@@ -9,8 +9,9 @@ package com.najdev.snapvault
  * `.part` and `vault_index.json.tmp` names, and lose each other's favorites. The only place
  * that can be arbitrated is the directory itself (D07).
  */
-class OutputDirectoryInUseException(val folder: String) : Exception(
+class OutputDirectoryInUseException(val folder: String, cause: Throwable? = null) : Exception(
     "This library is already being updated by another SnapVault window. Close it and try again.",
+    cause,
 )
 
 /** An acquired claim on an output directory, held for a run and released when it ends. */

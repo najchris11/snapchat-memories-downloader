@@ -83,7 +83,7 @@ fun DashboardScreen(
                 DashboardStatus(viewModel, compact = true)
             }
             Spacer(Modifier.height(16.dp))
-            DashboardActions(viewModel, options)
+            DashboardActions(viewModel)
         }
     } else {
         Row(
@@ -100,7 +100,7 @@ fun DashboardScreen(
                     DashboardControls(viewModel, options, onNavigateToSettings, hasExifTool, hasFFmpeg)
                 }
                 Spacer(Modifier.height(16.dp))
-                DashboardActions(viewModel, options)
+                DashboardActions(viewModel)
             }
             DashboardStatus(
                 viewModel = viewModel,
@@ -378,10 +378,7 @@ private fun DashboardControls(
 // ── Action row ───────────────────────────────────────────────────────────────
 
 @Composable
-private fun DashboardActions(
-    viewModel: DashboardViewModel,
-    options: PipelineOptions,
-) {
+private fun DashboardActions(viewModel: DashboardViewModel) {
     // Action buttons
     val canStart = viewModel.downloadFolder != null && when (viewModel.importMode) {
         ImportMode.Zip -> when (viewModel.zipSourceMode) {

@@ -23,7 +23,7 @@ import okio.buffer
 import okio.use
 import kotlin.time.TimeSource
 
-private class PipelineAbortException(message: String) : Exception(message)
+private class PipelineAbortException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 internal const val CLOSE_SAVE_TIMEOUT_MS = 5_000L
 
@@ -329,7 +329,7 @@ class DashboardViewModel(
                 val directoryLock = try {
                     withContext(ioDispatcher) { outputDirectoryLocker.lock(outDir) { log("[WARN] $it") } }
                 } catch (e: OutputDirectoryInUseException) {
-                    throw PipelineAbortException(e.message ?: "This library is already being updated.")
+                    throw PipelineAbortException(e.message ?: "This library is already being updated.", e)
                 }
                 try {
                     if (importMode == ImportMode.Zip) {

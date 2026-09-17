@@ -12,7 +12,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import okio.Buffer
 import okio.ForwardingFileSystem
-import okio.ForwardingSink
 import okio.Path
 import okio.Sink
 import kotlinx.coroutines.Dispatchers
@@ -473,10 +472,11 @@ class DownloadEngineTest {
             override fun sink(file: Path, mustCreate: Boolean): Sink {
                 val real = super.sink(file, mustCreate)
                 if (!file.name.endsWith(".part")) return real
-                return object : ForwardingSink(real) {
+                // Delegating by hand: okio's ForwardingSink is JVM-only, and this file compiles for iOS too.
+                return object : Sink by real {
                     var written = 0L
                     override fun write(source: Buffer, byteCount: Long) {
-                        super.write(source, byteCount)
+                        real.write(source, byteCount)
                         written += byteCount
                         if (written >= chunk.size) firstChunkOnDisk.complete(Unit)
                     }

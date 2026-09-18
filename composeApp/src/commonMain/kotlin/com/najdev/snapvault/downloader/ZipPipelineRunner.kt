@@ -29,6 +29,9 @@ data class CombineResult(
 data class ExtractionBudget(
     val requiredBytes: Long,
     val availableBytes: Long,
+    // Per archive, for the low-space plan: an import that does not fit as a whole may still fit
+    // one archive at a time, if each is deleted as its contents land (D20).
+    val archives: List<ArchiveSpace> = emptyList(),
 )
 
 interface ZipPipelineRunner {
@@ -36,6 +39,18 @@ interface ZipPipelineRunner {
 
     // Null where the platform cannot tell; the import then proceeds as it always did.
     fun extractionBudget(itemsByZip: Map<String, List<HtmlMemoryEntry>>, outputDir: String): ExtractionBudget? = null
+
+    /**
+     * What is wrong with the files [entries] should have produced in [outputDir], if anything:
+     * each is checked against the archive for presence and size. An empty list means the
+     * archive's contents are all on disk, which is the only condition under which the archive
+     * itself may be deleted (D20).
+     */
+    fun verifyExtraction(
+        zipPath: String,
+        entries: List<HtmlMemoryEntry>,
+        outputDir: String,
+    ): List<String> = listOf("this platform cannot verify an extraction")
 
     suspend fun extractAll(
         itemsByZip: Map<String, List<HtmlMemoryEntry>>,

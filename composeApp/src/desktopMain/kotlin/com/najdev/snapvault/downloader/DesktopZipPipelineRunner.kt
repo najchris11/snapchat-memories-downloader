@@ -29,6 +29,9 @@ class DesktopZipPipelineRunner(mediaProcessor: MediaProcessor) : ZipPipelineRunn
     override fun extractionBudget(itemsByZip: Map<String, List<HtmlMemoryEntry>>, outputDir: String) =
         extractor.extractionBudget(itemsByZip, outputDir)
 
+    override fun verifyExtraction(zipPath: String, entries: List<HtmlMemoryEntry>, outputDir: String) =
+        extractor.verifyExtraction(zipPath, entries, outputDir)
+
     override suspend fun extractAll(
         itemsByZip: Map<String, List<HtmlMemoryEntry>>,
         outputDir: String,

@@ -389,4 +389,85 @@ class ZipExtractEngineTest {
 
         assertEquals(500L, budget.requiredBytes, "an empty file is replaced (D14), so it still has to be written")
     }
+
+    // ── D20: what each archive costs, and whether its contents really landed ──────────
+
+    @Test
+    fun theBudgetReportsEachArchiveSeparatelyForTheLowSpacePlan() {
+        val first = createZip("part1.zip", mapOf("memories/a-main.jpg" to ByteArray(2048) { 1 }))
+        val second = createZip("part2.zip", mapOf("memories/b-main.jpg" to ByteArray(4096) { 2 }))
+        val engine = ZipExtractEngine()
+
+        val budget = engine.extractionBudget(
+            mapOf(first.path to listOf(entry("a-main.jpg")), second.path to listOf(entry("b-main.jpg"))),
+            outDir.path,
+        )
+
+        val archives = budget.archives.associateBy { it.path }
+        assertEquals(2048L, archives.getValue(first.path).requiredBytes)
+        assertEquals(4096L, archives.getValue(second.path).requiredBytes)
+        assertEquals(first.length(), archives.getValue(first.path).archiveBytes, "deleting it frees the whole file")
+        // Both live in the same temporary directory tree as the output folder.
+        assertTrue(budget.archives.all { it.onOutputVolume })
+        assertEquals(budget.requiredBytes, budget.archives.sumOf { it.requiredBytes })
+    }
+
+    // Deleting an archive on another drive frees nothing where the library is written, so the
+    // low-space mode must not be offered for it.
+    @Test
+    fun anArchiveOnAnotherDriveIsNotOnTheOutputVolume() {
+        val external = createZip("external.zip", mapOf("memories/a-main.jpg" to ByteArray(64)))
+        val engine = ZipExtractEngine(volumeId = { file -> if (file.name == "external.zip") "usb" else "internal" })
+
+        val budget = engine.extractionBudget(mapOf(external.path to listOf(entry("a-main.jpg"))), outDir.path)
+
+        assertFalse(budget.archives.single().onOutputVolume)
+    }
+
+    // A drive that cannot be identified is treated as a different one: a wrong "yes" offers a
+    // mode that permanently deletes archives and does not make the import fit.
+    @Test
+    fun anUnidentifiableDriveIsNotAssumedToBeTheOutputVolume() {
+        val zip = createZip("part1.zip", mapOf("memories/a-main.jpg" to ByteArray(64)))
+        val engine = ZipExtractEngine(volumeId = { null })
+
+        val budget = engine.extractionBudget(mapOf(zip.path to listOf(entry("a-main.jpg"))), outDir.path)
+
+        assertFalse(budget.archives.single().onOutputVolume)
+    }
+
+    // Deleting the archive is only safe if every file it was supposed to produce is there and
+    // the right size. A truncated write, or a file removed between extraction and deletion,
+    // has to keep the archive.
+    @Test
+    fun verificationPassesOnlyWhenEveryEntryIsOnDiskAtFullSize() {
+        val bytes = ByteArray(1024) { 7 }
+        val zip = createZip("part1.zip", mapOf("memories/a-main.jpg" to bytes, "memories/a-overlay.png" to bytes))
+        val entries = listOf(entry("a-main.jpg", "a-overlay.png"))
+        val engine = ZipExtractEngine()
+        runExtract(zip, entries)
+
+        assertEquals(emptyList(), engine.verifyExtraction(zip.path, entries, outDir.path))
+
+        File(outDir, "a-overlay.png").writeBytes(ByteArray(10))
+        assertTrue(engine.verifyExtraction(zip.path, entries, outDir.path).any { "a-overlay.png" in it })
+
+        File(outDir, "a-overlay.png").delete()
+        File(outDir, "a-main.jpg").delete()
+        val missing = engine.verifyExtraction(zip.path, entries, outDir.path)
+        assertEquals(2, missing.size, missing.toString())
+    }
+
+    // An entry the archive does not actually contain cannot be checked against it; the
+    // extraction already reported it as an error, and the archive must not be deleted on the
+    // strength of a file that came from somewhere else.
+    @Test
+    fun anEntryMissingFromTheArchiveFailsVerification() {
+        val zip = createZip("part1.zip", mapOf("memories/a-main.jpg" to ByteArray(16)))
+        File(outDir, "ghost.jpg").writeBytes(ByteArray(16))
+
+        val problems = ZipExtractEngine().verifyExtraction(zip.path, listOf(entry("ghost.jpg")), outDir.path)
+
+        assertTrue(problems.any { "ghost.jpg" in it }, problems.toString())
+    }
 }

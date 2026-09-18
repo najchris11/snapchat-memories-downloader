@@ -12,10 +12,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import java.io.File
+import java.nio.file.Files
 import java.util.zip.ZipFile
 
 class ZipExtractEngine(
     private val usableSpace: (File) -> Long = { it.usableSpace },
+    // The drive a file lives on, as an identity to compare. A parameter so a test can place an
+    // archive on a second drive without needing one.
+    private val volumeId: (File) -> Any? = { runCatching { Files.getFileStore(it.absoluteFile.toPath()) }.getOrNull() },
 ) {
 
     /**
@@ -29,23 +33,77 @@ class ZipExtractEngine(
      */
     fun extractionBudget(itemsByZip: Map<String, List<HtmlMemoryEntry>>, outputDir: String): ExtractionBudget {
         val outDir = File(outputDir)
+        // The folder may not exist yet; measure the nearest ancestor that does.
+        val measured = generateSequence(outDir.absoluteFile) { it.parentFile }.firstOrNull { it.exists() } ?: outDir
+        val archives = itemsByZip.map { (zipPath, entries) ->
+            val archive = File(zipPath)
+            ArchiveSpace(
+                path = zipPath,
+                requiredBytes = requiredBytesFor(zipPath, entries, outDir),
+                archiveBytes = archive.length(),
+                onOutputVolume = sameVolume(archive, measured),
+            )
+        }
+        return ExtractionBudget(
+            requiredBytes = archives.sumOf { it.requiredBytes },
+            availableBytes = usableSpace(measured),
+            archives = archives,
+        )
+    }
+
+    private fun requiredBytesFor(zipPath: String, entries: List<HtmlMemoryEntry>, outDir: File): Long {
         var required = 0L
-        for ((zipPath, entries) in itemsByZip) {
-            ZipFile(zipPath).use { zf ->
-                for (entry in entries) {
-                    val names = listOfNotNull(entry.fileName, entry.overlayFileName.takeIf { entry.hasOverlay })
-                    for (name in names) {
-                        val dest = File(outDir, name)
-                        if (dest.isFile && dest.length() > 0L) continue
-                        val size = zf.getEntry("memories/$name")?.size ?: continue
-                        if (size > 0) required += size
+        ZipFile(zipPath).use { zf ->
+            for (name in entries.flatMap(::expectedNames)) {
+                val dest = File(outDir, name)
+                if (dest.isFile && dest.length() > 0L) continue
+                val size = zf.getEntry("memories/$name")?.size ?: continue
+                if (size > 0) required += size
+            }
+        }
+        return required
+    }
+
+    // Deleting an archive frees space only where the library is being written. A drive that
+    // cannot be identified is treated as a different one: a wrong "yes" here offers a user a
+    // mode that permanently deletes their archives and does not make the import fit.
+    private fun sameVolume(archive: File, outputDir: File): Boolean {
+        val nearest = generateSequence(archive.absoluteFile) { it.parentFile }.firstOrNull { it.exists() }
+            ?: return false
+        val archiveVolume = volumeId(nearest) ?: return false
+        return archiveVolume == volumeId(outputDir)
+    }
+
+    private fun expectedNames(entry: HtmlMemoryEntry): List<String> =
+        listOfNotNull(entry.fileName, entry.overlayFileName.takeIf { entry.hasOverlay })
+
+    /**
+     * What is wrong with the files [entries] should have produced, if anything (D20).
+     *
+     * Each expected file is checked against the archive it came from: present, and the size
+     * that archive says it should be. An archive is deleted only on an empty list, so the check
+     * has to be about *these* bytes — a file of the right name that came from somewhere else,
+     * or one truncated by a write that ran out of room, must not pass.
+     */
+    fun verifyExtraction(zipPath: String, entries: List<HtmlMemoryEntry>, outputDir: String): List<String> {
+        val outDir = File(outputDir)
+        val archive = File(zipPath)
+        if (!archive.isFile) return listOf("${archive.name} is no longer present")
+        return runCatching {
+            ZipFile(archive).use { zf ->
+                entries.flatMap(::expectedNames).mapNotNull { name ->
+                    val expected = zf.getEntry("memories/$name")
+                    val dest = File(outDir, name)
+                    when {
+                        expected == null -> "$name is not in ${archive.name}"
+                        !dest.isFile -> "$name was not written"
+                        expected.size >= 0 && dest.length() != expected.size ->
+                            "$name is ${dest.length()} bytes, expected ${expected.size}"
+                        else -> null
                     }
                 }
             }
-        }
-        // The folder may not exist yet; measure the nearest ancestor that does.
-        val measured = generateSequence(outDir.absoluteFile) { it.parentFile }.firstOrNull { it.exists() } ?: outDir
-        return ExtractionBudget(requiredBytes = required, availableBytes = usableSpace(measured))
+        }.getOrElse { listOf("${archive.name} could not be read back: ${it.message ?: it::class.simpleName}") }
     }
 
     suspend fun extractAll(

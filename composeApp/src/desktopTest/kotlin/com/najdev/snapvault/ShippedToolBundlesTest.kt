@@ -3,6 +3,7 @@ package com.najdev.snapvault
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -31,11 +32,13 @@ class ShippedToolBundlesTest {
 
     private fun resource(path: String) = javaClass.getResourceAsStream(path)
 
+    private fun shippedBundles() = committed + listOfNotNull(
+        Bundle("linux-x64", "exiftool").takeIf { resource("/bin/linux-x64/exiftool.zip") != null },
+    )
+
     @Test
     fun everyShippedArchiveInstallsItsExecutable() {
-        val bundles = committed + listOfNotNull(
-            Bundle("linux-x64", "exiftool").takeIf { resource("/bin/linux-x64/exiftool.zip") != null },
-        )
+        val bundles = shippedBundles()
         val base = createTempDirectory("snapvault-shipped-tools").toFile()
         try {
             val failures = bundles.mapNotNull { (platform, tool) ->
@@ -50,6 +53,39 @@ class ShippedToolBundlesTest {
                 }
             }
             assertTrue(failures.isEmpty(), failures.joinToString("\n"))
+        } finally {
+            base.deleteRecursively()
+        }
+    }
+
+    // everyShippedArchiveInstallsItsExecutable proves extraction produced a correctly named,
+    // non-empty file for every platform, from any CI runner — that alone caught Windows tools
+    // never installing, on every release before D15/D17. It cannot prove the file *runs*: a
+    // Linux runner cannot execute a Windows .exe or macOS binary. Where the shipped bundle's
+    // platform matches the one this JVM is actually running on — real macOS/Windows release
+    // runners, not this repo's Linux PR check — this test also launches it, so a binary that
+    // extracts fine but fails to start (missing runtime deps, a bad codesign, wrong CPU
+    // architecture) still fails the build instead of only failing at a user's first import.
+    @Test
+    fun theShippedToolForThisPlatformActuallyRuns() {
+        val platform = BinaryExtractor.getPlatform()
+        val runnable = shippedBundles().filter { it.platform == platform }
+        // Nothing to run on this JVM's platform — e.g. the Linux PR check, or a Linux CI run
+        // before prepare-runtime-linux.sh has built the gitignored exiftool archive.
+        if (runnable.isEmpty()) return
+
+        val base = createTempDirectory("snapvault-shipped-tools-run").toFile()
+        try {
+            runnable.forEach { (bundlePlatform, tool) ->
+                val installed = assertNotNull(
+                    ToolInstaller(File(base, bundlePlatform), bundlePlatform, ::resource).install(tool),
+                    "$bundlePlatform/$tool.zip installed nothing",
+                )
+                val versionFlag = if (tool == "exiftool") "-ver" else "-version"
+                val (exitCode, output) = runCommand(listOf(installed.absolutePath, versionFlag))
+                assertEquals(0, exitCode, "$bundlePlatform/$tool did not run on $platform: $output")
+                assertTrue(output.isNotBlank(), "$bundlePlatform/$tool produced no output on $platform")
+            }
         } finally {
             base.deleteRecursively()
         }

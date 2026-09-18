@@ -35,13 +35,18 @@ fun main() {
         // button does. App calls onCloseWindow once that is done.
         var closeRequests by remember { mutableStateOf(0) }
 
+        // macOS keeps its native title bar and traffic lights; a borderless window there reads
+        // as a dialog to window managers such as AeroSpace, which float it instead of tiling
+        // it (D21). Elsewhere the app draws its own.
+        val chrome = windowChromeFor(System.getProperty("os.name").orEmpty())
+
         Window(
             onCloseRequest = { closeRequests++ },
             state = windowState,
-            // Undecorated, so this never shows as a titlebar — but the taskbar entry, the
-            // alt-tab card and the window manager all read it.
+            // The taskbar entry, the alt-tab card and the window manager all read this, and on
+            // macOS it is also the title bar.
             title = stringResource(Res.string.window_title),
-            undecorated = true,
+            undecorated = chrome.undecorated,
             transparent = false,
             icon = painterResource(Res.drawable.ic_launcher)
         ) {
@@ -55,7 +60,7 @@ fun main() {
                 mediaProcessor = mediaProcessor,
                 zipPipelineRunner = zipPipelineRunner,
                 fileSystem = FileSystem.SYSTEM,
-                showWindowControls = true,
+                showWindowControls = chrome.customWindowControls,
                 closeRequests = closeRequests,
                 onCloseWindow = ::exitApplication,
                 onMinimizeWindow = { windowState.isMinimized = true },

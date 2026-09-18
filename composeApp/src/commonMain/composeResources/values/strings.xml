@@ -31,6 +31,17 @@
     <string name="opt_precise_matching">Precise time + GPS matching</string>
     <!-- Shown wherever the chosen options write a GPS position into the files (D18). -->
     <string name="opt_gps_disclosure">Where a location is known, it is saved inside each photo and video. Anyone you share those files with can see where they were taken.</string>
+    <!-- Offered when an import will not fit, but would if each ZIP were deleted as its
+         contents are imported (D20). Never a stored setting: a question, asked once. -->
+    <string name="lowspace_title">Not enough space for this import</string>
+    <string name="lowspace_body">This import needs about %1$s and only %2$s is free. SnapVault can import one ZIP at a time and delete each one as soon as its contents are safely saved, freeing %3$s as it goes.</string>
+    <string name="lowspace_permanent">Deleting is permanent. These ZIP files do not go to the Trash and cannot be brought back, so keep a copy elsewhere if you may want the export again. A ZIP whose contents do not all arrive is kept.</string>
+    <plurals name="lowspace_archives">
+        <item quantity="one">%1$d ZIP file will be deleted as it is imported:</item>
+        <item quantity="other">%1$d ZIP files will be deleted as they are imported:</item>
+    </plurals>
+    <string name="lowspace_confirm">Import and delete each ZIP</string>
+    <string name="lowspace_cancel">Not now</string>
     <string name="opt_combine_overlays">Merge Video Overlays</string>
     <string name="opt_clean_duplicates">Clean Duplicate Files</string>
     <string name="opt_dedupe_dry_run">Preview duplicate removal</string>

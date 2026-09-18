@@ -44,7 +44,9 @@ import com.najdev.snapvault.binaryInstallHint
 import com.najdev.snapvault.isAndroidBuild
 import com.najdev.snapvault.ui.theme.LogColors
 import com.najdev.snapvault.ui.theme.SnapVaultColors
+import com.najdev.snapvault.ui.components.LowSpaceOfferDialog
 import com.najdev.snapvault.viewmodel.DashboardViewModel
+import com.najdev.snapvault.viewmodel.formatBytes
 import com.najdev.snapvault.viewmodel.PipelineOptions
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.pluralStringResource
@@ -70,6 +72,20 @@ fun DashboardScreen(
     // time the user visits another screen or crosses a layout boundary, and remembered state
     // leaves with it (D22).
     val options = viewModel.pipelineOptions
+
+    // An import refused for space is a dead end on its own; this is the way through it, and it
+    // asks before deleting anything (D20). On the Dashboard because that is where the run the
+    // user just started was refused.
+    viewModel.lowSpaceOffer?.let { offer ->
+        LowSpaceOfferDialog(
+            archiveNames = offer.archiveNames,
+            requiredText = formatBytes(offer.requiredBytes),
+            availableText = formatBytes(offer.availableBytes),
+            reclaimableText = formatBytes(offer.reclaimableBytes),
+            onConfirm = viewModel::acceptLowSpaceOffer,
+            onDismiss = viewModel::dismissLowSpaceOffer,
+        )
+    }
 
     if (usesCompactDashboardLayout(windowSize)) {
         // One scrolling column. Compact cannot fit the two panels, and Medium retains the

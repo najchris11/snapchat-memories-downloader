@@ -611,10 +611,22 @@ internal sealed interface ThumbnailLoad {
     data object Unavailable : ThumbnailLoad
 }
 
+/**
+ * How a thumbnail is fetched, so a test can hold a load open.
+ *
+ * [ThumbnailLoad.Loading] is otherwise unobservable: it lasts exactly as long as a real decode
+ * on a real IO thread, and a test asserting the fallback has *not* appeared yet is racing that
+ * thread rather than testing anything. It won on a developer machine and lost on CI, every run.
+ */
+internal val LocalThumbnailLoader = staticCompositionLocalOf<suspend (String) -> ImageBitmap?> {
+    { path -> withContext(ioDispatcher) { getCachedThumbnail(path) } }
+}
+
 @Composable
 internal fun rememberThumbnail(path: String): ThumbnailLoad {
-    val load by produceState<ThumbnailLoad>(ThumbnailLoad.Loading, path) {
-        value = withContext(ioDispatcher) { getCachedThumbnail(path) }
+    val loader = LocalThumbnailLoader.current
+    val load by produceState<ThumbnailLoad>(ThumbnailLoad.Loading, path, loader) {
+        value = loader(path)
             ?.let { ThumbnailLoad.Ready(it) }
             ?: ThumbnailLoad.Unavailable
     }

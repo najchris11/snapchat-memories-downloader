@@ -1,9 +1,11 @@
 package com.najdev.snapvault.ui
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.v2.runComposeUiTest
 import com.najdev.snapvault.ui.theme.SnapVaultTheme
+import kotlinx.coroutines.awaitCancellation
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -54,10 +56,19 @@ class ThumbnailFallbackTest {
 
     // Loading is not unavailable: the fallback must not flash up for a file that is simply
     // still being thumbnailed.
+    //
+    // The load is held open rather than left to finish on its own. Advancing one frame and
+    // hoping the decode has not landed yet is a race against an IO thread: it passed locally
+    // and failed on CI on every single run. Holding it open makes "still loading" a state the
+    // test creates instead of a window it has to win.
     @Test
     fun theFallbackIsNotShownBeforeLoadingHasFinished() = runComposeUiTest {
         mainClock.autoAdvance = false
-        setContent { SnapVaultTheme(darkMode = true) { MediaCard(item = unpreviewable()) } }
+        setContent {
+            CompositionLocalProvider(LocalThumbnailLoader provides { awaitCancellation() }) {
+                SnapVaultTheme(darkMode = true) { MediaCard(item = unpreviewable()) }
+            }
+        }
         mainClock.advanceTimeByFrame()
 
         assertTrue(onAllNodes(hasText("Preview unavailable", substring = true)).fetchSemanticsNodes().isEmpty())

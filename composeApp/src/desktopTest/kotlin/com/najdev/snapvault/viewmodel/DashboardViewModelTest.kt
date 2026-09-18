@@ -184,8 +184,12 @@ class DashboardViewModelTest {
         return viewModel
     }
 
+    // Generous on purpose: this is a deadlock detector, not a performance assertion. These runs
+    // take tens of milliseconds, so any value catches a genuine hang, and the only thing a tight
+    // budget adds is a failure when a loaded CI runner stalls the thread — which is exactly what
+    // it did, intermittently, while the same test took 0.03s locally.
     private fun awaitCompletion(viewModel: DashboardViewModel) = runBlocking {
-        withTimeout(5_000) {
+        withTimeout(30_000) {
             while (viewModel.isRunning) delay(10)
         }
     }

@@ -63,6 +63,16 @@ class OverlayCombinerTest {
         return results
     }
 
+    @Test
+    fun reviewVideoWithoutMetadataToolMustKeepOriginals() {
+        val main = File(dir, "2023-10-12_VVV-main.mp4").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+        val overlay = writePng("2023-10-12_VVV-overlay.png")
+        val results = combineAll(FakeProcessor(onVideoCombine = { output ->
+            File(output).writeBytes(byteArrayOf(4, 5, 6)); true
+        }), copyMetadata = { _, _ -> MetadataCopy.Unavailable })
+        assertTrue(main.exists() && overlay.exists(), "Deleted video originals with metadata unavailable; status=${results.single().status}")
+    }
+
     // ── findPairs ────────────────────────────────────────────────────────────
 
     @Test
@@ -235,20 +245,38 @@ class OverlayCombinerTest {
         )
     }
 
-    // A video pair is not affected: combineVideoWithOverlay copies the tags itself, so
-    // copyExif is never consulted and cleanup proceeds on its own evidence.
+    // A video pair is gated on the same metadata-copy evidence as an image pair (D02): the
+    // combined file is a fresh encode, and whatever the export embedded lives only on the
+    // original until the copy demonstrably lands.
     @Test
-    fun videoPairCleansUpWithoutConsultingTheImageMetadataCopier() {
+    fun videoOriginalsSurviveWhenMetadataCopyFails() {
         val main = File(dir, "2023-10-12_VVV-main.mp4").apply { writeBytes(byteArrayOf(1)) }
         val overlay = writePng("2023-10-12_VVV-overlay.png")
 
         val results = combineAll(
             FakeProcessor(onVideoCombine = { out -> File(out).writeBytes(byteArrayOf(1, 2, 3)); true }),
-            copyMetadata = { _, _ -> error("images only — a video pair must not reach the exif copier") },
+            copyMetadata = { _, _ -> MetadataCopy.Failed },
+        )
+
+        assertTrue(main.exists() && overlay.exists(), "the original still holds metadata the combined file does not")
+        assertTrue(
+            results.single().warnings.any { "metadata" in it.lowercase() },
+            "the reason the originals were kept must reach the user: ${results.single().warnings}",
+        )
+    }
+
+    @Test
+    fun videoPairCleansUpWhenMetadataCopySucceeds() {
+        val main = File(dir, "2023-10-12_VVV-main.mp4").apply { writeBytes(byteArrayOf(1)) }
+        val overlay = writePng("2023-10-12_VVV-overlay.png")
+
+        val results = combineAll(
+            FakeProcessor(onVideoCombine = { out -> File(out).writeBytes(byteArrayOf(1, 2, 3)); true }),
+            copyMetadata = { _, _ -> MetadataCopy.Copied },
         )
 
         assertEquals(listOf("combined"), results.map { it.status })
-        assertTrue(!main.exists() && !overlay.exists(), "originals must still be cleaned up for video")
+        assertTrue(!main.exists() && !overlay.exists(), "originals are cleaned up once metadata demonstrably copied")
     }
 
     // ── BUG-01 regression: combine must not clobber a precise capture time ──

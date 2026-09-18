@@ -237,29 +237,26 @@ class OverlayCombiner(
                 return "error: output missing after combine — ${pair.outputFile.name}"
             }
 
-            // Preserve the original's metadata on the combined image (the video path does
-            // this inside combineVideoWithOverlay); must happen before originals are deleted.
-            // Cleanup is gated on the metadata having demonstrably made it across, not on
-            // the combine alone. The combined file is a fresh encode: whatever the export
-            // embedded in the original is on the original and nowhere else until this copy
-            // succeeds. Videos are exempt because combineVideoWithOverlay copies the tags
-            // itself, which is why copyExif is image-only.
+            // Preserve the original's metadata on the combined output; must happen before
+            // originals are deleted. Cleanup is gated on the metadata having demonstrably made
+            // it across, not on the combine alone. The combined file is a fresh encode: whatever
+            // the export embedded in the original is on the original and nowhere else until this
+            // copy succeeds. Videos and images share this gate — a video encoder reporting
+            // success only means FFmpeg exited 0, not that metadata carried across.
             var metadataMissing = false
-            if (!pair.isVideo) {
-                when (runInterruptible { copyExif(pair.mainFile.absolutePath, staged.absolutePath) }) {
-                    MetadataCopy.Copied -> {}
-                    MetadataCopy.Failed -> {
-                        metadataMissing = true
-                        onWarning("could not copy metadata onto combined output: ${pair.outputFile.name}")
-                    }
-                    // No exiftool is not "nothing to copy" — it is "no way to find out, and
-                    // no way to repair it either". combineAll's date-only fallback bottoms
-                    // out in writeDateMetadata, which needs the same missing tool, so the
-                    // combined file ends up with no metadata at all.
-                    MetadataCopy.Unavailable -> {
-                        metadataMissing = true
-                        onWarning("no metadata tool available to carry tags onto ${pair.outputFile.name}")
-                    }
+            when (runInterruptible { copyExif(pair.mainFile.absolutePath, staged.absolutePath) }) {
+                MetadataCopy.Copied -> {}
+                MetadataCopy.Failed -> {
+                    metadataMissing = true
+                    onWarning("could not copy metadata onto combined output: ${pair.outputFile.name}")
+                }
+                // No exiftool is not "nothing to copy" — it is "no way to find out, and
+                // no way to repair it either". combineAll's date-only fallback bottoms
+                // out in writeDateMetadata, which needs the same missing tool, so the
+                // combined file ends up with no metadata at all.
+                MetadataCopy.Unavailable -> {
+                    metadataMissing = true
+                    onWarning("no metadata tool available to carry tags onto ${pair.outputFile.name}")
                 }
             }
 

@@ -338,7 +338,6 @@ class DesktopMediaProcessor : MediaProcessor {
 
     override fun combineVideoWithOverlay(videoPath: String, overlayPath: String, outputPath: String): Boolean {
         val ffmpegPath = BinaryExtractor.checkCommand("ffmpeg") ?: return false
-        val exiftoolPath = BinaryExtractor.checkCommand("exiftool")
 
         // Discard stdout+stderr — FFmpeg writes verbose progress to stderr and the pipe buffer
         // (~64 KB on macOS) fills up for long videos, causing waitFor() to block forever.
@@ -371,19 +370,9 @@ class DesktopMediaProcessor : MediaProcessor {
             if (usedHardware) hwEncodedCount.incrementAndGet() else swEncodedCount.incrementAndGet()
         }
 
-        if (exitCode == 0 && exiftoolPath != null) {
-            try {
-                val (metaRc, metaOut) = runCommand(
-                    listOf(exiftoolPath, "-overwrite_original", "-q", "-TagsFromFile", videoPath, "-all:all", outputPath),
-                )
-                if (metaRc != 0 && metaOut.isNotBlank()) {
-                    System.err.println("[exiftool metadata copy rc=$metaRc] ${File(outputPath).name}: ${metaOut.trim()}")
-                }
-            } catch (e: Exception) {
-                System.err.println("[exiftool metadata copy] ${File(outputPath).name}: ${e.message}")
-            }
-        }
-
+        // Metadata is no longer copied here: OverlayCombiner.processPair runs the same
+        // copyMetadata seam it uses for images, so original-deletion is gated on the copy's
+        // actual result for video too, not on FFmpeg's exit code alone.
         return exitCode == 0
     }
 }

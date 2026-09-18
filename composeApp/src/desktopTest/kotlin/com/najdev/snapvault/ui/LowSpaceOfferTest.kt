@@ -28,6 +28,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -131,6 +132,9 @@ class LowSpaceOfferTest {
                 override fun load() = outDir.path
                 override fun save(path: String?) = Unit
             },
+            // The offer ships disabled by default (LOW_SPACE_DELETE_ENABLED); this test verifies
+            // the mechanism itself still works, for whenever it's re-enabled.
+            lowSpaceDeleteEnabled = true,
         ).apply {
             changeZipSourceMode(ZipSourceMode.MultipleFiles)
             pickMultipleZips()
@@ -163,6 +167,57 @@ class LowSpaceOfferTest {
         viewModel.dispose()
     }
 
+    // The offer has three known safety gaps (same-sized-different-content verification,
+    // unrecognized media, an unguarded history-backup failure) not yet fixed — disabled by
+    // default for release (LOW_SPACE_DELETE_ENABLED), even in a scenario that would otherwise
+    // qualify for it.
+    @Test
+    fun theOfferIsDisabledByDefault() = runComposeUiTest {
+        val zip = exportZip("part1.zip", "2024-01-01_aaa-main.jpg")
+        val gb = 1024L * 1024 * 1024
+        val real = DesktopZipPipelineRunner(DesktopMediaProcessor())
+        val runner = object : ZipPipelineRunner by real {
+            override fun extractionBudget(itemsByZip: Map<String, List<HtmlMemoryEntry>>, outputDir: String) =
+                ExtractionBudget(
+                    requiredBytes = 9 * gb,
+                    availableBytes = 3 * gb,
+                    archives = real.extractionBudget(itemsByZip, outputDir)!!.archives.map {
+                        ArchiveSpace(it.path, requiredBytes = gb, archiveBytes = gb, onOutputVolume = true)
+                    },
+                )
+        }
+        val viewModel = DashboardViewModel(
+            zipPipelineRunner = runner,
+            mediaProcessor = DesktopMediaProcessor(),
+            fileSystem = FileSystem.SYSTEM,
+            pickers = Pickers(listOf(zip.path)),
+            outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+            outputFolderMemory = object : OutputFolderMemory {
+                override fun load() = outDir.path
+                override fun save(path: String?) = Unit
+            },
+            // Default omitted deliberately: this proves LOW_SPACE_DELETE_ENABLED's consequence.
+        ).apply {
+            changeZipSourceMode(ZipSourceMode.MultipleFiles)
+            pickMultipleZips()
+        }
+
+        setContent {
+            SnapVaultTheme(darkMode = true) { DashboardScreen(viewModel = viewModel, onNavigateToSettings = {}) }
+        }
+
+        viewModel.startSync()
+        waitUntil(timeoutMillis = 20_000) { !viewModel.isRunning }
+        waitForIdle()
+
+        assertNull(viewModel.lowSpaceOffer, "the offer must not be made while the feature is disabled")
+        onAllNodes(hasText("Import and delete each ZIP")).fetchSemanticsNodes().let {
+            assertTrue(it.isEmpty(), "no dialog offering deletion may appear")
+        }
+        assertTrue(zip.exists(), "nothing may be deleted when the offer never happened")
+        viewModel.dispose()
+    }
+
     @Test
     fun decliningTheOfferLeavesTheArchivesAlone() = runComposeUiTest {
         val zip = exportZip("part1.zip", "2024-01-01_aaa-main.jpg")
@@ -188,6 +243,9 @@ class LowSpaceOfferTest {
                 override fun load() = outDir.path
                 override fun save(path: String?) = Unit
             },
+            // The offer ships disabled by default (LOW_SPACE_DELETE_ENABLED); this test verifies
+            // the mechanism itself still works, for whenever it's re-enabled.
+            lowSpaceDeleteEnabled = true,
         ).apply {
             changeZipSourceMode(ZipSourceMode.MultipleFiles)
             pickMultipleZips()

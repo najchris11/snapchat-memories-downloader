@@ -77,7 +77,14 @@ class LowSpaceImportTest {
         override fun pickMultipleZips(onResult: (List<String>) -> Unit) = onResult(zips)
     }
 
-    private fun viewModel(zips: List<File>, runner: ZipPipelineRunner? = null): DashboardViewModel {
+    private fun viewModel(
+        zips: List<File>,
+        runner: ZipPipelineRunner? = null,
+        // The offer ships disabled by default (LOW_SPACE_DELETE_ENABLED); tests that exercise
+        // the offer itself (rather than the deletion mechanics via lowSpaceMode = true directly)
+        // opt in explicitly.
+        lowSpaceDeleteEnabled: Boolean = false,
+    ): DashboardViewModel {
         val real = DesktopZipPipelineRunner(DesktopMediaProcessor())
         return DashboardViewModel(
             zipPipelineRunner = runner ?: real,
@@ -89,6 +96,7 @@ class LowSpaceImportTest {
                 override fun load() = outDir.path
                 override fun save(path: String?) = Unit
             },
+            lowSpaceDeleteEnabled = lowSpaceDeleteEnabled,
         ).apply {
             changeZipSourceMode(ZipSourceMode.MultipleFiles)
             pickMultipleZips()
@@ -200,7 +208,7 @@ class LowSpaceImportTest {
                 archives = archives.map { it.copy(requiredBytes = 2 * gb, archiveBytes = 2 * gb, onOutputVolume = true) },
             )
         }
-        val viewModel = viewModel(zips, runner)
+        val viewModel = viewModel(zips, runner, lowSpaceDeleteEnabled = true)
 
         viewModel.startImport(lowSpaceMode = false)
         await(viewModel)

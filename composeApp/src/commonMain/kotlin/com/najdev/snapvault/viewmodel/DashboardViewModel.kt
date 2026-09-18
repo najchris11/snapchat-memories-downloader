@@ -32,6 +32,12 @@ internal const val CLOSE_SAVE_TIMEOUT_MS = 5_000L
 
 internal const val EXTRACTION_SPACE_RESERVE_BYTES = 1L * 1024 * 1024 * 1024
 
+// The offer to delete each archive as its contents are imported (D20) has three known safety
+// gaps — same-sized-different-content verification, unrecognized media, and an unguarded
+// history-backup failure — none fixed yet. Disabled for release; the deletion mechanics stay
+// covered by tests so re-enabling later only means flipping this back.
+internal const val LOW_SPACE_DELETE_ENABLED = false
+
 internal fun formatBytes(bytes: Long): String {
     val gib = bytes / (1024.0 * 1024.0 * 1024.0)
     if (gib >= 1.0) return "${(gib * 10).toLong() / 10.0} GB"
@@ -55,6 +61,9 @@ class DashboardViewModel(
     // A parameter so a test can restore a folder, and watch what gets written, without
     // touching the machine's real preferences.
     private val outputFolderMemory: OutputFolderMemory = OutputFolderMemory.Platform,
+    // See LOW_SPACE_DELETE_ENABLED. A parameter so the offer's own mechanics stay under test
+    // while it ships off.
+    private val lowSpaceDeleteEnabled: Boolean = LOW_SPACE_DELETE_ENABLED,
 ) {
     // ── Input selection state ────────────────────────────────────────────────
     var htmlFile by mutableStateOf<String?>(null)
@@ -855,8 +864,9 @@ class DashboardViewModel(
                     "${formatBytes(budget.availableBytes)} is available."
                 // Refusing used to be the whole answer. Where the archives sit on the output
                 // drive and the import would fit one at a time, there is something the user
-                // can do about it, and only they can decide to do it (D20).
-                if (plan.fits) {
+                // can do about it, and only they can decide to do it (D20). Gated off for
+                // release — see LOW_SPACE_DELETE_ENABLED.
+                if (lowSpaceDeleteEnabled && plan.fits) {
                     lowSpaceOffer = LowSpaceOffer(
                         archiveNames = plan.archives.map { it.path.substringAfterLast('/').substringAfterLast('\\') },
                         reclaimableBytes = plan.reclaimableBytes,

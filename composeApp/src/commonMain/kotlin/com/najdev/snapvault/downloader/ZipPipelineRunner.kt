@@ -40,6 +40,9 @@ interface ZipPipelineRunner {
     // Null where the platform cannot tell; the import then proceeds as it always did.
     fun extractionBudget(itemsByZip: Map<String, List<HtmlMemoryEntry>>, outputDir: String): ExtractionBudget? = null
 
+    /** Free space in [outputDir] right now, or null where the platform cannot tell. */
+    fun availableSpace(outputDir: String): Long? = null
+
     /**
      * What is wrong with the files [entries] should have produced in [outputDir], if anything:
      * each is checked against the archive for presence and size. An empty list means the

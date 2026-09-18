@@ -660,6 +660,22 @@ class DashboardViewModel(
             val name = zipPath.substringAfterLast('/').substringAfterLast('\\')
             currentCoroutineContext().ensureActive()
 
+            // The preflight's figure was true when it was taken. Anything else on the machine
+            // can have taken the room since, and extracting into a disk with none left is how a
+            // run ends in a folder full of half-written files.
+            val free = withContext(ioDispatcher) { zipPipelineRunner.availableSpace(outDir) }
+            if (free != null && archive.requiredBytes + EXTRACTION_SPACE_RESERVE_BYTES > free) {
+                log(
+                    "[INFO] Stopping before $name: it needs ${formatBytes(archive.requiredBytes)} plus " +
+                        "${formatBytes(EXTRACTION_SPACE_RESERVE_BYTES)} to process, and only ${formatBytes(free)} " +
+                        "is free. $deletedCount archive(s) were imported; the rest are untouched.",
+                )
+                throw PipelineAbortException(
+                    "Ran out of space after importing $deletedCount archive(s). Free up space and run the import " +
+                        "again — the archives that were not imported are still where they were.",
+                )
+            }
+
             zipPipelineRunner.extractAll(mapOf(zipPath to entries), outDir, workerCount, onProgress)
 
             val problems = withContext(ioDispatcher) {

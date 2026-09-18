@@ -51,6 +51,13 @@ class ZipExtractEngine(
         )
     }
 
+    /** Free space in [outputDir] now — the preflight's figure is only true when it was taken. */
+    fun availableSpace(outputDir: String): Long {
+        val dir = File(outputDir)
+        val measured = generateSequence(dir.absoluteFile) { it.parentFile }.firstOrNull { it.exists() } ?: dir
+        return usableSpace(measured)
+    }
+
     private fun requiredBytesFor(zipPath: String, entries: List<HtmlMemoryEntry>, outDir: File): Long {
         var required = 0L
         ZipFile(zipPath).use { zf ->

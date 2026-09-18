@@ -252,4 +252,33 @@ class LowSpaceImportTest {
         assertNull(viewModel.lowSpaceOffer, "deleting archives on another drive frees nothing here")
         viewModel.dispose()
     }
+
+    // Space the preflight counted on can be taken by anything else on the machine while the
+    // import runs. Carrying on fills the disk and leaves a folder of half-written files.
+    @Test
+    fun anImportStopsCleanlyWhenTheDiskFillsUpPartWay() {
+        val first = exportZip("part1.zip", listOf("2024-01-01_aaa-main.jpg"))
+        val second = exportZip("part2.zip", listOf("2024-01-02_bbb-main.jpg"))
+        val gb = 1024L * 1024 * 1024
+        val real = DesktopZipPipelineRunner(DesktopMediaProcessor())
+        var calls = 0
+        val runner = object : ZipPipelineRunner by real {
+            // Room for the first archive, none by the time the second is due.
+            override fun availableSpace(outputDir: String): Long = if (calls++ == 0) 10 * gb else 1024
+        }
+        val viewModel = viewModel(listOf(first, second), runner)
+
+        viewModel.startImport(lowSpaceMode = true)
+        await(viewModel)
+
+        assertFalse(first.exists(), "the archive that did fit was imported")
+        assertTrue(second.exists(), "the one that did not must be left alone")
+        assertTrue(File(outDir, "2024-01-01_aaa-main.jpg").isFile)
+        assertFalse(File(outDir, "2024-01-02_bbb-main.jpg").exists(), "nothing half-written")
+        assertTrue(
+            viewModel.logs.any { "Stopping before part2.zip" in it },
+            viewModel.logs.toString(),
+        )
+        viewModel.dispose()
+    }
 }

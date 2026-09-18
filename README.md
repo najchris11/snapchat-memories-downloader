@@ -71,7 +71,7 @@ It creates `demo-library/` with eight abstract, non-personal images, realistic S
 
 > **ExifTool isn't bundled in a source checkout.** The "bundled on Linux" note above is true for *release* installers — `scripts/prepare-runtime-linux.sh` packages it fresh during the release workflow, and the packaged zip is gitignored — but a plain `git clone` has nothing under `composeApp/src/desktopMain/resources/bin/linux-x64/`, so `./gradlew :composeApp:run` from source will silently have no ExifTool (date/GPS tagging becomes a no-op). Either run `bash scripts/prepare-runtime-linux.sh` once yourself, or install ExifTool with your package manager / into `~/.snapvault/bin/` (the second location the app already probes, no root needed) before running from source.
 
-The app version is set in `gradle.properties` (`app.version`). Releases are cut manually via the **Release** workflow (Actions → Release → Run workflow), which bumps the version, tags, runs the desktop test suite, and publishes installers.
+The app version is set in `gradle.properties` (`app.version`). Releases are cut manually via the **Release** workflow (Actions → Release → Run workflow). It works out the version, refusing one that is not above every existing tag; builds, tests, packages and verifies an installer on each platform; and only if every platform succeeded does it commit the version, tag it, and publish the installers with `SHA256SUMS.txt`. A dry run — the default — does everything except publish, from any branch.
 
 ## Legacy Python Scripts
 
@@ -83,8 +83,12 @@ SnapVault is free to use. If it helps you, you can [leave an optional tip on Ko-
 
 ## Credits
 
-Forked from [ManuelPuchner/snapchat-memories-downloader](https://github.com/ManuelPuchner/snapchat-memories-downloader). Thanks to Manuel and [Nick](https://github.com/nrc2358) for the original implementation.
+SnapVault began in December 2025 as a fork of [ManuelPuchner/snapchat-memories-downloader](https://github.com/ManuelPuchner/snapchat-memories-downloader), a set of Python CLI scripts — thanks to Manuel and [Nick](https://github.com/nrc2358) for that original implementation. The app you install today is a ground-up rewrite: a Kotlin Multiplatform / Compose Desktop application sharing no code with those scripts, which are kept in [`legacy/`](legacy/) for reference only.
 
 ## License
 
-[GPL-3.0](LICENSE)
+Copyright © 2025–2026 Najib Coulibaly and contributors.
+
+SnapVault is free software under the [GNU General Public License v3.0 or later](LICENSE). You may use, study, share and modify it. If you distribute it — modified or not, for a fee or not — you must pass on the same freedoms, including the corresponding source, and you may not add restrictions of your own.
+
+Bundled ExifTool and FFmpeg remain under their own licenses; see [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) and `bin/manifest.json` for versions, checksums and sources.

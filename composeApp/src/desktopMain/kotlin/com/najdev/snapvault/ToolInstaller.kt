@@ -42,6 +42,9 @@ internal class ToolInstaller(
 
         // Anything at this path without the marker is an earlier attempt that never finished.
         versionDir.deleteRecursively()
+        // Pre-D15 installs left a flat executable at exactly this path — a file where the
+        // versioned layout needs a directory. It is disposable cache content, never user data.
+        if (toolDir.isFile) toolDir.delete()
         toolDir.mkdirs()
         val staging = File(toolDir, "$STAGING_PREFIX${System.nanoTime()}")
         try {

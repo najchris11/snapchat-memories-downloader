@@ -56,6 +56,15 @@ class ToolInstallerTest {
     // D15: an executable already sitting in the cache was used forever. Updating SnapVault —
     // including to ship a fixed, or security-patched, tool — changed nothing for anyone who had
     // run an earlier version, because the old extraction was found first.
+    // D15: an executable already sitting in the cache was used forever. Updating SnapVault —
+    // including to ship a fixed, or security-patched, tool — changed nothing for anyone who had
+    // run an earlier version, because the old extraction was found first.
+    @Test
+    fun reviewUpgradeFromFlatCacheKeepsToolsAvailable() {
+        File(base, "exiftool").writeText("old flat executable")
+        assertNotNull(installer(zipOf("exiftool" to "new executable")).install("exiftool"))
+    }
+
     @Test
     fun anOlderCachedToolIsReplacedByTheBundledVersion() {
         val v1 = installer(zipOf("exiftool" to "exiftool v1", "exiftool-dist/lib" to "lib v1")).install("exiftool")

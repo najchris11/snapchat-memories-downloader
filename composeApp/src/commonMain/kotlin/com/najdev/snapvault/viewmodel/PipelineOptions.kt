@@ -36,3 +36,14 @@ internal class PipelineOptions {
     var dryRun by mutableStateOf(DEFAULT_DRY_RUN)
     var expanded by mutableStateOf(DEFAULT_PIPELINE_EXPANDED)
 }
+
+/**
+ * What a user needs to decide whether to let an import delete its source ZIPs as it goes (D20):
+ * which archives, how much they would free, and the gap that makes it necessary.
+ */
+internal data class LowSpaceOffer(
+    val archiveNames: List<String>,
+    val reclaimableBytes: Long,
+    val requiredBytes: Long,
+    val availableBytes: Long,
+)

@@ -2,9 +2,12 @@ package com.najdev.snapvault.viewmodel
 
 import androidx.compose.runtime.*
 import com.najdev.snapvault.*
+import com.najdev.snapvault.downloader.ArchiveSpace
 import com.najdev.snapvault.downloader.CombineResult
 import com.najdev.snapvault.downloader.Deduplicator
 import com.najdev.snapvault.downloader.DownloadEngine
+import com.najdev.snapvault.downloader.ExtractResult
+import com.najdev.snapvault.downloader.planLowSpaceImport
 import com.najdev.snapvault.downloader.ZipPipelineRunner
 import com.najdev.snapvault.metadata.MediaProcessor
 import com.najdev.snapvault.VaultIndex
@@ -71,6 +74,15 @@ class DashboardViewModel(
     var isRunning by mutableStateOf(false)
         private set
     val logs = mutableStateListOf<String>()
+
+    /**
+     * The choice offered when an import will not fit, but would if each ZIP were deleted as its
+     * contents were imported (D20). Null at every other time, including while the mode runs:
+     * it is a question, asked once, never a stored setting.
+     */
+    internal var lowSpaceOffer by mutableStateOf<LowSpaceOffer?>(null)
+        private set
+
     var progress by mutableStateOf(0f)
         private set
     var progressText by mutableStateOf("")
@@ -290,6 +302,19 @@ class DashboardViewModel(
 
     fun changeImportMode(mode: ImportMode) { importMode = mode }
 
+    /** Runs the import again, deleting each ZIP as its contents are verified. */
+    fun acceptLowSpaceOffer() {
+        if (lowSpaceOffer == null) return
+        lowSpaceOffer = null
+        with(pipelineOptions) {
+            startSync(runDownload, runMetadata, preciseMatching, runCombine, runDedupe, dryRun, lowSpaceMode = true)
+        }
+    }
+
+    fun dismissLowSpaceOffer() {
+        lowSpaceOffer = null
+    }
+
     fun changeZipSourceMode(mode: ZipSourceMode) {
         zipSourceMode = mode
         zipFolder = null
@@ -313,6 +338,9 @@ class DashboardViewModel(
         runCombine: Boolean,
         runDedupe: Boolean,
         dryRun: Boolean,
+        // Deletes each source ZIP once its contents are verified on disk. Never a stored
+        // option: it only ever arrives from a user accepting the offer below, for one run (D20).
+        lowSpaceMode: Boolean = false,
     ) {
         // A double-click racing recomposition (before isRunning disables the button)
         // must not launch a second concurrent pipeline.
@@ -333,6 +361,7 @@ class DashboardViewModel(
         indeterminate = false
         pipelineFailureCount = 0
         pipelineWarningCount = 0
+        lowSpaceOffer = null
 
         // Captured so the finally block below can tell whether it's still the current run —
         // job.cancel() flips isActive false immediately, well before the cancelled
@@ -362,6 +391,7 @@ class DashboardViewModel(
                             runDedupe,
                             dryRun,
                             workerCount,
+                            lowSpaceMode,
                         )
                     } else {
                         runLegacyPipeline(outDir, runDownload, runMetadata, runCombine, runDedupe, dryRun, workerCount)
@@ -601,6 +631,119 @@ class DashboardViewModel(
         else -> "${seconds / 3600}h ${(seconds % 3600) / 60}m"
     }
 
+
+    // ── D20: importing one archive at a time ─────────────────────────────────
+
+    /**
+     * Extracts each archive, and deletes it once its contents are verified on disk.
+     *
+     * Archives arrive smallest first, from the plan that decided this fits: the tightest moment
+     * is the first one, before anything has been deleted. Every deletion is permanent, so an
+     * archive goes only when the extractor confirms every file it should have produced is
+     * present at the size the archive says — and only after the deletion is recorded, since a
+     * deletion nothing accounts for is the one outcome no rerun can explain.
+     */
+    private suspend fun importArchivesOneAtATime(
+        order: List<ArchiveSpace>,
+        itemsByZip: Map<String, List<HtmlMemoryEntry>>,
+        outDir: String,
+        workerCount: Int,
+        onProgress: (ExtractResult) -> Unit,
+    ) {
+        var deletedCount = 0
+        var freedBytes = 0L
+        var keptCount = 0
+
+        for (archive in order) {
+            val zipPath = archive.path
+            val entries = itemsByZip[zipPath] ?: continue
+            val name = zipPath.substringAfterLast('/').substringAfterLast('\\')
+            currentCoroutineContext().ensureActive()
+
+            zipPipelineRunner.extractAll(mapOf(zipPath to entries), outDir, workerCount, onProgress)
+
+            val problems = withContext(ioDispatcher) {
+                zipPipelineRunner.verifyExtraction(zipPath, entries, outDir)
+            }
+            val keptBecause = problems.firstOrNull()?.let { first ->
+                if (problems.size > 1) "$first (and ${problems.size - 1} more)" else first
+            }
+            val record = ImportedArchive(
+                name = name,
+                sizeBytes = archive.archiveBytes,
+                memories = entries.size,
+                deleted = keptBecause == null,
+                keptBecause = keptBecause,
+            )
+
+            if (keptBecause != null) {
+                keptCount++
+                pipelineWarningCount++
+                log("[WARN] $name kept: $keptBecause")
+                runCatching { withContext(ioDispatcher) { ImportManifest.record(fileSystem, outDir, record) } }
+                continue
+            }
+
+            // Recorded first. If the record cannot be written, the archive stays: a permanent
+            // deletion with nothing to show for it is worse than an archive left on disk.
+            val recorded = runCatching {
+                withContext(ioDispatcher) { ImportManifest.record(fileSystem, outDir, record) }
+            }
+            if (recorded.isFailure) {
+                keptCount++
+                pipelineWarningCount++
+                log("[WARN] $name kept: its import could not be recorded (${recorded.exceptionOrNull()?.message})")
+                continue
+            }
+
+            val deleted = runCatching { withContext(ioDispatcher) { fileSystem.delete(zipPath.toPath()) } }
+            if (deleted.isSuccess) {
+                deletedCount++
+                freedBytes += archive.archiveBytes
+                log("[INFO] $name imported and deleted, freeing ${formatBytes(archive.archiveBytes)}.")
+            } else {
+                keptCount++
+                pipelineWarningCount++
+                log("[WARN] $name was imported but could not be deleted: ${deleted.exceptionOrNull()?.message}")
+                runCatching {
+                    withContext(ioDispatcher) {
+                        ImportManifest.record(fileSystem, outDir, record.copy(deleted = false, keptBecause = "could not be deleted"))
+                    }
+                }
+            }
+        }
+
+        log(
+            "[INFO] Low-space import: $deletedCount archive(s) deleted, freeing ${formatBytes(freedBytes)}" +
+                if (keptCount > 0) "; $keptCount kept, see the warnings above." else ".",
+        )
+    }
+
+    /** Copies each archive's `memories_history.json` into the library, before any deletion. */
+    private suspend fun stashExportHistory(zipFiles: List<String>, outDir: String) {
+        withContext(ioDispatcher) {
+            for (zipPath in zipFiles) {
+                val history = runCatching { readZipEntryText(zipPath, "json/memories_history.json") }.getOrNull()
+                    ?: continue
+                val name = zipPath.substringAfterLast('/').substringAfterLast('\\')
+                runCatching {
+                    val target = "$outDir/${ImportManifest.DIR_NAME}/history/$name.json".toPath()
+                    fileSystem.createDirectories(target.parent!!)
+                    fileSystem.write(target) { writeUtf8(history) }
+                }.onFailure { log("[WARN] Could not keep $name's memories_history.json: ${it.message}") }
+            }
+        }
+    }
+
+    /** The archive's export history, from the archive itself or from what was kept of it. */
+    private fun readExportHistory(zipPath: String, outDir: String): String? {
+        runCatching { readZipEntryText(zipPath, "json/memories_history.json") }.getOrNull()?.let { return it }
+        val name = zipPath.substringAfterLast('/').substringAfterLast('\\')
+        return runCatching {
+            fileSystem.read("$outDir/${ImportManifest.DIR_NAME}/history/$name.json".toPath()) { readUtf8() }
+        }.getOrNull()
+    }
+
     // ── ZIP pipeline ─────────────────────────────────────────────────────────
     private suspend fun runZipPipeline(
         outDir: String,
@@ -610,6 +753,7 @@ class DashboardViewModel(
         runDedupe: Boolean,
         dryRun: Boolean,
         workerCount: Int,
+        lowSpaceMode: Boolean = false,
     ) {
         log("[INFO] Scanning for ZIP file(s)…")
         val zipFiles: List<String> = when (zipSourceMode) {
@@ -685,15 +829,36 @@ class DashboardViewModel(
         // folder too full for the metadata and combine steps after it (D13). The reserve is
         // room for those steps: exiftool writes a temporary copy of every file it tags, and
         // combining writes whole new files.
+        var archiveOrder: List<ArchiveSpace> = itemsByZip.keys.map { ArchiveSpace(it, 0, 0, false) }
         zipPipelineRunner.extractionBudget(itemsByZip, outDir)?.let { budget ->
-            if (budget.requiredBytes + EXTRACTION_SPACE_RESERVE_BYTES > budget.availableBytes) {
-                throw PipelineAbortException(
-                    "This import needs about ${formatBytes(budget.requiredBytes)} of free space in the output folder, " +
-                        "plus ${formatBytes(EXTRACTION_SPACE_RESERVE_BYTES)} to process it, and only " +
-                        "${formatBytes(budget.availableBytes)} is available. Free up space or choose another output folder.",
-                )
+            val plan = planLowSpaceImport(budget.archives, budget.availableBytes, EXTRACTION_SPACE_RESERVE_BYTES)
+            if (plan.archives.isNotEmpty()) archiveOrder = plan.archives
+            if (!lowSpaceMode && budget.requiredBytes + EXTRACTION_SPACE_RESERVE_BYTES > budget.availableBytes) {
+                val shortfall = "This import needs about ${formatBytes(budget.requiredBytes)} of free space in the " +
+                    "output folder, plus ${formatBytes(EXTRACTION_SPACE_RESERVE_BYTES)} to process it, and only " +
+                    "${formatBytes(budget.availableBytes)} is available."
+                // Refusing used to be the whole answer. Where the archives sit on the output
+                // drive and the import would fit one at a time, there is something the user
+                // can do about it, and only they can decide to do it (D20).
+                if (plan.fits) {
+                    lowSpaceOffer = LowSpaceOffer(
+                        archiveNames = plan.archives.map { it.path.substringAfterLast('/').substringAfterLast('\\') },
+                        reclaimableBytes = plan.reclaimableBytes,
+                        requiredBytes = budget.requiredBytes,
+                        availableBytes = budget.availableBytes,
+                    )
+                    throw PipelineAbortException(
+                        "$shortfall Deleting each ZIP as its contents are imported would free " +
+                            "${formatBytes(plan.reclaimableBytes)} and make it fit — see the choice on the Dashboard.",
+                    )
+                }
+                throw PipelineAbortException("$shortfall Free up space or choose another output folder.")
             }
         }
+
+        // Before any archive is deleted: GPS matching reads memories_history.json out of the
+        // archives at a step that runs after extraction, and a rerun needs it too.
+        if (lowSpaceMode) stashExportHistory(zipFiles, outDir)
 
         log("[INFO] Extracting media files…")
         var extractedCount = 0
@@ -705,7 +870,7 @@ class DashboardViewModel(
         progressText = "Extracting files…"
         val extractEta = EtaEstimator()
 
-        zipPipelineRunner.extractAll(itemsByZip, outDir, workerCount) { result ->
+        val onExtractProgress: (ExtractResult) -> Unit = { result ->
             if (result.error != null) {
                 extractErrorCount++
                 log("[ERROR] ${result.fileName}: ${result.error}")
@@ -729,6 +894,13 @@ class DashboardViewModel(
                 }
             }
         }
+
+        if (lowSpaceMode) {
+            importArchivesOneAtATime(archiveOrder, itemsByZip, outDir, workerCount, onExtractProgress)
+        } else {
+            zipPipelineRunner.extractAll(itemsByZip, outDir, workerCount, onExtractProgress)
+        }
+
         speedText = "SPEED: --"
         etaText = "ETA: --"
         val extractSummary = buildString {
@@ -756,7 +928,7 @@ class DashboardViewModel(
                 // buildExperimentalZipMetadataPlan already resolves by omitting GPS
                 // rather than guessing.
                 val memoryJsonSources = withContext(ioDispatcher) {
-                    zipFiles.mapNotNull { zipPath -> readZipEntryText(zipPath, "json/memories_history.json") }
+                    zipFiles.mapNotNull { zipPath -> readExportHistory(zipPath, outDir) }
                 }
 
                 if (memoryJsonSources.isEmpty()) {

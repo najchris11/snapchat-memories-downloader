@@ -512,6 +512,52 @@ this plan.
   audit's resume checklist before calling it fixed. This is desktop/macOS-only; confirm Windows
   and Linux window behavior are unaffected by the change (they should already be decorated —
   verify, don't assume).
+### Batch 6 status (2026-09-17)
+
+- **D20 — landed (desktop).** `planLowSpaceImport` decides whether an import fits one archive at
+  a time, smallest first, keeping the same 1 GiB processing reserve; archives on another drive
+  are never counted or offered. The budget reports each archive (what it writes, what deleting
+  it frees, whether it is on the output drive); `verifyExtraction` checks every file an archive
+  should have produced against that archive by presence and size. The run stashes each
+  `memories_history.json` into `.snapvault/history/` *before* any deletion, imports archives one
+  by one, records each in `.snapvault/imports.json`, and deletes an archive only after both the
+  verification and the record succeed — otherwise it is kept, with the reason logged and
+  recorded. Free space is re-read before each archive, so a disk filled by something else stops
+  the import cleanly with the remaining archives untouched. The mode is never a stored setting:
+  it exists only as a dialog raised when a refused import would fit this way, naming the exact
+  files, saying the deletion is permanent and not to the Trash, with declining as the dismiss
+  action. Mobile is unaffected: the iOS runner cannot verify an extraction, so it would keep
+  every archive, and it reports no budget, so no offer is made.
+  - **Both open design questions were answered from the code, not guessed:** each ZIP is
+    indexed from its own contents, so a main/overlay pair is always within one archive; and
+    dedupe runs over the output folder, not the archives, so cross-archive duplicates are
+    unaffected by deleting a source ZIP.
+- **D21 — landed, needs the manual A/B.** macOS keeps its native title bar and traffic lights
+  (`windowChromeFor`), draws no second set of controls, and does not move the window when the
+  app's own top bar is dragged. Windows and Linux are unchanged. **Still required per the audit:
+  a packaged-build AeroSpace A/B**, plus a look at stock macOS management (fullscreen, Mission
+  Control, minimize/restore, multi-monitor). Nothing here proves the tiling behaviour is fixed;
+  it proves the window is now an ordinary macOS window.
+- **Restart folder — landed.** The chosen library folder is saved and restored, but only if it
+  is still a folder, so an unplugged drive does not come back as a selection the Library scans
+  and reports empty.
+- **Found while doing it — the suite was reading and writing real settings.** The folder-memory
+  default reaches the machine's preference store and tests took it, which wrote
+  `lastOutputFolder=/out` into the developer's own settings and made a later App-level test fail
+  on a prompt that was no longer there. Now an injected `OutputFolderMemory`, with
+  `TestPreferenceIsolationTest` reading the test sources to keep every test off the real store.
+  The stray key was removed from this machine.
+- **Deferred (D20).**
+  - The audit's pre-Start space panel (destination volume, peak estimate, expected final library
+    size, reserve, per-volume recoverable space). Today the numbers appear only when an import is
+    refused, which is where the decision is actually made, but the panel was asked for.
+  - Resuming a crashed low-space import from `.snapvault/imports.json` — the record exists, but
+    nothing reads it back yet, and the Library does not show what was deleted.
+  - A Trash option distinct from permanent deletion (on macOS the Trash does not free space
+    until emptied, so permanent is the useful behaviour here, but the choice was asked for).
+  - Mobile: iOS/Android would need their own sandbox-aware handling before the mode means
+    anything there.
+
 - **Restart doesn't remember the library folder.** Not yet a numbered finding. Low-risk,
   testable addition: persist the last output folder (and maybe source) and offer to reopen it,
   with clear handling when the path no longer exists/is unmounted. Write the failing test for

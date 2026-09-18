@@ -49,6 +49,10 @@ class DashboardViewModel(
     // only reason to be a parameter is that the whole phase — what gets downloaded, what
     // reaches the phases after it — was otherwise unreachable from a test.
     private val httpClientFactory: () -> HttpClient = { HttpClient() },
+    // Parameters so a test can restore a folder without touching the machine's real
+    // preferences, and can watch what gets written.
+    private val loadLastOutputFolder: () -> String? = ::loadLastOutputFolderPreference,
+    private val saveLastOutputFolder: (String?) -> Unit = ::saveLastOutputFolderPreference,
 ) {
     // ── Input selection state ────────────────────────────────────────────────
     var htmlFile by mutableStateOf<String?>(null)
@@ -170,6 +174,16 @@ class DashboardViewModel(
     // property, because nothing ever needs to refer to the job.
     init {
         startFavoriteWriter()
+        restoreLastOutputFolder()
+    }
+
+    // Only if it is still a folder: an external drive that is not plugged in, or a folder since
+    // deleted, would otherwise come back as a selection the Library scans and reports empty.
+    private fun restoreLastOutputFolder() {
+        val saved = loadLastOutputFolder() ?: return
+        if (runCatching { fileSystem.metadataOrNull(saved.toPath())?.isDirectory }.getOrNull() == true) {
+            downloadFolder = saved
+        }
     }
 
     private fun startFavoriteWriter() = scope.launch {
@@ -268,6 +282,7 @@ class DashboardViewModel(
             if (path != null && outputFolderChangeable) {
                 downloadFolder = path
                 lastIndexReset = null
+                saveLastOutputFolder(path)
             }
         }
     }

@@ -23,3 +23,9 @@ actual fun loadLayoutOverride(): LayoutOverride {
 actual fun saveLayoutOverride(override: LayoutOverride) {
     defaults.setObject(override.name, "layoutOverride")
 }
+
+actual fun loadLastOutputFolderPreference(): String? = defaults.stringForKey("lastOutputFolder")
+
+actual fun saveLastOutputFolderPreference(path: String?) {
+    if (path == null) defaults.removeObjectForKey("lastOutputFolder") else defaults.setObject(path, "lastOutputFolder")
+}

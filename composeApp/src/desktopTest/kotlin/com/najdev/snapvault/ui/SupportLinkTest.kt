@@ -244,6 +244,7 @@ class SupportLinkTest {
                 override fun pickMultipleZips(onResult: (List<String>) -> Unit) = onResult(emptyList())
             },
             outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+            outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
         )
         try {
             viewModel.changeImportMode(ImportMode.Legacy)
@@ -333,6 +334,7 @@ class SupportLinkTest {
                     },
                     zipPipelineRunner = NoOpZipPipelineRunner,
                     fileSystem = FakeFileSystem(),
+                    outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
                 )
             }
         }

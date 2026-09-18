@@ -39,6 +39,9 @@ fun App(
     onCloseWindow: () -> Unit = {},
     onMinimizeWindow: () -> Unit = {},
     onMaximizeWindow: () -> Unit = {},
+    // Reaches the machine's preference store by default, so tests that are not about it pass
+    // OutputFolderMemory.None rather than reading and writing real settings.
+    outputFolderMemory: OutputFolderMemory = OutputFolderMemory.Platform,
 ) {
     var currentScreen by remember { mutableStateOf(Screen.Dashboard) }
     var themeMode by remember { mutableStateOf(loadThemeModePreference()) }
@@ -52,7 +55,7 @@ fun App(
     var hasFFmpeg by remember { mutableStateOf(false) }
 
     val dashboardViewModel = remember {
-        DashboardViewModel(zipPipelineRunner, mediaProcessor, fileSystem, pickers)
+        DashboardViewModel(zipPipelineRunner, mediaProcessor, fileSystem, pickers, outputFolderMemory = outputFolderMemory)
     }
     DisposableEffect(Unit) { onDispose { dashboardViewModel.dispose() } }
 

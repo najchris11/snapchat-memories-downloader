@@ -1,5 +1,6 @@
 package com.najdev.snapvault.viewmodel
 
+import com.najdev.snapvault.OutputFolderMemory
 import com.najdev.snapvault.PlatformPickers
 import com.najdev.snapvault.UnenforcedOutputDirectoryLocker
 import com.najdev.snapvault.downloader.NoOpZipPipelineRunner
@@ -39,8 +40,10 @@ class RememberedLibraryFolderTest {
         fileSystem = fileSystem,
         pickers = Pickers(pick),
         outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
-        loadLastOutputFolder = { saved },
-        saveLastOutputFolder = onSave,
+        outputFolderMemory = object : OutputFolderMemory {
+            override fun load() = saved
+            override fun save(path: String?) = onSave(path)
+        },
     )
 
     @Test

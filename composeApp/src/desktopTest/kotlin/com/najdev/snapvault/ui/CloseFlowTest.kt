@@ -51,6 +51,7 @@ class CloseFlowTest {
                 showWindowControls = true,
                 closeRequests = closeRequests,
                 onCloseWindow = { exits++ },
+                outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
             )
         }
         waitForIdle()

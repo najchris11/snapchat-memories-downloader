@@ -21,6 +21,7 @@ internal fun idleDashboardViewModel() = DashboardViewModel(
     fileSystem = FakeFileSystem(),
     pickers = NoPickers,
     outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+    outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
 )
 
 private object NoPickers : PlatformPickers {

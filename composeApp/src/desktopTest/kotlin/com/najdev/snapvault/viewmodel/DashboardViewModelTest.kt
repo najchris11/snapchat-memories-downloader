@@ -176,6 +176,7 @@ class DashboardViewModelTest {
             fileSystem = fs,
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
             outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+            outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
         )
         viewModel.changeImportMode(ImportMode.Legacy)
         viewModel.pickHtmlFile()
@@ -329,6 +330,7 @@ class DashboardViewModelTest {
             fileSystem = fs,
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
             outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+            outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
         )
 
         assertTrue(viewModel.isRiffMislabeledAsPng("/out/overlay.png"))
@@ -354,6 +356,7 @@ class DashboardViewModelTest {
             fileSystem = fs,
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
             outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+            outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
         )
         viewModel.changeImportMode(ImportMode.Legacy)
         viewModel.pickHtmlFile()
@@ -406,6 +409,7 @@ class DashboardViewModelTest {
             fileSystem = fs,
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
             outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+            outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
         )
         viewModel.changeImportMode(ImportMode.Legacy)
         viewModel.pickHtmlFile()
@@ -451,6 +455,7 @@ class DashboardViewModelTest {
             fileSystem = fs,
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
             outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+            outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
         )
         viewModel.pickOutputFolder()
 
@@ -478,6 +483,7 @@ class DashboardViewModelTest {
             fileSystem = fs,
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
             outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+            outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
         )
         viewModel.pickOutputFolder()
 
@@ -511,6 +517,7 @@ class DashboardViewModelTest {
             fileSystem = fs,
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
             outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+            outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
         )
         viewModel.changeImportMode(ImportMode.Legacy)
         viewModel.pickHtmlFile()
@@ -601,6 +608,7 @@ class DashboardViewModelTest {
             fileSystem = fs,
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
             outputDirectoryLocker = locker,
+            outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
         ).also {
             it.changeImportMode(ImportMode.Legacy)
             it.pickHtmlFile()
@@ -707,6 +715,7 @@ class DashboardViewModelTest {
             httpClientFactory = {
                 HttpClient(MockEngine { respond("zip-bytes", headers = headersOf(HttpHeaders.ContentType, "application/zip")) })
             },
+            outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
         )
         viewModel.changeImportMode(ImportMode.Legacy)
         viewModel.pickHtmlFile()
@@ -773,6 +782,7 @@ class DashboardViewModelTest {
         fileSystem = fileSystem,
         pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
         outputDirectoryLocker = locker,
+        outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
     ).also {
         it.changeImportMode(ImportMode.Legacy)
         it.pickHtmlFile()
@@ -902,6 +912,7 @@ class DashboardViewModelTest {
         fileSystem = disk,
         pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
         outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+        outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
     ).also {
         it.changeImportMode(ImportMode.Legacy)
         it.pickHtmlFile()
@@ -1061,6 +1072,7 @@ class DashboardViewModelTest {
         fileSystem = disk,
         pickers = FolderPickers(),
         outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+        outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
     ).also {
         it.changeImportMode(mode)
         it.pickHtmlFile()
@@ -1211,6 +1223,7 @@ class DashboardViewModelTest {
             fileSystem = FakeFileSystem(),
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
             outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+            outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
         )
         assertEquals(DashboardViewModel.IndexResetOutcome.NoFolder, runBlocking { noFolder.resetVaultIndex() })
         assertEquals(DashboardViewModel.IndexResetOutcome.NoFolder, noFolder.lastIndexReset, "the screen reads the outcome from here")
@@ -1227,6 +1240,7 @@ class DashboardViewModelTest {
             fileSystem = disk,
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
             outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+            outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
         ).apply { pickOutputFolder() }
         assertEquals(DashboardViewModel.IndexResetOutcome.Failed, runBlocking { damaged.resetVaultIndex() })
         assertEquals("{ not json", disk.read("/out/vault_index.json".toPath()) { readUtf8() })
@@ -1242,6 +1256,7 @@ class DashboardViewModelTest {
             fileSystem = FakeFileSystem().apply { createDirectories("/out".toPath()) },
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
             outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+            outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
         )
         viewModel.pickOutputFolder()
         runBlocking { viewModel.resetVaultIndex() }
@@ -1273,6 +1288,7 @@ class DashboardViewModelTest {
             fileSystem = disk,
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
             outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+            outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
         ).apply {
             changeImportMode(ImportMode.Legacy)
             pickHtmlFile()

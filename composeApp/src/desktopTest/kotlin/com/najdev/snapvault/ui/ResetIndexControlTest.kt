@@ -123,6 +123,7 @@ class ResetIndexControlTest {
                     },
                     zipPipelineRunner = NoOpZipPipelineRunner,
                     fileSystem = FakeFileSystem(),
+                    outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
                 )
             }
         }

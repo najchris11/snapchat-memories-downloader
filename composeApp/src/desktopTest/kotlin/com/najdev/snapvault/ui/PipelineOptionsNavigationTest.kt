@@ -116,7 +116,7 @@ class PipelineOptionsNavigationTest {
         var width by mutableStateOf(1280.dp)
         setContent {
             Box(Modifier.width(width).height(900.dp)) {
-                App(pickers = Pickers(), mediaProcessor = Tools(), zipPipelineRunner = runner, fileSystem = disk)
+                App(pickers = Pickers(), mediaProcessor = Tools(), zipPipelineRunner = runner, fileSystem = disk, outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None)
             }
         }
 
@@ -157,7 +157,7 @@ class PipelineOptionsNavigationTest {
     fun aFreshStartStillOffersTheDefaults() = runComposeUiTest {
         setContent {
             Box(Modifier.width(1280.dp).height(900.dp)) {
-                App(pickers = Pickers(), mediaProcessor = Tools(), zipPipelineRunner = RecordingRunner(), fileSystem = FakeFileSystem())
+                App(pickers = Pickers(), mediaProcessor = Tools(), zipPipelineRunner = RecordingRunner(), fileSystem = FakeFileSystem(), outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None)
             }
         }
         onNodeWithText(LEGACY).performClick()

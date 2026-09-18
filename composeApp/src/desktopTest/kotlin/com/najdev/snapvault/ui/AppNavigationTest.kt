@@ -67,6 +67,7 @@ class AppNavigationTest {
                     mediaProcessor = NoopMediaProcessor(),
                     zipPipelineRunner = NoOpZipPipelineRunner,
                     fileSystem = FileSystem.SYSTEM,
+                    outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
                 )
             }
         }

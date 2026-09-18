@@ -92,6 +92,7 @@ class ControlsDuringARunTest {
         },
         pickers = Pickers(),
         outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+        outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
     ).apply {
         changeImportMode(ImportMode.Legacy)
         pickHtmlFile()
@@ -152,6 +153,7 @@ class ControlsDuringARunTest {
                 override fun pickMultipleZips(onResult: (List<String>) -> Unit) = onResult(emptyList())
             },
             outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+            outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
         ).apply {
             changeImportMode(ImportMode.Legacy)
             pickHtmlFile()
@@ -236,6 +238,7 @@ class ControlsDuringARunTest {
                             writeUtf8("""{"Saved Media": [{"Download Link": "https://example.com/x", "Date": "2024-01-01 00:00:00 UTC"}]}""")
                         }
                     },
+                    outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
                 )
             }
         }

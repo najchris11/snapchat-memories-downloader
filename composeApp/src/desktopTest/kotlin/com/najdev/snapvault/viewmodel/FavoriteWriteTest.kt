@@ -55,6 +55,7 @@ class FavoriteWriteTest {
             mediaProcessor = FakeMediaProcessor(),
             fileSystem = fs,
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+            outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
         ).apply { pickOutputFolder() }
     }
 
@@ -295,6 +296,7 @@ class FavoriteWriteTest {
             mediaProcessor = FakeMediaProcessor(),
             fileSystem = fs,
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+            outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
         )
 
         viewModel.setFavorite("/out/memory.jpg", true)

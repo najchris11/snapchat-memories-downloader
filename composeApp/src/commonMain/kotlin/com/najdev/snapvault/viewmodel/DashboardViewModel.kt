@@ -49,10 +49,9 @@ class DashboardViewModel(
     // only reason to be a parameter is that the whole phase — what gets downloaded, what
     // reaches the phases after it — was otherwise unreachable from a test.
     private val httpClientFactory: () -> HttpClient = { HttpClient() },
-    // Parameters so a test can restore a folder without touching the machine's real
-    // preferences, and can watch what gets written.
-    private val loadLastOutputFolder: () -> String? = ::loadLastOutputFolderPreference,
-    private val saveLastOutputFolder: (String?) -> Unit = ::saveLastOutputFolderPreference,
+    // A parameter so a test can restore a folder, and watch what gets written, without
+    // touching the machine's real preferences.
+    private val outputFolderMemory: OutputFolderMemory = OutputFolderMemory.Platform,
 ) {
     // ── Input selection state ────────────────────────────────────────────────
     var htmlFile by mutableStateOf<String?>(null)
@@ -180,7 +179,7 @@ class DashboardViewModel(
     // Only if it is still a folder: an external drive that is not plugged in, or a folder since
     // deleted, would otherwise come back as a selection the Library scans and reports empty.
     private fun restoreLastOutputFolder() {
-        val saved = loadLastOutputFolder() ?: return
+        val saved = outputFolderMemory.load() ?: return
         if (runCatching { fileSystem.metadataOrNull(saved.toPath())?.isDirectory }.getOrNull() == true) {
             downloadFolder = saved
         }
@@ -282,7 +281,7 @@ class DashboardViewModel(
             if (path != null && outputFolderChangeable) {
                 downloadFolder = path
                 lastIndexReset = null
-                saveLastOutputFolder(path)
+                outputFolderMemory.save(path)
             }
         }
     }

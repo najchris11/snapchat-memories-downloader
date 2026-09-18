@@ -4,6 +4,8 @@
 
 **What runs where:** ZIP imports run locally. Legacy link imports require internet access. Linux requires FFmpeg and Perl.
 
+> **Not affiliated with Snap Inc.** SnapVault is an independent, unofficial tool. It is not made, endorsed, sponsored or supported by Snap Inc., and "Snapchat" is a trademark of Snap Inc. It works only on the data export Snapchat gives *you*, through Snapchat's own "Download My Data" — it does not access your account, log in for you, or bypass anything.
+
 Built with Kotlin Multiplatform + Compose Desktop. Ships as a native installer for macOS, Windows, and Linux.
 
 ## Getting Your Snapchat Data
@@ -73,17 +75,13 @@ It creates `demo-library/` with eight abstract, non-personal images, realistic S
 
 The app version is set in `gradle.properties` (`app.version`). Releases are cut manually via the **Release** workflow (Actions → Release → Run workflow). It works out the version, refusing one that is not above every existing tag; builds, tests, packages and verifies an installer on each platform; and only if every platform succeeded does it commit the version, tag it, and publish the installers with `SHA256SUMS.txt`. A dry run — the default — does everything except publish, from any branch.
 
-## Legacy Python Scripts
-
-The original Python-based CLI scripts are preserved in [`legacy/`](legacy/) for reference. They are not actively maintained.
-
 ## Support SnapVault
 
 SnapVault is free to use. If it helps you, you can [leave an optional tip on Ko-fi](https://ko-fi.com/najdev) to support development and distribution.
 
 ## Credits
 
-SnapVault began in December 2025 as a fork of [ManuelPuchner/snapchat-memories-downloader](https://github.com/ManuelPuchner/snapchat-memories-downloader), a set of Python CLI scripts — thanks to Manuel and [Nick](https://github.com/nrc2358) for that original implementation. The app you install today is a ground-up rewrite: a Kotlin Multiplatform / Compose Desktop application sharing no code with those scripts, which are kept in [`legacy/`](legacy/) for reference only.
+SnapVault began in December 2025 as a fork of [ManuelPuchner/snapchat-memories-downloader](https://github.com/ManuelPuchner/snapchat-memories-downloader), a set of Python CLI scripts — thanks to Manuel and [Nick](https://github.com/nrc2358) for that original implementation. The app you install today is a ground-up rewrite: a Kotlin Multiplatform / Compose Desktop application that shares no code with those scripts. The scripts themselves are not distributed here; that upstream repository carries no license, so it is theirs to share, not ours.
 
 ## License
 

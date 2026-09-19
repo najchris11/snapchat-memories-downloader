@@ -305,6 +305,7 @@ class FavoriteToggleTest {
         mediaProcessor = FakeMediaProcessor(),
         fileSystem = fileSystem,
         pickers = FakePlatformPickers(htmlPath = "", outputDir = folder.absolutePath),
+        outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
     ).apply { pickOutputFolder() }
 
     @Composable

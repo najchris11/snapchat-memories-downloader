@@ -58,7 +58,7 @@ actual fun scanMediaFiles(folderPath: String): List<LibraryItem> {
                 title = scanned.path.name.substringBeforeLast('.'),
                 type = if (ext in videoExtensions) "video" else "photo",
                 hasGps = meta?.hasGps ?: false,
-                hasOverlay = meta?.hasOverlay ?: false,
+                hasOverlay = meta?.combined ?: false,
                 favorited = meta?.favorited ?: false,
                 fileSizeBytes = scanned.size
             )

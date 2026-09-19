@@ -1,5 +1,6 @@
 package com.najdev.snapvault.viewmodel
 
+import com.najdev.snapvault.SerializedFileSystem
 import com.najdev.snapvault.VaultIndex
 import com.najdev.snapvault.downloader.NoOpZipPipelineRunner
 import kotlinx.coroutines.delay
@@ -32,6 +33,20 @@ class FavoriteWriteTest {
     private val historyJson =
         """{"Saved Media": [{"Download Link": "https://example.com/x", "Date": "2024-01-01 00:00:00 UTC"}]}"""
 
+    /**
+     * The fake these tests share between the view model's writer and the test thread.
+     *
+     * The writer saves on the IO dispatcher while the test polls the same index, and okio's
+     * FakeFileSystem is not thread-safe: under a busy suite a save threw from inside the fake,
+     * the writer treated it as a failed save and reverted the heart, and a test failed on a bug
+     * the app does not have. Serialized, it is safe to share. Moving onto an open file is
+     * allowed because the fake otherwise emulates Windows, where a rename onto a file another
+     * thread is reading fails — which these tests are not about, and which is recorded in the
+     * remediation plan as its own open question.
+     */
+    private fun sharedFileSystem(): FileSystem =
+        SerializedFileSystem(FakeFileSystem().apply { allowMovingOpenFiles = true })
+
     private fun viewModel(fs: FileSystem): DashboardViewModel {
         fs.createDirectories("/out".toPath())
         fs.write("/history.json".toPath()) { writeUtf8(historyJson) }
@@ -40,6 +55,7 @@ class FavoriteWriteTest {
             mediaProcessor = FakeMediaProcessor(),
             fileSystem = fs,
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+            outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
         ).apply { pickOutputFolder() }
     }
 
@@ -51,7 +67,7 @@ class FavoriteWriteTest {
 
     @Test
     fun aFavoriteIsWrittenUnderItsFileNameAndShownImmediately() {
-        val fs = FakeFileSystem()
+        val fs = sharedFileSystem()
         val viewModel = viewModel(fs)
 
         viewModel.setFavorite("/out/memory.jpg", true)
@@ -72,7 +88,7 @@ class FavoriteWriteTest {
     // that should not have shipped.
     @Test
     fun aFailedWriteRevertsTheHeartAndSaysSo() {
-        val fs = FakeFileSystem()
+        val fs = sharedFileSystem()
         val control = IndexWriteControl(fs, blockFrom = 1, failAt = setOf(1))
         val viewModel = viewModel(control)
 
@@ -101,7 +117,7 @@ class FavoriteWriteTest {
     // sees immediately, the item stays pending throughout, and the newest value is what lands.
     @Test
     fun rapidTogglesOnOneItemPersistInPressOrder() {
-        val fs = FakeFileSystem()
+        val fs = sharedFileSystem()
         val control = IndexWriteControl(fs, blockFrom = 1)
         val viewModel = viewModel(control)
 
@@ -135,7 +151,7 @@ class FavoriteWriteTest {
     // value is not what ends up on disk.
     @Test
     fun manyRapidTogglesEndAtTheLastPress() {
-        val fs = FakeFileSystem()
+        val fs = sharedFileSystem()
         val viewModel = viewModel(fs)
 
         repeat(50) { viewModel.setFavorite("/out/memory.jpg", it % 2 == 0) }
@@ -156,7 +172,7 @@ class FavoriteWriteTest {
     // an override the disk had not caught up with.
     @Test
     fun anEarlierWriteCompletingDoesNotSettleAStillPendingLaterToggle() {
-        val fs = FakeFileSystem()
+        val fs = sharedFileSystem()
         val control = IndexWriteControl(fs, blockFrom = 2)
         val viewModel = viewModel(control)
 
@@ -187,7 +203,7 @@ class FavoriteWriteTest {
     // override the user has since changed — the newer press is still in flight and still true.
     @Test
     fun anOlderFailedWriteDoesNotRevertANewerToggle() {
-        val fs = FakeFileSystem()
+        val fs = sharedFileSystem()
         val control = IndexWriteControl(fs, blockFrom = 2, failAt = setOf(1))
         val viewModel = viewModel(control)
 
@@ -219,7 +235,7 @@ class FavoriteWriteTest {
     // to ask whether something saved, so a stale override answers that question wrongly.
     @Test
     fun anOverrideIsDroppedOnceAScanReflectsIt() {
-        val fs = FakeFileSystem()
+        val fs = sharedFileSystem()
         val viewModel = viewModel(fs)
 
         viewModel.setFavorite("/out/memory.jpg", true)
@@ -238,7 +254,7 @@ class FavoriteWriteTest {
     // press and the write landing.
     @Test
     fun anOverrideSurvivesAScanWhileItsWriteIsStillPending() {
-        val fs = FakeFileSystem()
+        val fs = sharedFileSystem()
         val gate = IndexWriteControl(fs, blockFrom = 1)
         val viewModel = viewModel(gate)
 
@@ -261,7 +277,7 @@ class FavoriteWriteTest {
     // of this one says nothing about it either way.
     @Test
     fun aScanOnlyReconcilesTheFilesItActuallySaw() {
-        val fs = FakeFileSystem()
+        val fs = sharedFileSystem()
         val viewModel = viewModel(fs)
 
         viewModel.setFavorite("/out/memory.jpg", true)
@@ -274,12 +290,13 @@ class FavoriteWriteTest {
 
     @Test
     fun aFavoriteWithNoOutputFolderIsNotLeftPendingForever() {
-        val fs = FakeFileSystem()
+        val fs = sharedFileSystem()
         val viewModel = DashboardViewModel(
             zipPipelineRunner = NoOpZipPipelineRunner,
             mediaProcessor = FakeMediaProcessor(),
             fileSystem = fs,
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
+            outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
         )
 
         viewModel.setFavorite("/out/memory.jpg", true)

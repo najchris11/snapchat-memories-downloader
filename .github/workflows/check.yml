@@ -25,6 +25,11 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
+      # The release workflow's version logic, tested here so a broken change is caught on the
+      # PR rather than when someone tries to cut a release.
+      - name: Test release scripts
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+
       # Before the tests: a lint failure is cheap to produce and cheap to read, so there's
       # no reason to spend a test run finding out about an unused import.
       - name: Run Detekt

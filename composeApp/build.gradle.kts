@@ -131,7 +131,7 @@ android {
         applicationId = "com.najdev.snapvault"
         minSdk = 24
         targetSdk = 37
-        versionCode = 12
+        versionCode = 14
         versionName = appVersion
     }
     sourceSets["main"].manifest.srcFile("src/androidMain/AndroidManifest.xml")
@@ -196,6 +196,13 @@ compose.desktop {
 val isDebugBuild: Boolean =
     (project.findProperty("isDebug") as? String)?.toBoolean()
         ?: gradle.startParameter.taskNames.any { it == "run" || it.endsWith(":run") }
+
+// ShippedToolManifestTest reads the runtime fetch scripts, which are not compiled or packaged.
+// Without declaring them, Gradle treats the suite as up to date after a script edit and never
+// re-runs the check that the scripts still verify what the manifest records.
+tasks.named<Test>("desktopTest") {
+    inputs.dir(rootProject.file("scripts")).withPropertyName("runtimeFetchScripts")
+}
 
 // Ship the third-party license notices inside the app (classpath root), so every
 // installer carries the ExifTool/FFmpeg license information it is required to include.

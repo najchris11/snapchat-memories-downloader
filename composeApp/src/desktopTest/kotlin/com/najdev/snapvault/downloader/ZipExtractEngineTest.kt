@@ -9,6 +9,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ZipExtractEngineTest {
@@ -40,6 +41,19 @@ class ZipExtractEngineTest {
             }
         }
         return zipFile
+    }
+
+    /** A legacy downloaded memory archive, written into the output directory as the download phase leaves it. */
+    private fun legacyArchive(name: String, entries: Map<String, String>): File {
+        val archive = File(outDir, name)
+        ZipOutputStream(archive.outputStream()).use { zos ->
+            for ((entryName, text) in entries) {
+                zos.putNextEntry(ZipEntry(entryName))
+                zos.write(text.toByteArray())
+                zos.closeEntry()
+            }
+        }
+        return archive
     }
 
     private fun entry(fileName: String, overlayFileName: String? = null) = HtmlMemoryEntry(
@@ -113,24 +127,87 @@ class ZipExtractEngineTest {
 
         runExtract(zip, listOf(entry("2023-10-12_ABC-main.jpg")))
 
-        val leftovers = outDir.listFiles()!!.filter { it.name.endsWith(".part") }
+        // Walks the tree: temp files are staged in a subdirectory now, so a listing of
+        // outDir alone would pass without proving anything.
+        val leftovers = outDir.walkTopDown().filter { it.isFile && it.name.endsWith(".part") }.toList()
         assertTrue(leftovers.isEmpty(), "no .part temp files may remain, found: $leftovers")
+        assertTrue(!File(outDir, ".snapvault-staging").exists(), "empty staging directory must be removed")
     }
 
     // ── extractDownloadedArchives (legacy pipeline) ──────────────────────────
 
+    // D14: "skipped" meant only that *something* was at the path. An empty file there — a
+    // crash between create and write in an older build, a sync client's placeholder — was
+    // skipped on every run from then on, and the Library showed a memory that would not open.
+    @Test
+    fun anEmptyFileWhereAnEntryBelongsIsReplacedRatherThanSkipped() {
+        val zip = createZip("export.zip", mapOf("memories/2023-10-12_ABC-main.jpg" to "real-bytes".toByteArray()))
+        val placeholder = File(outDir, "2023-10-12_ABC-main.jpg").apply { writeBytes(ByteArray(0)) }
+
+        val results = runExtract(zip, listOf(entry("2023-10-12_ABC-main.jpg")))
+
+        assertEquals(1, results.size)
+        assertEquals(null, results[0].error)
+        assertFalse(results[0].skipped, "an empty file is not a finished extraction")
+        assertEquals("real-bytes", placeholder.readText())
+    }
+
+    // A folder under the name is not a finished file either, and it is not ours to remove.
+    // Reporting it as "skipped" let a legacy archive be deleted with the memory extracted
+    // nowhere.
+    @Test
+    fun aFolderWhereAnEntryBelongsIsAFailureNotASkip() {
+        val archive = legacyArchive("20231012_153000_abc.zip", linkedMapOf("media~xyz.jpg" to "photo-bytes"))
+        File(outDir, "20231012_153000_abc-main.jpg").mkdirs()
+
+        val warnings = mutableListOf<String>()
+        runBlocking {
+            ZipExtractEngine().extractDownloadedArchives(outDir.absolutePath, listOf(archive.absolutePath)) {
+                warnings.add(it)
+            }
+        }
+
+        assertTrue(archive.exists(), "the archive holds the only copy and must be kept")
+        assertTrue(warnings.any { "20231012_153000_abc-main.jpg" in it }, "the obstruction must be named: $warnings")
+    }
+
+    @Test
+    fun legacyArchiveIsRetainedWhenAnExistingFileWasSkipped() {
+        // A skipped destination proves only existence, not that this archive's bytes landed.
+        // Previously this deleted the only copy of the incoming photo after a name collision.
+        val archive = legacyArchive("collision.zip", linkedMapOf("photo.jpg" to "incoming"))
+        val before = archive.readBytes().toList()
+        val existing = File(outDir, "collision-main.jpg").apply { writeText("personal") }
+        val warnings = mutableListOf<String>()
+
+        runBlocking {
+            ZipExtractEngine().extractDownloadedArchives(outDir.path, listOf(archive.path)) {
+                warnings.add(it)
+            }
+        }
+
+        assertTrue(archive.exists(), "an unverified skip must not authorize source deletion")
+        assertEquals(before, archive.readBytes().toList())
+        assertEquals("personal", existing.readText())
+        assertTrue(warnings.any { "collision-main.jpg" in it && "kept" in it }, warnings.toString())
+    }
+
     @Test
     fun extractsLegacyArchiveAsMainOverlayPairAndDeletesIt() {
-        val archive = File(outDir, "20231012_153000_abc.zip")
-        ZipOutputStream(archive.outputStream()).use { zos ->
-            zos.putNextEntry(ZipEntry("media~xyz.mp4")); zos.write("video-bytes".toByteArray()); zos.closeEntry()
-            zos.putNextEntry(ZipEntry("overlay~xyz.png")); zos.write("overlay-bytes".toByteArray()); zos.closeEntry()
-            zos.putNextEntry(ZipEntry("thumbnail~xyz.jpg")); zos.write("thumb".toByteArray()); zos.closeEntry()
-        }
+        val archive = legacyArchive(
+            "20231012_153000_abc.zip",
+            linkedMapOf(
+                "media~xyz.mp4" to "video-bytes",
+                "overlay~xyz.png" to "overlay-bytes",
+                "thumbnail~xyz.jpg" to "thumb",
+            ),
+        )
 
         val warnings = mutableListOf<String>()
         val extracted = runBlocking {
-            ZipExtractEngine().extractDownloadedArchives(outDir.absolutePath) { warnings.add(it) }
+            ZipExtractEngine().extractDownloadedArchives(
+                outDir.absolutePath, listOf(archive.absolutePath),
+            ) { warnings.add(it) }
         }
 
         assertEquals(2, extracted.size, "media + overlay extracted, thumbnail skipped; warnings: $warnings")
@@ -140,13 +217,81 @@ class ZipExtractEngineTest {
         assertTrue(warnings.isEmpty(), "no warnings expected: $warnings")
     }
 
+    // Regression (D01): the archive basename is the only thing that distinguishes an
+    // extracted file, so two same-extension entries both flatten to "<base>-main.jpg".
+    // The second one used to come back "skipped" — indistinguishable from "already
+    // extracted on a previous run" — leaving allOk true and deleting the archive with
+    // only the first photo on disk. The second photo existed nowhere else.
+    @Test
+    fun archiveWhoseEntriesCollideIsKeptIntact() {
+        val archive = legacyArchive(
+            "20231012_153000_abc.zip",
+            linkedMapOf("one.jpg" to "first-photo", "two.jpg" to "second-photo"),
+        )
+        val before = archive.readBytes()
+
+        val warnings = mutableListOf<String>()
+        val extracted = runBlocking {
+            ZipExtractEngine().extractDownloadedArchives(
+                outDir.absolutePath, listOf(archive.absolutePath),
+            ) { warnings.add(it) }
+        }
+
+        assertTrue(archive.exists(), "colliding archive must be kept; it holds the only copy of both photos")
+        assertEquals(before.toList(), archive.readBytes().toList(), "kept archive must be byte-identical")
+        assertTrue(extracted.isEmpty(), "nothing may be extracted from an archive that cannot be flattened safely")
+        assertTrue(warnings.any { "one.jpg" in it || "two.jpg" in it }, "collision must be warned: $warnings")
+    }
+
+    // Regression (D01): every entry was a thumbnail, so the extraction loop skipped them
+    // all, allOk stayed true, and the archive was deleted having produced no output.
+    @Test
+    fun thumbnailOnlyArchiveIsKeptIntact() {
+        val archive = legacyArchive("20231012_153000_abc.zip", linkedMapOf("thumbnail~xyz.jpg" to "only-copy"))
+
+        val warnings = mutableListOf<String>()
+        val extracted = runBlocking {
+            ZipExtractEngine().extractDownloadedArchives(
+                outDir.absolutePath, listOf(archive.absolutePath),
+            ) { warnings.add(it) }
+        }
+
+        assertTrue(archive.exists(), "archive that produced no output must never be deleted")
+        assertTrue(extracted.isEmpty())
+        assertTrue(warnings.isNotEmpty(), "silently deleting it was the bug; say why it was kept")
+    }
+
+    // Regression (D01): extraction used to enumerate every *.zip in the output directory.
+    // Pointing the output at Downloads (or at the export folder itself) put unrelated
+    // archives through the flatten-and-delete path.
+    @Test
+    fun archivesNotOwnedByThisRunAreNeverTouched() {
+        val mine = legacyArchive("20231012_153000_abc.zip", linkedMapOf("media~xyz.mp4" to "video-bytes"))
+        val theirs = legacyArchive("tax-returns-2023.zip", linkedMapOf("form.pdf" to "irreplaceable"))
+        val theirsBefore = theirs.readBytes()
+
+        val warnings = mutableListOf<String>()
+        runBlocking {
+            ZipExtractEngine().extractDownloadedArchives(
+                outDir.absolutePath, listOf(mine.absolutePath),
+            ) { warnings.add(it) }
+        }
+
+        assertTrue(theirs.exists(), "an archive this run did not download must not be read or deleted")
+        assertEquals(theirsBefore.toList(), theirs.readBytes().toList())
+        assertTrue(!File(outDir, "tax-returns-2023-main.pdf").exists(), "unrelated archive must not be flattened")
+        assertTrue(!mine.exists(), "the run's own fully-extracted archive is still cleaned up")
+    }
+
     @Test
     fun corruptArchiveIsKeptAndWarned() {
         val bogus = File(outDir, "20231012_153000_bad.zip").apply { writeText("not a zip") }
 
         val warnings = mutableListOf<String>()
         val extracted = runBlocking {
-            ZipExtractEngine().extractDownloadedArchives(outDir.absolutePath) { warnings.add(it) }
+            ZipExtractEngine().extractDownloadedArchives(
+                outDir.absolutePath, listOf(bogus.absolutePath),
+            ) { warnings.add(it) }
         }
 
         assertTrue(extracted.isEmpty())
@@ -154,15 +299,35 @@ class ZipExtractEngineTest {
         assertTrue(warnings.isNotEmpty())
     }
 
+    // Leftovers inside our own staging directory are unambiguously ours — a run that
+    // crashed mid-copy — so they are still cleaned up. Only the guess-by-extension sweep
+    // of the whole destination went away (D03).
     @Test
     fun cleansStalePartFilesFromPreviousRun() {
-        val stale = File(outDir, "2023-10-12_ABC-main.jpg.x1y2.part").apply { writeText("truncated") }
+        val staging = File(outDir, ".snapvault-staging").apply { mkdirs() }
+        val stale = File(staging, "2023-10-12_ABC-main.jpg.x1y2.part").apply { writeText("truncated") }
         val zip = createZip("export.zip", mapOf("memories/2023-10-12_ABC-main.jpg" to "bytes".toByteArray()))
 
         runExtract(zip, listOf(entry("2023-10-12_ABC-main.jpg")))
 
         assertTrue(!stale.exists(), "stale .part file from an interrupted run must be removed")
         assertEquals("bytes", File(outDir, "2023-10-12_ABC-main.jpg").readText())
+    }
+
+    // Regression (D03): startup deleted every *.part file in the destination, inferring
+    // ownership from the extension alone. A browser's in-flight download, or another
+    // SnapVault instance's live staging file, sitting in the chosen folder was destroyed
+    // — and with an empty task list the run had no business writing there at all.
+    @Test
+    fun partFilesWeDoNotOwnAreNeverDeleted() {
+        val theirs = File(outDir, "browser-download.part").apply { writeText("user-download") }
+
+        runBlocking {
+            ZipExtractEngine().extractAll(emptyMap(), outDir.absolutePath, workerCount = 1) {}
+        }
+
+        assertTrue(theirs.exists(), "a .part file this run did not create must survive")
+        assertEquals("user-download", theirs.readText(), "and must not be truncated")
     }
 
     @Test
@@ -195,5 +360,135 @@ class ZipExtractEngineTest {
         // Final content should be either v1 or v2 (atomic move won)
         val finalContent = File(outDir, "shared.jpg").readText()
         assertTrue(finalContent == "v1" || finalContent == "v2")
+    }
+
+    // ── D13: space, before a byte is written ─────────────────────────────────
+
+    // D13: nothing checked whether an import would fit. A large export into a nearly full disk
+    // extracted until writes failed, leaving thousands of files and a folder too full for the
+    // metadata and combine steps that follow. The budget counts what extraction would actually
+    // write: every entry's declared size, except where a finished file is already on disk. A
+    // zip bomb declares its size honestly in the directory and is still enormous, so this is
+    // also what turns one away before extraction rather than after the disk is full.
+    @Test
+    fun theBudgetCountsWhatExtractionWouldWriteAgainstTheSpaceAvailable() {
+        val zip = createZip(
+            "export.zip",
+            mapOf(
+                "memories/2023-10-12_ABC-main.jpg" to ByteArray(700),
+                "memories/2023-10-12_ABC-overlay.png" to ByteArray(300),
+                "memories/2023-10-13_DEF-main.jpg" to ByteArray(2_000),
+            ),
+        )
+        // Already extracted by an earlier run: writes nothing.
+        File(outDir, "2023-10-13_DEF-main.jpg").writeBytes(ByteArray(2_000))
+        var askedAbout: File? = null
+        val engine = ZipExtractEngine(usableSpace = { askedAbout = it; 12_345L })
+
+        val budget = engine.extractionBudget(
+            mapOf(
+                zip.absolutePath to listOf(
+                    entry("2023-10-12_ABC-main.jpg", "2023-10-12_ABC-overlay.png"),
+                    entry("2023-10-13_DEF-main.jpg"),
+                ),
+            ),
+            outDir.absolutePath,
+        )
+
+        assertEquals(1_000L, budget.requiredBytes, "700 + 300; the file already on disk costs nothing")
+        assertEquals(12_345L, budget.availableBytes)
+        assertEquals(outDir.absolutePath, askedAbout?.absolutePath, "space has to be measured where the files will go")
+    }
+
+    @Test
+    fun anEmptyPlaceholderIsCountedAsStillToBeWritten() {
+        val zip = createZip("export.zip", mapOf("memories/2023-10-12_ABC-main.jpg" to ByteArray(500)))
+        File(outDir, "2023-10-12_ABC-main.jpg").writeBytes(ByteArray(0))
+
+        val budget = ZipExtractEngine(usableSpace = { 0L })
+            .extractionBudget(mapOf(zip.absolutePath to listOf(entry("2023-10-12_ABC-main.jpg"))), outDir.absolutePath)
+
+        assertEquals(500L, budget.requiredBytes, "an empty file is replaced (D14), so it still has to be written")
+    }
+
+    // ── D20: what each archive costs, and whether its contents really landed ──────────
+
+    @Test
+    fun theBudgetReportsEachArchiveSeparatelyForTheLowSpacePlan() {
+        val first = createZip("part1.zip", mapOf("memories/a-main.jpg" to ByteArray(2048) { 1 }))
+        val second = createZip("part2.zip", mapOf("memories/b-main.jpg" to ByteArray(4096) { 2 }))
+        val engine = ZipExtractEngine()
+
+        val budget = engine.extractionBudget(
+            mapOf(first.path to listOf(entry("a-main.jpg")), second.path to listOf(entry("b-main.jpg"))),
+            outDir.path,
+        )
+
+        val archives = budget.archives.associateBy { it.path }
+        assertEquals(2048L, archives.getValue(first.path).requiredBytes)
+        assertEquals(4096L, archives.getValue(second.path).requiredBytes)
+        assertEquals(first.length(), archives.getValue(first.path).archiveBytes, "deleting it frees the whole file")
+        // Both live in the same temporary directory tree as the output folder.
+        assertTrue(budget.archives.all { it.onOutputVolume })
+        assertEquals(budget.requiredBytes, budget.archives.sumOf { it.requiredBytes })
+    }
+
+    // Deleting an archive on another drive frees nothing where the library is written, so the
+    // low-space mode must not be offered for it.
+    @Test
+    fun anArchiveOnAnotherDriveIsNotOnTheOutputVolume() {
+        val external = createZip("external.zip", mapOf("memories/a-main.jpg" to ByteArray(64)))
+        val engine = ZipExtractEngine(volumeId = { file -> if (file.name == "external.zip") "usb" else "internal" })
+
+        val budget = engine.extractionBudget(mapOf(external.path to listOf(entry("a-main.jpg"))), outDir.path)
+
+        assertFalse(budget.archives.single().onOutputVolume)
+    }
+
+    // A drive that cannot be identified is treated as a different one: a wrong "yes" offers a
+    // mode that permanently deletes archives and does not make the import fit.
+    @Test
+    fun anUnidentifiableDriveIsNotAssumedToBeTheOutputVolume() {
+        val zip = createZip("part1.zip", mapOf("memories/a-main.jpg" to ByteArray(64)))
+        val engine = ZipExtractEngine(volumeId = { null })
+
+        val budget = engine.extractionBudget(mapOf(zip.path to listOf(entry("a-main.jpg"))), outDir.path)
+
+        assertFalse(budget.archives.single().onOutputVolume)
+    }
+
+    // Deleting the archive is only safe if every file it was supposed to produce is there and
+    // the right size. A truncated write, or a file removed between extraction and deletion,
+    // has to keep the archive.
+    @Test
+    fun verificationPassesOnlyWhenEveryEntryIsOnDiskAtFullSize() {
+        val bytes = ByteArray(1024) { 7 }
+        val zip = createZip("part1.zip", mapOf("memories/a-main.jpg" to bytes, "memories/a-overlay.png" to bytes))
+        val entries = listOf(entry("a-main.jpg", "a-overlay.png"))
+        val engine = ZipExtractEngine()
+        runExtract(zip, entries)
+
+        assertEquals(emptyList(), engine.verifyExtraction(zip.path, entries, outDir.path))
+
+        File(outDir, "a-overlay.png").writeBytes(ByteArray(10))
+        assertTrue(engine.verifyExtraction(zip.path, entries, outDir.path).any { "a-overlay.png" in it })
+
+        File(outDir, "a-overlay.png").delete()
+        File(outDir, "a-main.jpg").delete()
+        val missing = engine.verifyExtraction(zip.path, entries, outDir.path)
+        assertEquals(2, missing.size, missing.toString())
+    }
+
+    // An entry the archive does not actually contain cannot be checked against it; the
+    // extraction already reported it as an error, and the archive must not be deleted on the
+    // strength of a file that came from somewhere else.
+    @Test
+    fun anEntryMissingFromTheArchiveFailsVerification() {
+        val zip = createZip("part1.zip", mapOf("memories/a-main.jpg" to ByteArray(16)))
+        File(outDir, "ghost.jpg").writeBytes(ByteArray(16))
+
+        val problems = ZipExtractEngine().verifyExtraction(zip.path, listOf(entry("ghost.jpg")), outDir.path)
+
+        assertTrue(problems.any { "ghost.jpg" in it }, problems.toString())
     }
 }

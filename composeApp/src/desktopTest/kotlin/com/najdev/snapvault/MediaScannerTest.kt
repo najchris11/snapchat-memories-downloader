@@ -207,4 +207,30 @@ class MediaScannerTest {
         assertEquals(false, item.favorited)
         assertTrue(item.hasGps, "the fields that were there must survive")
     }
+
+    // D11: "Combined" was drawn from `hasOverlay`, which the pipeline set whenever a memory
+    // *had* an overlay file — before combining, and whether or not combining then ran or
+    // succeeded. Observed live: a run with combining switched off showed its untouched -main
+    // photos as "Combined". An index written that way must not keep telling that story.
+    @Test
+    fun aMemoryThatOnlyHasAnOverlayIsNotShownAsCombined() {
+        File(dir, "2024-06-01_AAA-main.jpg").writeBytes(byteArrayOf(1))
+        File(dir, VaultIndex.FILE_NAME)
+            .writeText("""{"2024-06-01_AAA-main.jpg":{"hasGps":false,"hasOverlay":true}}""")
+
+        val item = scanMediaFiles(dir.absolutePath).single()
+
+        assertEquals(false, item.hasOverlay, "an overlay existing is not an overlay combined into this file")
+    }
+
+    @Test
+    fun aFileTheCombineStepProducedIsShownAsCombined() {
+        File(dir, "2024-06-01_AAA.jpg").writeBytes(byteArrayOf(1))
+        File(dir, VaultIndex.FILE_NAME)
+            .writeText("""{"2024-06-01_AAA.jpg":{"hasGps":true,"hasOverlay":true,"combined":true}}""")
+
+        val item = scanMediaFiles(dir.absolutePath).single()
+
+        assertEquals(true, item.hasOverlay)
+    }
 }

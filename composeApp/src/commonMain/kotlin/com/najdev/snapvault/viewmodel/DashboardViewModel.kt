@@ -2,8 +2,12 @@ package com.najdev.snapvault.viewmodel
 
 import androidx.compose.runtime.*
 import com.najdev.snapvault.*
+import com.najdev.snapvault.downloader.ArchiveSpace
+import com.najdev.snapvault.downloader.CombineResult
 import com.najdev.snapvault.downloader.Deduplicator
 import com.najdev.snapvault.downloader.DownloadEngine
+import com.najdev.snapvault.downloader.ExtractResult
+import com.najdev.snapvault.downloader.planLowSpaceImport
 import com.najdev.snapvault.downloader.ZipPipelineRunner
 import com.najdev.snapvault.metadata.MediaProcessor
 import com.najdev.snapvault.VaultIndex
@@ -22,13 +26,44 @@ import okio.buffer
 import okio.use
 import kotlin.time.TimeSource
 
-private class PipelineAbortException(message: String) : Exception(message)
+private class PipelineAbortException(message: String, cause: Throwable? = null) : Exception(message, cause)
+
+internal const val CLOSE_SAVE_TIMEOUT_MS = 5_000L
+
+internal const val EXTRACTION_SPACE_RESERVE_BYTES = 1L * 1024 * 1024 * 1024
+
+// The offer to delete each archive as its contents are imported (D20) has three known safety
+// gaps — same-sized-different-content verification, unrecognized media, and an unguarded
+// history-backup failure — none fixed yet. Disabled for release; the deletion mechanics stay
+// covered by tests so re-enabling later only means flipping this back.
+internal const val LOW_SPACE_DELETE_ENABLED = false
+
+internal fun formatBytes(bytes: Long): String {
+    val gib = bytes / (1024.0 * 1024.0 * 1024.0)
+    if (gib >= 1.0) return "${(gib * 10).toLong() / 10.0} GB"
+    val mib = bytes / (1024.0 * 1024.0)
+    return "${(mib * 10).toLong() / 10.0} MB"
+}
 
 class DashboardViewModel(
     private val zipPipelineRunner: ZipPipelineRunner,
     private val mediaProcessor: MediaProcessor,
     private val fileSystem: FileSystem,
     private val pickers: PlatformPickers,
+    // Injected rather than reached for statically so a test can drive the "another window
+    // already has this library" branch without needing a second process — and so the tests
+    // that run against a FakeFileSystem path never touch a real directory to lock it.
+    private val outputDirectoryLocker: OutputDirectoryLocker = platformOutputDirectoryLocker,
+    // A factory rather than a client, because the download phase closes what it opens. Its
+    // only reason to be a parameter is that the whole phase — what gets downloaded, what
+    // reaches the phases after it — was otherwise unreachable from a test.
+    private val httpClientFactory: () -> HttpClient = { HttpClient() },
+    // A parameter so a test can restore a folder, and watch what gets written, without
+    // touching the machine's real preferences.
+    private val outputFolderMemory: OutputFolderMemory = OutputFolderMemory.Platform,
+    // See LOW_SPACE_DELETE_ENABLED. A parameter so the offer's own mechanics stay under test
+    // while it ships off.
+    private val lowSpaceDeleteEnabled: Boolean = LOW_SPACE_DELETE_ENABLED,
 ) {
     // ── Input selection state ────────────────────────────────────────────────
     var htmlFile by mutableStateOf<String?>(null)
@@ -48,6 +83,15 @@ class DashboardViewModel(
     var isRunning by mutableStateOf(false)
         private set
     val logs = mutableStateListOf<String>()
+
+    /**
+     * The choice offered when an import will not fit, but would if each ZIP were deleted as its
+     * contents were imported (D20). Null at every other time, including while the mode runs:
+     * it is a question, asked once, never a stored setting.
+     */
+    internal var lowSpaceOffer by mutableStateOf<LowSpaceOffer?>(null)
+        private set
+
     var progress by mutableStateOf(0f)
         private set
     var progressText by mutableStateOf("")
@@ -66,6 +110,8 @@ class DashboardViewModel(
     // can say how much failed rather than only that something did.
     var failureCount by mutableStateOf(0)
         private set
+    var warningCount by mutableStateOf(0)
+        private set
     // True during a sub-phase that has real work in flight but no per-item signal to report
     // (the post-combine date-fallback batch, dedupe scanning) — the UI shows an animated
     // indeterminate ring instead of a progress value that would otherwise sit at a
@@ -82,6 +128,12 @@ class DashboardViewModel(
     // see hasWarnings. Reset per run in startSync.
     private var pipelineFailureCount = 0
 
+    // Things that went wrong without a step failing: originals kept because their metadata did
+    // not copy, an archive kept unextracted, export files skipped for an unrecognised name.
+    // Counted apart from failures so the outcome can say "completed with warnings" without
+    // claiming a step failed that did not (D10).
+    private var pipelineWarningCount = 0
+
     private val logLock = SyncLock()
 
     // All log appends go through here: SnapshotStateList is not safe for unsynchronized
@@ -90,6 +142,13 @@ class DashboardViewModel(
     private fun log(message: String) {
         logLock.withLock { logs.add(message) }
     }
+
+    /**
+     * The log as "Copy logs" hands it out: every line through [redactForSupport], so a pasted
+     * support log carries no download-link credentials or account names (D18).
+     */
+    fun supportLogText(): String =
+        logLock.withLock { logs.toList() }.joinToString("\n") { redactForSupport(it) }
 
     // ── Favorites ────────────────────────────────────────────────────────────
 
@@ -135,6 +194,16 @@ class DashboardViewModel(
     // property, because nothing ever needs to refer to the job.
     init {
         startFavoriteWriter()
+        restoreLastOutputFolder()
+    }
+
+    // Only if it is still a folder: an external drive that is not plugged in, or a folder since
+    // deleted, would otherwise come back as a selection the Library scans and reports empty.
+    private fun restoreLastOutputFolder() {
+        val saved = outputFolderMemory.load() ?: return
+        if (runCatching { fileSystem.metadataOrNull(saved.toPath())?.isDirectory }.getOrNull() == true) {
+            downloadFolder = saved
+        }
     }
 
     private fun startFavoriteWriter() = scope.launch {
@@ -217,11 +286,43 @@ class DashboardViewModel(
 
     // ── Picker actions ───────────────────────────────────────────────────────
     fun pickHtmlFile() = pickers.pickHtmlFile { it?.let { path -> htmlFile = path } }
-    fun pickOutputFolder() = pickers.pickOutputFolder { it?.let { path -> downloadFolder = path } }
+    /**
+     * Whether the output folder may change right now.
+     *
+     * A run captures its folder when it starts. Changing the folder mid-run from Library or
+     * Settings left the run writing to one folder while the Library and every new favorite
+     * followed another (D12). One guard here, shared by every screen that offers the change.
+     */
+    val outputFolderChangeable: Boolean get() = !isRunning
+
+    // Checked again when the picker answers: a dialog opened before Start can close after it.
+    fun pickOutputFolder() {
+        if (!outputFolderChangeable) return
+        pickers.pickOutputFolder { path ->
+            if (path != null && outputFolderChangeable) {
+                downloadFolder = path
+                lastIndexReset = null
+                outputFolderMemory.save(path)
+            }
+        }
+    }
     fun pickZipFolder() = pickers.pickZipFolder { it?.let { path -> zipFolder = path; selectedZipFiles = emptyList() } }
     fun pickMultipleZips() = pickers.pickMultipleZips { paths -> if (paths.isNotEmpty()) { selectedZipFiles = paths; zipFolder = null } }
 
     fun changeImportMode(mode: ImportMode) { importMode = mode }
+
+    /** Runs the import again, deleting each ZIP as its contents are verified. */
+    fun acceptLowSpaceOffer() {
+        if (lowSpaceOffer == null) return
+        lowSpaceOffer = null
+        with(pipelineOptions) {
+            startSync(runDownload, runMetadata, preciseMatching, runCombine, runDedupe, dryRun, lowSpaceMode = true)
+        }
+    }
+
+    fun dismissLowSpaceOffer() {
+        lowSpaceOffer = null
+    }
 
     fun changeZipSourceMode(mode: ZipSourceMode) {
         zipSourceMode = mode
@@ -230,6 +331,15 @@ class DashboardViewModel(
     }
 
     // ── Pipeline control ─────────────────────────────────────────────────────
+
+    /** The switches for the next run. See [PipelineOptions] for why they live here. */
+    internal val pipelineOptions = PipelineOptions()
+
+    /** Starts a run with the current [pipelineOptions], captured now. */
+    fun startSync() = with(pipelineOptions) {
+        startSync(runDownload, runMetadata, preciseMatching, runCombine, runDedupe, dryRun)
+    }
+
     fun startSync(
         runDownload: Boolean,
         runMetadata: Boolean,
@@ -237,6 +347,9 @@ class DashboardViewModel(
         runCombine: Boolean,
         runDedupe: Boolean,
         dryRun: Boolean,
+        // Deletes each source ZIP once its contents are verified on disk. Never a stored
+        // option: it only ever arrives from a user accepting the offer below, for one run (D20).
+        lowSpaceMode: Boolean = false,
     ) {
         // A double-click racing recomposition (before isRunning disables the button)
         // must not launch a second concurrent pipeline.
@@ -253,8 +366,11 @@ class DashboardViewModel(
         etaText = "ETA: --"
         hasWarnings = false
         failureCount = 0
+        warningCount = 0
         indeterminate = false
         pipelineFailureCount = 0
+        pipelineWarningCount = 0
+        lowSpaceOffer = null
 
         // Captured so the finally block below can tell whether it's still the current run —
         // job.cancel() flips isActive false immediately, well before the cancelled
@@ -265,29 +381,46 @@ class DashboardViewModel(
         thisJob = scope.launch {
             try {
                 val outDir = downloadFolder ?: throw PipelineAbortException("No output folder selected.")
-                if (importMode == ImportMode.Zip) {
-                    runZipPipeline(
-                        outDir,
-                        runMetadata,
-                        experimentalMetadataMatching,
-                        runCombine,
-                        runDedupe,
-                        dryRun,
-                        workerCount,
-                    )
-                } else {
-                    runLegacyPipeline(outDir, runDownload, runMetadata, runCombine, runDedupe, dryRun, workerCount)
+                // Claimed before any work starts, so a second window is turned away at the
+                // door rather than halfway through rewriting the same files (D07). Every
+                // other guard in the app — the extractor's move lock, the FFmpeg semaphore,
+                // VaultIndex's mutex — only arbitrates within one process.
+                val directoryLock = try {
+                    withContext(ioDispatcher) { outputDirectoryLocker.lock(outDir) { log("[WARN] $it") } }
+                } catch (e: OutputDirectoryInUseException) {
+                    throw PipelineAbortException(e.message ?: "This library is already being updated.", e)
+                }
+                try {
+                    if (importMode == ImportMode.Zip) {
+                        runZipPipeline(
+                            outDir,
+                            runMetadata,
+                            experimentalMetadataMatching,
+                            runCombine,
+                            runDedupe,
+                            dryRun,
+                            workerCount,
+                            lowSpaceMode,
+                        )
+                    } else {
+                        runLegacyPipeline(outDir, runDownload, runMetadata, runCombine, runDedupe, dryRun, workerCount)
+                    }
+                } finally {
+                    // A lock held past the end of a run is a library that can never be synced
+                    // again, so this has to survive cancellation as well as failure.
+                    directoryLock.release()
                 }
                 progress = 1.0f
                 indeterminate = false
                 currentStep = 4
                 speedText = "SPEED: --"
                 etaText = "ETA: --"
-                if (pipelineFailureCount > 0) {
+                if (pipelineFailureCount > 0 || pipelineWarningCount > 0) {
                     hasWarnings = true
                     failureCount = pipelineFailureCount
+                    warningCount = pipelineWarningCount
                     progressText = "Completed with warnings"
-                    log("[WARN] Sync complete — $pipelineFailureCount failure(s) occurred, see warnings above.")
+                    log("[WARN] Sync complete — $pipelineFailureCount failure(s) and $pipelineWarningCount warning(s), see above.")
                 } else {
                     progressText = "Pipeline Complete"
                     log("[SUCCESS] Sync complete!")
@@ -353,32 +486,287 @@ class DashboardViewModel(
         // isRunning flips in the pipeline's finally block once cancellation completes.
     }
 
+    /**
+     * Gives a combined output its own index entry, inherited from the pair it was built from.
+     *
+     * The index is keyed by file name and the Library looks entries up by the name on disk.
+     * The combine step writes a new name and deletes the sources, and nothing used to move the
+     * entry — so the file the user actually sees came up with no GPS, not combined, and not
+     * favorited (D11). Called from combineAll's single progress consumer, so [meta] and
+     * [derived] are only ever touched from one thread.
+     */
+    private fun recordCombinedOutput(
+        result: CombineResult,
+        meta: MutableMap<String, FileMeta>,
+        derived: CombineDerivatives,
+    ) {
+        val outputName = VaultIndex.keyOf(result.outputPath)
+        val mainName = result.sourcePaths.firstOrNull()?.let(VaultIndex::keyOf)
+        val source = mainName?.let { meta[it] }
+        meta[outputName] = FileMeta(
+            // GPS describes the file's own tags; if they did not make it across, it has none.
+            hasGps = result.metadataCarried && source?.hasGps == true,
+            hasOverlay = true,
+            combined = true,
+        )
+        if (mainName != null) derived.favoritesFrom[mainName] = outputName
+        result.sourcePaths.forEach { path ->
+            if (!fileSystem.exists(path.toPath())) {
+                val name = VaultIndex.keyOf(path)
+                meta.remove(name)
+                derived.goneSources += name
+            }
+        }
+    }
+
+    // ── Closing ──────────────────────────────────────────────────────────────
+
+    /**
+     * Where a request to close the app has got to.
+     *
+     * The window used to call `exitApplication` directly. Composition disposal then closed the
+     * favorites queue and cancelled the scope its writer runs in, in the same breath, so a heart
+     * pressed just before closing was killed mid-write with nothing said. A favorite is in no
+     * export and no re-run rebuilds it. Closing is now a conversation with the view model, and
+     * the window exits only on [ReadyToExit].
+     */
+    sealed interface CloseState {
+        data object Open : CloseState
+        data object Closing : CloseState
+
+        /** Waiting ran out with this many favorites unsaved. Nothing has been torn down. */
+        data class UnsavedFavorites(val count: Int) : CloseState
+        data object ReadyToExit : CloseState
+    }
+
+    var closeState by mutableStateOf<CloseState>(CloseState.Open)
+        private set
+
+    /**
+     * Lets pending favorites land, then stops any run, then reports [CloseState.ReadyToExit].
+     *
+     * Nothing is torn down while waiting. If the wait runs out, the app is left fully working
+     * and the answer is [CloseState.UnsavedFavorites] — "keep open" has to mean something, and
+     * it would not if the writer had already been cancelled.
+     */
+    fun requestClose(timeoutMillis: Long = CLOSE_SAVE_TIMEOUT_MS) {
+        if (closeState == CloseState.Closing || closeState == CloseState.ReadyToExit) return
+        closeState = CloseState.Closing
+        scope.launch {
+            // Polled rather than observed: pendingFavorites is snapshot state, and outside a
+            // composition nothing delivers its change notifications.
+            val saved = withTimeoutOrNull(timeoutMillis) {
+                while (pendingFavorites.isNotEmpty()) delay(20)
+            } != null
+            if (saved) {
+                finishClosing(timeoutMillis)
+            } else {
+                closeState = CloseState.UnsavedFavorites(pendingFavorites.size)
+            }
+        }
+    }
+
+    /** The user chose to exit with favorites unsaved. */
+    fun quitAnyway(timeoutMillis: Long = CLOSE_SAVE_TIMEOUT_MS) {
+        if (closeState !is CloseState.UnsavedFavorites) return
+        closeState = CloseState.Closing
+        scope.launch { finishClosing(timeoutMillis) }
+    }
+
+    /** The user chose to stay; the unsaved favorites carry on saving. */
+    fun keepOpen() {
+        if (closeState is CloseState.UnsavedFavorites) closeState = CloseState.Open
+    }
+
+    // A run abandoned at exit never told its children to stop and never released its claim on
+    // the library (D07). Cancelling and joining runs its finally blocks: children are killed,
+    // the lock is released. Bounded, because a run that will not unwind must not make the
+    // window impossible to close — the OS still drops the lock when the process ends.
+    private suspend fun finishClosing(timeoutMillis: Long) {
+        val job = syncJob
+        if (job != null && job.isActive) {
+            log("[WARN] Closing — stopping the run in progress…")
+            withTimeoutOrNull(timeoutMillis) { job.cancelAndJoin() }
+        }
+        closeState = CloseState.ReadyToExit
+    }
+
     fun dispose() {
         favoriteIntents.close()
         scope.cancel()
         pickers.releaseAllSecurityAccess()
     }
 
-    suspend fun resetVaultIndex(): Boolean {
+    enum class IndexResetOutcome { Cleared, RunInProgress, NoFolder, Failed }
+
+    /**
+     * How the last press of Settings' Clear Badges went.
+     *
+     * The result used to be a Boolean that App discarded, so the button did something or
+     * nothing with no way to tell which (D12). Cleared when the folder changes, since it
+     * describes the previous one.
+     */
+    var lastIndexReset by mutableStateOf<IndexResetOutcome?>(null)
+        private set
+
+    suspend fun resetVaultIndex(): IndexResetOutcome {
+        val outcome = resetVaultIndexOutcome()
+        lastIndexReset = outcome
+        return outcome
+    }
+
+    private suspend fun resetVaultIndexOutcome(): IndexResetOutcome {
         // A running pipeline reads/writes vault_index.json at multiple points and holds its
         // own in-memory copy — deleting the on-disk file out from under it (e.g. from
         // Settings, reachable while a sync is in progress) risks losing entries the run is
         // about to persist. Model-level guard so this is safe regardless of which screen can
         // reach it (BUG-16).
-        if (isRunning) return false
-        val folder = downloadFolder ?: return false
+        if (isRunning) return IndexResetOutcome.RunInProgress
+        val folder = downloadFolder ?: return IndexResetOutcome.NoFolder
         return runCatching {
-            // Keeps favorites: they are the one thing in the index the next run cannot
-            // rebuild, and reset exists to force re-processing, not to discard user data.
+            // Keeps favorites: they are the one thing in the index no run can rebuild, and
+            // clearing badges is no reason to discard user data.
             VaultIndex.resetKeepingFavorites(fileSystem, folder)
-            true
-        }.getOrDefault(false)
+            IndexResetOutcome.Cleared
+        }.getOrElse { e ->
+            log("[ERROR] Could not clear the vault index: ${e.message}")
+            IndexResetOutcome.Failed
+        }
     }
 
     private fun formatEta(seconds: Long): String = when {
         seconds < 60 -> "${seconds}s"
         seconds < 3600 -> "${seconds / 60}m ${seconds % 60}s"
         else -> "${seconds / 3600}h ${(seconds % 3600) / 60}m"
+    }
+
+
+    // ── D20: importing one archive at a time ─────────────────────────────────
+
+    /**
+     * Extracts each archive, and deletes it once its contents are verified on disk.
+     *
+     * Archives arrive smallest first, from the plan that decided this fits: the tightest moment
+     * is the first one, before anything has been deleted. Every deletion is permanent, so an
+     * archive goes only when the extractor confirms every file it should have produced is
+     * present at the size the archive says — and only after the deletion is recorded, since a
+     * deletion nothing accounts for is the one outcome no rerun can explain.
+     */
+    private suspend fun importArchivesOneAtATime(
+        order: List<ArchiveSpace>,
+        itemsByZip: Map<String, List<HtmlMemoryEntry>>,
+        outDir: String,
+        workerCount: Int,
+        onProgress: (ExtractResult) -> Unit,
+    ) {
+        var deletedCount = 0
+        var freedBytes = 0L
+        var keptCount = 0
+
+        for (archive in order) {
+            val zipPath = archive.path
+            val entries = itemsByZip[zipPath] ?: continue
+            val name = zipPath.substringAfterLast('/').substringAfterLast('\\')
+            currentCoroutineContext().ensureActive()
+
+            // The preflight's figure was true when it was taken. Anything else on the machine
+            // can have taken the room since, and extracting into a disk with none left is how a
+            // run ends in a folder full of half-written files.
+            val free = withContext(ioDispatcher) { zipPipelineRunner.availableSpace(outDir) }
+            if (free != null && archive.requiredBytes + EXTRACTION_SPACE_RESERVE_BYTES > free) {
+                log(
+                    "[INFO] Stopping before $name: it needs ${formatBytes(archive.requiredBytes)} plus " +
+                        "${formatBytes(EXTRACTION_SPACE_RESERVE_BYTES)} to process, and only ${formatBytes(free)} " +
+                        "is free. $deletedCount archive(s) were imported; the rest are untouched.",
+                )
+                throw PipelineAbortException(
+                    "Ran out of space after importing $deletedCount archive(s). Free up space and run the import " +
+                        "again — the archives that were not imported are still where they were.",
+                )
+            }
+
+            zipPipelineRunner.extractAll(mapOf(zipPath to entries), outDir, workerCount, onProgress)
+
+            val problems = withContext(ioDispatcher) {
+                zipPipelineRunner.verifyExtraction(zipPath, entries, outDir)
+            }
+            val keptBecause = problems.firstOrNull()?.let { first ->
+                if (problems.size > 1) "$first (and ${problems.size - 1} more)" else first
+            }
+            val record = ImportedArchive(
+                name = name,
+                sizeBytes = archive.archiveBytes,
+                memories = entries.size,
+                deleted = keptBecause == null,
+                keptBecause = keptBecause,
+            )
+
+            if (keptBecause != null) {
+                keptCount++
+                pipelineWarningCount++
+                log("[WARN] $name kept: $keptBecause")
+                runCatching { withContext(ioDispatcher) { ImportManifest.record(fileSystem, outDir, record) } }
+                continue
+            }
+
+            // Recorded first. If the record cannot be written, the archive stays: a permanent
+            // deletion with nothing to show for it is worse than an archive left on disk.
+            val recorded = runCatching {
+                withContext(ioDispatcher) { ImportManifest.record(fileSystem, outDir, record) }
+            }
+            if (recorded.isFailure) {
+                keptCount++
+                pipelineWarningCount++
+                log("[WARN] $name kept: its import could not be recorded (${recorded.exceptionOrNull()?.message})")
+                continue
+            }
+
+            val deleted = runCatching { withContext(ioDispatcher) { fileSystem.delete(zipPath.toPath()) } }
+            if (deleted.isSuccess) {
+                deletedCount++
+                freedBytes += archive.archiveBytes
+                log("[INFO] $name imported and deleted, freeing ${formatBytes(archive.archiveBytes)}.")
+            } else {
+                keptCount++
+                pipelineWarningCount++
+                log("[WARN] $name was imported but could not be deleted: ${deleted.exceptionOrNull()?.message}")
+                runCatching {
+                    withContext(ioDispatcher) {
+                        ImportManifest.record(fileSystem, outDir, record.copy(deleted = false, keptBecause = "could not be deleted"))
+                    }
+                }
+            }
+        }
+
+        log(
+            "[INFO] Low-space import: $deletedCount archive(s) deleted, freeing ${formatBytes(freedBytes)}" +
+                if (keptCount > 0) "; $keptCount kept, see the warnings above." else ".",
+        )
+    }
+
+    /** Copies each archive's `memories_history.json` into the library, before any deletion. */
+    private suspend fun stashExportHistory(zipFiles: List<String>, outDir: String) {
+        withContext(ioDispatcher) {
+            for (zipPath in zipFiles) {
+                val history = runCatching { readZipEntryText(zipPath, "json/memories_history.json") }.getOrNull()
+                    ?: continue
+                val name = zipPath.substringAfterLast('/').substringAfterLast('\\')
+                runCatching {
+                    val target = "$outDir/${ImportManifest.DIR_NAME}/history/$name.json".toPath()
+                    fileSystem.createDirectories(target.parent!!)
+                    fileSystem.write(target) { writeUtf8(history) }
+                }.onFailure { log("[WARN] Could not keep $name's memories_history.json: ${it.message}") }
+            }
+        }
+    }
+
+    /** The archive's export history, from the archive itself or from what was kept of it. */
+    private fun readExportHistory(zipPath: String, outDir: String): String? {
+        runCatching { readZipEntryText(zipPath, "json/memories_history.json") }.getOrNull()?.let { return it }
+        val name = zipPath.substringAfterLast('/').substringAfterLast('\\')
+        return runCatching {
+            fileSystem.read("$outDir/${ImportManifest.DIR_NAME}/history/$name.json".toPath()) { readUtf8() }
+        }.getOrNull()
     }
 
     // ── ZIP pipeline ─────────────────────────────────────────────────────────
@@ -390,6 +778,7 @@ class DashboardViewModel(
         runDedupe: Boolean,
         dryRun: Boolean,
         workerCount: Int,
+        lowSpaceMode: Boolean = false,
     ) {
         log("[INFO] Scanning for ZIP file(s)…")
         val zipFiles: List<String> = when (zipSourceMode) {
@@ -426,9 +815,20 @@ class DashboardViewModel(
             log("[INFO] $zipName: ${entries.size} memories, $parsedFileCount files parsed ($dateRange)")
             if (unmatchedCount > 0) {
                 log("[WARN] $zipName: $unmatchedCount file(s) in memories/ skipped — unexpected filename format. Examples: ${unmatchedSamples.joinToString(", ")}")
+                pipelineWarningCount += unmatchedCount
             }
         }
         log("[INFO] Indexed $totalMemoryCount memories across ${itemsByZip.size} zip(s).")
+
+        // Stop before touching the output folder. Carrying on ran metadata, combination and
+        // dedupe over whatever the folder already held, saved an empty index, and finished at
+        // "Pipeline Complete" — for an import that imported nothing (D10).
+        if (totalMemoryCount == 0) {
+            throw PipelineAbortException(
+                "Found no Snapchat memories in the selected ZIP file(s), so nothing was imported. " +
+                    "Choose the ZIP files from Snapchat's \"Download My Data\" export — their memories are in a memories/ folder.",
+            )
+        }
 
         if (runMetadata && experimentalMetadataMatching) {
             log("[INFO] Precise time + GPS matching is on (default). GPS is only applied where a file's exact capture timestamp uniquely matches a memories_history.json record; ambiguous matches fall back to date-only metadata. Turn the toggle off on the Dashboard to force date-only tags for every file.")
@@ -449,6 +849,43 @@ class DashboardViewModel(
 
         val downloadedMeta: MutableMap<String, FileMeta> = VaultIndex.read(fileSystem, outDir).toMutableMap()
 
+        // Refused before a byte is written. Nothing used to check, so a large export into a
+        // nearly full disk extracted until writes failed, leaving thousands of files and a
+        // folder too full for the metadata and combine steps after it (D13). The reserve is
+        // room for those steps: exiftool writes a temporary copy of every file it tags, and
+        // combining writes whole new files.
+        var archiveOrder: List<ArchiveSpace> = itemsByZip.keys.map { ArchiveSpace(it, 0, 0, false) }
+        zipPipelineRunner.extractionBudget(itemsByZip, outDir)?.let { budget ->
+            val plan = planLowSpaceImport(budget.archives, budget.availableBytes, EXTRACTION_SPACE_RESERVE_BYTES)
+            if (plan.archives.isNotEmpty()) archiveOrder = plan.archives
+            if (!lowSpaceMode && budget.requiredBytes + EXTRACTION_SPACE_RESERVE_BYTES > budget.availableBytes) {
+                val shortfall = "This import needs about ${formatBytes(budget.requiredBytes)} of free space in the " +
+                    "output folder, plus ${formatBytes(EXTRACTION_SPACE_RESERVE_BYTES)} to process it, and only " +
+                    "${formatBytes(budget.availableBytes)} is available."
+                // Refusing used to be the whole answer. Where the archives sit on the output
+                // drive and the import would fit one at a time, there is something the user
+                // can do about it, and only they can decide to do it (D20). Gated off for
+                // release — see LOW_SPACE_DELETE_ENABLED.
+                if (lowSpaceDeleteEnabled && plan.fits) {
+                    lowSpaceOffer = LowSpaceOffer(
+                        archiveNames = plan.archives.map { it.path.substringAfterLast('/').substringAfterLast('\\') },
+                        reclaimableBytes = plan.reclaimableBytes,
+                        requiredBytes = budget.requiredBytes,
+                        availableBytes = budget.availableBytes,
+                    )
+                    throw PipelineAbortException(
+                        "$shortfall Deleting each ZIP as its contents are imported would free " +
+                            "${formatBytes(plan.reclaimableBytes)} and make it fit — see the choice on the Dashboard.",
+                    )
+                }
+                throw PipelineAbortException("$shortfall Free up space or choose another output folder.")
+            }
+        }
+
+        // Before any archive is deleted: GPS matching reads memories_history.json out of the
+        // archives at a step that runs after extraction, and a rerun needs it too.
+        if (lowSpaceMode) stashExportHistory(zipFiles, outDir)
+
         log("[INFO] Extracting media files…")
         var extractedCount = 0
         var skippedCount = 0
@@ -459,7 +896,7 @@ class DashboardViewModel(
         progressText = "Extracting files…"
         val extractEta = EtaEstimator()
 
-        zipPipelineRunner.extractAll(itemsByZip, outDir, workerCount) { result ->
+        val onExtractProgress: (ExtractResult) -> Unit = { result ->
             if (result.error != null) {
                 extractErrorCount++
                 log("[ERROR] ${result.fileName}: ${result.error}")
@@ -483,6 +920,13 @@ class DashboardViewModel(
                 }
             }
         }
+
+        if (lowSpaceMode) {
+            importArchivesOneAtATime(archiveOrder, itemsByZip, outDir, workerCount, onExtractProgress)
+        } else {
+            zipPipelineRunner.extractAll(itemsByZip, outDir, workerCount, onExtractProgress)
+        }
+
         speedText = "SPEED: --"
         etaText = "ETA: --"
         val extractSummary = buildString {
@@ -510,7 +954,7 @@ class DashboardViewModel(
                 // buildExperimentalZipMetadataPlan already resolves by omitting GPS
                 // rather than guessing.
                 val memoryJsonSources = withContext(ioDispatcher) {
-                    zipFiles.mapNotNull { zipPath -> readZipEntryText(zipPath, "json/memories_history.json") }
+                    zipFiles.mapNotNull { zipPath -> readExportHistory(zipPath, outDir) }
                 }
 
                 if (memoryJsonSources.isEmpty()) {
@@ -541,8 +985,9 @@ class DashboardViewModel(
             }
         }
 
+        val derived = CombineDerivatives()
         if (runCombine) {
-            val (combined, skipped, errors) = runCombinePhase(outDir)
+            val (combined, skipped, errors) = runCombinePhase(outDir, downloadedMeta, derived)
             pipelineCombinedCount = combined
             pipelineCombineSkipped = skipped
             pipelineCombineErrors = errors
@@ -554,9 +999,14 @@ class DashboardViewModel(
             // writeMerging, not write: the FileMeta(…) entries above are built from scratch by
             // this run and carry `favorited = false`, and a favorite toggled *during* the run
             // exists only on disk. Writing the run's own map would wipe both.
-            VaultIndex.writeMerging(fileSystem, outDir, downloadedMeta)
+            VaultIndex.writeMerging(fileSystem, outDir, downloadedMeta, derived.favoritesFrom, derived.goneSources)
             log("[INFO] Vault index saved (${downloadedMeta.size} entries).")
-        }.onFailure { e -> log("[WARN] Could not write vault index: ${e.message}") }
+        }.onFailure { e ->
+            // Every badge and favorite this run carried lives in that file; failing to save it
+            // is a failed step, not a footnote under "Sync complete!" (D10).
+            log("[ERROR] Could not write vault index: ${e.message}")
+            pipelineFailureCount++
+        }
 
         val summary = buildString {
             append("[SUCCESS] Done — $totalMemoryCount memories")
@@ -606,7 +1056,7 @@ class DashboardViewModel(
 
         if (runDownload) {
             log("[INFO] Downloading files in parallel…")
-            val httpClient = HttpClient()
+            val httpClient = httpClientFactory()
             var downloadedCount = 0
             var skippedCount = 0
             var errorCount = 0
@@ -652,7 +1102,16 @@ class DashboardViewModel(
                         }
                     }
                 }
-                presentItems.addAll(results.filter { it.item.downloadedPath != null }.map { it.item })
+                // By path, not by row: a repeated export row resolves to the file its twin
+                // downloaded (D08), and every phase after this one is per *file*. A duplicate
+                // here hands the same archive to the extractor twice — which reports the
+                // second as missing, having deleted it — and makes the metadata pass re-run
+                // exiftool over it against an inflated total.
+                presentItems.addAll(
+                    results.map { it.item }
+                        .filter { it.downloadedPath != null }
+                        .distinctBy { it.downloadedPath },
+                )
             } finally {
                 httpClient.close()
             }
@@ -665,9 +1124,17 @@ class DashboardViewModel(
 
         // Memories with overlays arrive as small .zip archives; extract them flat as
         // -main/-overlay pairs (legacy Python parity) so the combine phase can find them.
+        //
+        // Only the archives this run put on disk are eligible. presentItems covers both
+        // fresh downloads and ones already present from an interrupted run, so resume
+        // still works — but a ZIP the user keeps in the destination for their own reasons
+        // is never opened, flattened, or deleted (D01).
         progressText = "Extracting downloaded archives…"
-        val extractedFiles = zipPipelineRunner.extractDownloadedArchives(outDir) { msg ->
+        val ownedArchives = presentItems.mapNotNull { it.downloadedPath }
+            .filter { it.substringAfterLast('.', "").lowercase() == "zip" }
+        val extractedFiles = zipPipelineRunner.extractDownloadedArchives(outDir, ownedArchives) { msg ->
             log("[WARN] [archive] $msg")
+            pipelineWarningCount++
         }
         if (extractedFiles.isNotEmpty()) {
             log("[INFO] Extracted ${extractedFiles.size} file(s) from downloaded overlay archives.")
@@ -677,8 +1144,9 @@ class DashboardViewModel(
             legacyMetadataPass(presentItems, extractedFiles, downloadedMeta)
         }
 
+        val derived = CombineDerivatives()
         if (runCombine) {
-            legacyCombinePass(outDir)
+            runCombinePhase(outDir, downloadedMeta, derived)
         }
 
         if (runDedupe) runDeduplication(outDir, dryRun)
@@ -687,9 +1155,14 @@ class DashboardViewModel(
             // writeMerging, not write: the FileMeta(…) entries above are built from scratch by
             // this run and carry `favorited = false`, and a favorite toggled *during* the run
             // exists only on disk. Writing the run's own map would wipe both.
-            VaultIndex.writeMerging(fileSystem, outDir, downloadedMeta)
+            VaultIndex.writeMerging(fileSystem, outDir, downloadedMeta, derived.favoritesFrom, derived.goneSources)
             log("[INFO] Vault index saved (${downloadedMeta.size} entries).")
-        }.onFailure { e -> log("[WARN] Could not write vault index: ${e.message}") }
+        }.onFailure { e ->
+            // Every badge and favorite this run carried lives in that file; failing to save it
+            // is a failed step, not a footnote under "Sync complete!" (D10).
+            log("[ERROR] Could not write vault index: ${e.message}")
+            pipelineFailureCount++
+        }
     }
 
     private suspend fun writeZipDateMetadata(
@@ -883,9 +1356,19 @@ class DashboardViewModel(
         pipelineFailureCount += failCount
     }
 
+    /** What the index write needs to know about files the combine step derived. */
+    private class CombineDerivatives {
+        val favoritesFrom = mutableMapOf<String, String>()
+        val goneSources = mutableSetOf<String>()
+    }
+
     // Shared by both pipelines: combines every -main/-overlay pair in outDir.
     // Returns (combined, skipped, errors).
-    private suspend fun runCombinePhase(outDir: String): Triple<Int, Int, Int> {
+    private suspend fun runCombinePhase(
+        outDir: String,
+        meta: MutableMap<String, FileMeta>,
+        derived: CombineDerivatives,
+    ): Triple<Int, Int, Int> {
         var combinedCount = 0
         var combineErrorCount = 0
         var combineSkippedCount = 0
@@ -928,7 +1411,11 @@ class DashboardViewModel(
             outDir,
             deleteOriginals = true,
             workerCount = workerCount,
-            onMetaError = { msg -> log("[WARN] $msg") },
+            onMetaError = { msg ->
+                // A combined file left without its date — a failed write, not a remark.
+                log("[ERROR] $msg")
+                pipelineFailureCount++
+            },
             onStart = { actual ->
                 combineTotal = actual.coerceAtLeast(1)
                 mediaProcessor.resetVideoEncodeStats()
@@ -957,8 +1444,12 @@ class DashboardViewModel(
             }
         ) { result ->
             result.warnings.forEach { log("[WARN] $it") }
+            pipelineWarningCount += result.warnings.size
             when {
-                result.status == "combined" -> combinedCount++
+                result.status == "combined" -> {
+                    combinedCount++
+                    recordCombinedOutput(result, meta, derived)
+                }
                 result.status.startsWith("skipped:") -> combineSkippedCount++
                 result.status.startsWith("error") -> {
                     combineErrorCount++
@@ -993,9 +1484,6 @@ class DashboardViewModel(
         return Triple(combinedCount, combineSkippedCount, combineErrorCount)
     }
 
-    private suspend fun legacyCombinePass(outDir: String) {
-        runCombinePhase(outDir)
-    }
 
     //META legacy metadata pass: full date+TIME from the history file's dateStr, plus GPS
     //META when the history file provided coordinates — richer than the ZIP path's date-only tags.
@@ -1119,7 +1607,10 @@ class DashboardViewModel(
         indeterminate = true
         val deduplicator = Deduplicator(fileSystem)
         val results = withContext(ioDispatcher) {
-            deduplicator.deduplicateFolder(outDir.toPath(), dryRun)
+            // Read now, not from the run's copy: a heart pressed while this run was in flight
+            // exists only on disk, and it is exactly the copy that must survive (D04).
+            val favorites = VaultIndex.read(fileSystem, outDir).filterValues { it.favorited }.keys
+            deduplicator.deduplicateFolder(outDir.toPath(), dryRun, favorites)
         }
         indeterminate = false
         progress = 1f

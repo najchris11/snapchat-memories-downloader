@@ -38,8 +38,8 @@ class DeduplicatorTest {
         val tempDir = "build/test-dedupe-run_UUID".toPath()
         fs.createDirectories(tempDir)
 
-        val file1 = tempDir / "file1.txt"
-        val file2 = tempDir / "file2.txt"
+        val file1 = tempDir / "file1.jpg"
+        val file2 = tempDir / "file2.jpg"
 
         fs.write(file1) { writeUtf8("same content") }
         fs.write(file2) { writeUtf8("same content") }
@@ -173,5 +173,82 @@ class DeduplicatorTest {
         assertTrue(job.isCancelled)
         assertTrue(fs.exists(dir / "2021-05-01_AAA.jpg"))
         assertTrue(fs.exists(dir / "2022-07-04_MMM.jpg"))
+    }
+
+    // ── D04: what dedupe may touch, and which copy it keeps ─────────────────
+
+    private fun fakeDir(vararg files: Pair<String, String>): Pair<okio.fakefilesystem.FakeFileSystem, Path> {
+        val fs = okio.fakefilesystem.FakeFileSystem()
+        val dir = "/out".toPath()
+        fs.createDirectories(dir)
+        files.forEach { (name, text) -> fs.write(dir / name) { writeUtf8(text) } }
+        return fs to dir
+    }
+
+    // D04: the kept copy was always the lexicographically first name. Byte equality protects
+    // the pixels, not the user's choice: favorite the later copy and dedupe deleted it, taking
+    // the favorite with it — the one thing in the library no re-run can rebuild.
+    @Test
+    fun aFavoritedCopyIsNeverTheOneDeleted() = runTest {
+        val (fs, dir) = fakeDir("2021-05-01_AAA.jpg" to "same", "2023-11-30_ZZZ.jpg" to "same")
+
+        val results = Deduplicator(fs).deduplicateFolder(dir, dryRun = false, favorites = setOf("2023-11-30_ZZZ.jpg"))
+
+        assertEquals("2023-11-30_ZZZ.jpg", results.single().keptFile)
+        assertEquals(listOf("2021-05-01_AAA.jpg"), results.single().deletedFiles)
+        assertTrue(fs.exists(dir / "2023-11-30_ZZZ.jpg"))
+    }
+
+    // A user who favorited two copies meant both. Dedupe removes only what nobody asked to keep.
+    @Test
+    fun everyFavoritedCopyIsKept() = runTest {
+        val (fs, dir) = fakeDir(
+            "2021-05-01_AAA.jpg" to "same",
+            "2022-07-04_MMM.jpg" to "same",
+            "2023-11-30_ZZZ.jpg" to "same",
+        )
+
+        val results = Deduplicator(fs)
+            .deduplicateFolder(dir, dryRun = false, favorites = setOf("2022-07-04_MMM.jpg", "2023-11-30_ZZZ.jpg"))
+
+        assertEquals(listOf("2021-05-01_AAA.jpg"), results.single().deletedFiles)
+        assertTrue(fs.exists(dir / "2022-07-04_MMM.jpg"))
+        assertTrue(fs.exists(dir / "2023-11-30_ZZZ.jpg"))
+    }
+
+    // Nothing to delete when every copy is favorited — and no result claiming a dedupe happened.
+    @Test
+    fun aGroupOfOnlyFavoritesIsLeftAlone() = runTest {
+        val (fs, dir) = fakeDir("2021-05-01_AAA.jpg" to "same", "2023-11-30_ZZZ.jpg" to "same")
+
+        val results = Deduplicator(fs)
+            .deduplicateFolder(dir, dryRun = false, favorites = setOf("2021-05-01_AAA.jpg", "2023-11-30_ZZZ.jpg"))
+
+        assertTrue(results.isEmpty(), "was: $results")
+        assertTrue(fs.exists(dir / "2021-05-01_AAA.jpg") && fs.exists(dir / "2023-11-30_ZZZ.jpg"))
+    }
+
+    // D04: every regular file in the output folder was a candidate. Choose Documents or
+    // Downloads as the destination and two identical PDFs, ZIPs or notes became "duplicates"
+    // for deletion. Dedupe is for the memories SnapVault manages; anything the Library would
+    // not show is not its business.
+    @Test
+    fun onlyMediaTheLibraryRecognisesIsConsidered() = runTest {
+        val (fs, dir) = fakeDir(
+            "notes.txt" to "same text",
+            "notes (copy).txt" to "same text",
+            "invoice.pdf" to "same pdf",
+            "invoice-2.pdf" to "same pdf",
+            "backup.zip" to "same zip",
+            "backup-old.zip" to "same zip",
+            "2021-05-01_AAA.jpg" to "same photo",
+            "2023-11-30_ZZZ.jpg" to "same photo",
+        )
+
+        val results = Deduplicator(fs).deduplicateFolder(dir, dryRun = false)
+
+        assertEquals(listOf("2023-11-30_ZZZ.jpg"), results.flatMap { it.deletedFiles })
+        listOf("notes.txt", "notes (copy).txt", "invoice.pdf", "invoice-2.pdf", "backup.zip", "backup-old.zip")
+            .forEach { assertTrue(fs.exists(dir / it), "$it is not a memory and must not be touched") }
     }
 }

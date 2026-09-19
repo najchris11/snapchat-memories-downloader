@@ -73,6 +73,7 @@ fun PhoneRoot(
                 Screen.Library -> LibraryScreen(
                     downloadFolder = dashboardViewModel.downloadFolder,
                     onOpenFolder = dashboardViewModel::pickOutputFolder,
+                    folderChangeable = dashboardViewModel.outputFolderChangeable,
                     windowSize = WindowSize.Compact,
                     favoriteOverrides = dashboardViewModel.favoriteOverrides,
                     onToggleFavorite = { item, favorited ->
@@ -87,6 +88,8 @@ fun PhoneRoot(
                     downloadFolder = dashboardViewModel.downloadFolder,
                     onResetIndex = { resetScope.launch { dashboardViewModel.resetVaultIndex() } },
                     onEditOutputPath = { dashboardViewModel.pickOutputFolder() },
+                    outputFolderChangeable = dashboardViewModel.outputFolderChangeable,
+                    resetOutcome = dashboardViewModel.lastIndexReset,
                     themeMode = themeMode,
                     onThemeModeChange = onThemeModeChange,
                     layoutOverride = layoutOverride,

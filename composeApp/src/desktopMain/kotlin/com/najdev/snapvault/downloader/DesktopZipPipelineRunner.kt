@@ -26,6 +26,14 @@ class DesktopZipPipelineRunner(mediaProcessor: MediaProcessor) : ZipPipelineRunn
             ?: emptyList()
     }
 
+    override fun extractionBudget(itemsByZip: Map<String, List<HtmlMemoryEntry>>, outputDir: String) =
+        extractor.extractionBudget(itemsByZip, outputDir)
+
+    override fun verifyExtraction(zipPath: String, entries: List<HtmlMemoryEntry>, outputDir: String) =
+        extractor.verifyExtraction(zipPath, entries, outputDir)
+
+    override fun availableSpace(outputDir: String) = extractor.availableSpace(outputDir)
+
     override suspend fun extractAll(
         itemsByZip: Map<String, List<HtmlMemoryEntry>>,
         outputDir: String,
@@ -35,8 +43,9 @@ class DesktopZipPipelineRunner(mediaProcessor: MediaProcessor) : ZipPipelineRunn
 
     override suspend fun extractDownloadedArchives(
         outputDir: String,
+        archivePaths: List<String>,
         onWarn: (String) -> Unit
-    ): List<String> = extractor.extractDownloadedArchives(outputDir, onWarn)
+    ): List<String> = extractor.extractDownloadedArchives(outputDir, archivePaths, onWarn)
 
     override suspend fun combineAll(
         outputDir: String,

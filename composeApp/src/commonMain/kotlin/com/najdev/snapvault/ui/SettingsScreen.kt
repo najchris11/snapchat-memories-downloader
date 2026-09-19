@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.*
+import com.najdev.snapvault.viewmodel.DashboardViewModel
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.AppBuildConfig
 import com.najdev.snapvault.binaryInstallHint
+import com.najdev.snapvault.platformSupportPageUrl
 import com.najdev.snapvault.ui.theme.SnapVaultColors
 import com.najdev.snapvault.LayoutOverride
 import com.najdev.snapvault.ThemeMode
@@ -41,6 +43,11 @@ fun SettingsScreen(
     onThemeModeChange: (ThemeMode) -> Unit,
     layoutOverride: LayoutOverride,
     onLayoutOverrideChange: (LayoutOverride) -> Unit,
+    outputFolderChangeable: Boolean = true,
+    resetOutcome: DashboardViewModel.IndexResetOutcome? = null,
+    supportPageUrl: String? = platformSupportPageUrl,
+    onOpenSupportPage: (suspend (String) -> Unit)? = null,
+    onCopySupportPage: ((String) -> Unit)? = null,
 ) {
     Column(
         modifier = Modifier
@@ -251,6 +258,23 @@ fun SettingsScreen(
                     }
                 }
 
+                // The press used to leave no trace either way (D12). Each refusal names its fix.
+                resetOutcome?.let { outcome ->
+                    val cleared = outcome == DashboardViewModel.IndexResetOutcome.Cleared
+                    Text(
+                        stringResource(
+                            when (outcome) {
+                                DashboardViewModel.IndexResetOutcome.Cleared -> Res.string.set_reset_result_cleared
+                                DashboardViewModel.IndexResetOutcome.RunInProgress -> Res.string.set_reset_result_running
+                                DashboardViewModel.IndexResetOutcome.NoFolder -> Res.string.set_reset_result_no_folder
+                                DashboardViewModel.IndexResetOutcome.Failed -> Res.string.set_reset_result_failed
+                            }
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (cleared) SnapVaultColors.success else MaterialTheme.colorScheme.error,
+                    )
+                }
+
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 // Output path
@@ -262,6 +286,8 @@ fun SettingsScreen(
                 ) {
                     TextButton(
                         onClick = onEditOutputPath,
+                        // A run captured the folder it writes to; see outputFolderChangeable.
+                        enabled = outputFolderChangeable,
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(stringResource(Res.string.set_output_path_edit), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
@@ -269,6 +295,8 @@ fun SettingsScreen(
                 }
             }
         }
+
+        SupportSection(supportPageUrl, onOpenSupportPage, onCopySupportPage)
 
         Spacer(Modifier.height(8.dp))
 

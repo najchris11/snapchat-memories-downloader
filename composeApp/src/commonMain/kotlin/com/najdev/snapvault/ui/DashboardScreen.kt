@@ -44,24 +44,14 @@ import com.najdev.snapvault.binaryInstallHint
 import com.najdev.snapvault.isAndroidBuild
 import com.najdev.snapvault.ui.theme.LogColors
 import com.najdev.snapvault.ui.theme.SnapVaultColors
+import com.najdev.snapvault.ui.components.LowSpaceOfferDialog
 import com.najdev.snapvault.viewmodel.DashboardViewModel
+import com.najdev.snapvault.viewmodel.formatBytes
+import com.najdev.snapvault.viewmodel.PipelineOptions
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import snapchat_memories_downloader.composeapp.generated.resources.*
-
-// Pipeline option defaults, named rather than inlined so they can be asserted. The N1
-// blocker was a combination of three of these — a destructive step enabled, its preview
-// off, and the whole card collapsed — and nothing would have caught a silent flip back.
-internal const val DEFAULT_RUN_DOWNLOAD = true
-internal const val DEFAULT_RUN_METADATA = true
-internal const val DEFAULT_PRECISE_MATCHING = true
-internal const val DEFAULT_RUN_COMBINE = true
-internal const val DEFAULT_RUN_DEDUPE = true
-
-// Deletion is an explicit opt-out: preview on, and the card open so the enabled steps are
-// visible before Start is pressed.
-internal const val DEFAULT_DRY_RUN = true
-internal const val DEFAULT_PIPELINE_EXPANDED = true
 
 internal fun usesCompactDashboardLayout(windowSize: WindowSize): Boolean =
     windowSize != WindowSize.Expanded
@@ -69,19 +59,6 @@ internal fun usesCompactDashboardLayout(windowSize: WindowSize): Boolean =
 // Both steppers count to this. It was a literal 4 in the compact layout and four hand-written
 // call sites in the expanded one, which is how they were free to disagree.
 internal const val DASHBOARD_STEP_COUNT = 4
-
-// Option state lives in one holder rather than seven loose `var`s, so the controls, the
-// action row and the status panel can be separate composables that the two layouts compose
-// in a different order.
-internal class PipelineOptions {
-    var runDownload by mutableStateOf(DEFAULT_RUN_DOWNLOAD)
-    var runMetadata by mutableStateOf(DEFAULT_RUN_METADATA)
-    var preciseMatching by mutableStateOf(DEFAULT_PRECISE_MATCHING)
-    var runCombine by mutableStateOf(DEFAULT_RUN_COMBINE)
-    var runDedupe by mutableStateOf(DEFAULT_RUN_DEDUPE)
-    var dryRun by mutableStateOf(DEFAULT_DRY_RUN)
-    var expanded by mutableStateOf(DEFAULT_PIPELINE_EXPANDED)
-}
 
 @Composable
 fun DashboardScreen(
@@ -91,7 +68,24 @@ fun DashboardScreen(
     hasFFmpeg: Boolean = true,
     windowSize: WindowSize = WindowSize.Expanded,
 ) {
-    val options = remember { PipelineOptions() }
+    // Owned by the view model, not remembered here: this composable leaves composition every
+    // time the user visits another screen or crosses a layout boundary, and remembered state
+    // leaves with it (D22).
+    val options = viewModel.pipelineOptions
+
+    // An import refused for space is a dead end on its own; this is the way through it, and it
+    // asks before deleting anything (D20). On the Dashboard because that is where the run the
+    // user just started was refused.
+    viewModel.lowSpaceOffer?.let { offer ->
+        LowSpaceOfferDialog(
+            archiveNames = offer.archiveNames,
+            requiredText = formatBytes(offer.requiredBytes),
+            availableText = formatBytes(offer.availableBytes),
+            reclaimableText = formatBytes(offer.reclaimableBytes),
+            onConfirm = viewModel::acceptLowSpaceOffer,
+            onDismiss = viewModel::dismissLowSpaceOffer,
+        )
+    }
 
     if (usesCompactDashboardLayout(windowSize)) {
         // One scrolling column. Compact cannot fit the two panels, and Medium retains the
@@ -105,7 +99,7 @@ fun DashboardScreen(
                 DashboardStatus(viewModel, compact = true)
             }
             Spacer(Modifier.height(16.dp))
-            DashboardActions(viewModel, options)
+            DashboardActions(viewModel)
         }
     } else {
         Row(
@@ -122,7 +116,7 @@ fun DashboardScreen(
                     DashboardControls(viewModel, options, onNavigateToSettings, hasExifTool, hasFFmpeg)
                 }
                 Spacer(Modifier.height(16.dp))
-                DashboardActions(viewModel, options)
+                DashboardActions(viewModel)
             }
             DashboardStatus(
                 viewModel = viewModel,
@@ -354,31 +348,53 @@ private fun DashboardControls(
             }
             AnimatedVisibility(visible = options.expanded) {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    // A run copies these values when it starts, so while one is in progress a
+                    // switch that still moves changes nothing — turning combination off mid-run
+                    // looked like it had stopped the step that deletes originals (D12).
+                    val editable = !viewModel.isRunning
                     if (viewModel.importMode == ImportMode.Legacy) {
-                        PipelineItem(Icons.Outlined.CloudDownload, stringResource(Res.string.opt_download_memories), options.runDownload) { options.runDownload = it }
+                        PipelineItem(Icons.Outlined.CloudDownload, stringResource(Res.string.opt_download_memories), options.runDownload, enabled = editable) { options.runDownload = it }
                     }
                     val isZipMode = viewModel.importMode != ImportMode.Legacy
+                    // A position written into a file travels with every copy shared from it, so
+                    // say so under whichever switch is the one writing it — and only while it
+                    // is: date-only ZIP metadata writes no location (D18).
+                    val gpsDisclosure = stringResource(Res.string.opt_gps_disclosure)
                     PipelineItem(
                         icon = if (isZipMode) Icons.Outlined.CalendarMonth else Icons.Outlined.GpsFixed,
                         label = if (isZipMode) stringResource(Res.string.opt_write_date_metadata) else stringResource(Res.string.opt_inject_gps),
                         checked = options.runMetadata,
+                        helperText = gpsDisclosure.takeIf { !isZipMode && options.runMetadata },
+                        enabled = editable,
                         onCheckedChange = { options.runMetadata = it }
                     )
                     AnimatedVisibility(visible = isZipMode && options.runMetadata) {
                         PipelineItem(
                             Icons.Outlined.Info,
                             stringResource(Res.string.opt_precise_matching),
-                            options.preciseMatching
+                            options.preciseMatching,
+                            helperText = gpsDisclosure.takeIf { options.preciseMatching },
+                            enabled = editable,
                         ) { options.preciseMatching = it }
                     }
-                    PipelineItem(Icons.Outlined.Layers, stringResource(Res.string.opt_combine_overlays), options.runCombine) { options.runCombine = it }
-                    PipelineItem(Icons.Outlined.AutoDelete, stringResource(Res.string.opt_clean_duplicates), options.runDedupe) { options.runDedupe = it }
-                    // Dedupe deletes files — give it a preview mode.
+                    PipelineItem(
+                        Icons.Outlined.Layers,
+                        stringResource(Res.string.opt_combine_overlays),
+                        options.runCombine,
+                        helperText = stringResource(Res.string.opt_combine_cleanup_helper).takeIf { options.runCombine },
+                        enabled = editable,
+                    ) { options.runCombine = it }
+                    PipelineItem(Icons.Outlined.AutoDelete, stringResource(Res.string.opt_clean_duplicates), options.runDedupe, enabled = editable) { options.runDedupe = it }
+                    // Dedupe deletes files — give it a preview mode. The helper text is not
+                    // decoration: this switch governs deduplication only, and its old
+                    // "nothing deleted" wording read as a promise about the whole run (D09).
                     AnimatedVisibility(visible = options.runDedupe) {
                         PipelineItem(
                             Icons.Outlined.Visibility,
                             stringResource(Res.string.opt_dedupe_dry_run),
-                            options.dryRun
+                            options.dryRun,
+                            helperText = stringResource(Res.string.opt_dedupe_dry_run_helper),
+                            enabled = editable,
                         ) { options.dryRun = it }
                     }
                 }
@@ -390,10 +406,7 @@ private fun DashboardControls(
 // ── Action row ───────────────────────────────────────────────────────────────
 
 @Composable
-private fun DashboardActions(
-    viewModel: DashboardViewModel,
-    options: PipelineOptions,
-) {
+private fun DashboardActions(viewModel: DashboardViewModel) {
     // Action buttons
     val canStart = viewModel.downloadFolder != null && when (viewModel.importMode) {
         ImportMode.Zip -> when (viewModel.zipSourceMode) {
@@ -408,7 +421,7 @@ private fun DashboardActions(
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Button(
-            onClick = { viewModel.startSync(options.runDownload, options.runMetadata, options.preciseMatching, options.runCombine, options.runDedupe, options.dryRun) },
+            onClick = { viewModel.startSync() },
             enabled = !viewModel.isRunning && canStart,
             modifier = Modifier.weight(1f).height(52.dp),
             shape = RoundedCornerShape(10.dp),
@@ -516,13 +529,10 @@ private fun DashboardStatus(
     // step 4's circle turning amber, which reads as a slightly different success.
     AnimatedVisibility(visible = viewModel.hasWarnings) {
         Box(modifier = Modifier.padding(top = 12.dp)) {
-            InlineBanner(
-                icon = Icons.Outlined.WarningAmber,
-                accent = SnapVaultColors.warning,
-                title = stringResource(Res.string.warn_run_failures_title, viewModel.failureCount),
-                body = stringResource(Res.string.warn_run_failures_body),
-                actionLabel = stringResource(Res.string.btn_view_log),
-                onAction = { logsExpanded = true },
+            RunOutcomeBanner(
+                failureCount = viewModel.failureCount,
+                warningCount = viewModel.warningCount,
+                onViewLog = { logsExpanded = true },
             )
         }
     }
@@ -583,7 +593,7 @@ private fun DashboardStatus(
                 onClick = {
                     @Suppress("DEPRECATION")
                     clipboardManager.setText(
-                        AnnotatedString(viewModel.logs.joinToString("\n"))
+                        AnnotatedString(viewModel.supportLogText())
                     )
                     logsCopied = true
                     logScope.launch {
@@ -650,6 +660,31 @@ private fun DashboardStatus(
  * banner, a missing-dependency warning, and a finished run that reported failures — so all
  * three read as the same kind of message rather than three bespoke layouts.
  */
+/**
+ * The headline for a run that finished with something to report.
+ *
+ * A run can now finish with warnings and no failures (D10) — originals kept, an archive left
+ * unextracted — and the old banner could only say "N step(s) failed", which would have read
+ * "0 step(s) failed" over exactly those runs. Failures lead when there are any; the log carries
+ * the rest either way.
+ */
+@Composable
+internal fun RunOutcomeBanner(failureCount: Int, warningCount: Int, onViewLog: () -> Unit) {
+    val failed = failureCount > 0
+    InlineBanner(
+        icon = Icons.Outlined.WarningAmber,
+        accent = SnapVaultColors.warning,
+        title = if (failed) {
+            pluralStringResource(Res.plurals.warn_run_failures_title, failureCount, failureCount)
+        } else {
+            pluralStringResource(Res.plurals.warn_run_warnings_title, warningCount, warningCount)
+        },
+        body = stringResource(if (failed) Res.string.warn_run_failures_body else Res.string.warn_run_warnings_body),
+        actionLabel = stringResource(Res.string.btn_view_log),
+        onAction = onViewLog,
+    )
+}
+
 @Composable
 fun InlineBanner(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -786,27 +821,46 @@ fun PipelineItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     checked: Boolean,
+    // For an option whose label cannot carry its own caveat. The dry-run switch needs one:
+    // it reads like a global promise but governs only the deduplication step (D09).
+    // Declared before onCheckedChange so existing trailing-lambda call sites still bind.
+    helperText: String? = null,
+    enabled: Boolean = true,
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
-            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
+            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
             .minimumInteractiveComponentSize()
             .padding(vertical = 6.dp, horizontal = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
             Icon(icon, null, tint = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
-            Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+            Column {
+                Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                if (helperText != null) {
+                    Text(
+                        helperText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
         Switch(
             checked = checked,
             // Null: the row above owns both the interaction and the semantics, so the
             // Switch must not announce itself as a second control for the same option.
             onCheckedChange = null,
+            enabled = enabled,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                 checkedTrackColor = MaterialTheme.colorScheme.primary,

@@ -218,6 +218,7 @@ internal fun LibraryEmptyState(
     onRefresh: () -> Unit,
     onClearFilters: () -> Unit,
     modifier: Modifier = Modifier,
+    folderChangeable: Boolean = true,
 ) {
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         Column(
@@ -255,9 +256,10 @@ internal fun LibraryEmptyState(
                     LibraryEmptyReason.NoFolder -> EmptyStateAction(
                         label = stringResource(Res.string.lib_select_folder),
                         onClick = onOpenFolder,
+                        enabled = folderChangeable,
                     )
                     LibraryEmptyReason.NoMedia -> {
-                        EmptyStateAction(stringResource(Res.string.lib_change_folder), onOpenFolder)
+                        EmptyStateAction(stringResource(Res.string.lib_change_folder), onOpenFolder, enabled = folderChangeable)
                         EmptyStateAction(stringResource(Res.string.lib_refresh_action), onRefresh)
                     }
                     LibraryEmptyReason.FilteredOut ->
@@ -269,12 +271,12 @@ internal fun LibraryEmptyState(
 }
 
 @Composable
-private fun EmptyStateAction(label: String, onClick: () -> Unit) {
-    TextButton(onClick = onClick) {
+private fun EmptyStateAction(label: String, onClick: () -> Unit, enabled: Boolean = true) {
+    TextButton(onClick = onClick, enabled = enabled) {
         Text(
             label,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.primary,
+            color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.SemiBold
         )
     }
@@ -340,6 +342,8 @@ data class LibraryItem(
     val title: String,
     val type: String,
     val hasGps: Boolean,
+    // True only when an overlay has been combined into this file — it is drawn as "Combined".
+    // Scanners fill it from FileMeta.combined, not FileMeta.hasOverlay (D11).
     val hasOverlay: Boolean,
     val favorited: Boolean = false,
     val fileSizeBytes: Long = 0L
@@ -350,6 +354,8 @@ fun LibraryScreen(
     downloadFolder: String?,
     onOpenFolder: () -> Unit,
     windowSize: WindowSize = WindowSize.Expanded,
+    // False while a run is in progress: the run captured its folder (D12).
+    folderChangeable: Boolean = true,
     // Favorites are owned by the view model, not by this screen: the write has to outlive the
     // composition (navigating away used to cancel it) and a failed write has to be able to
     // revert the heart and say so. Defaulted so the screen still renders standalone.
@@ -539,6 +545,7 @@ fun LibraryScreen(
                     onRefresh = { refreshKey++ },
                     onClearFilters = { selectedFilter = MediaFilter.All; searchQuery = "" },
                     modifier = Modifier.weight(1f).fillMaxWidth(),
+                    folderChangeable = folderChangeable,
                 )
             } else {
                 LibraryGrid(
@@ -591,6 +598,52 @@ fun LibraryScreen(
     }
 }
 
+/**
+ * Where a thumbnail load has got to.
+ *
+ * A bare nullable could not tell "still loading" from "nothing can be shown", so a memory no
+ * decoder could read looked like one mid-load forever — a faint icon with no word that the
+ * file itself was fine (D19).
+ */
+internal sealed interface ThumbnailLoad {
+    data object Loading : ThumbnailLoad
+    data class Ready(val bitmap: ImageBitmap) : ThumbnailLoad
+    data object Unavailable : ThumbnailLoad
+}
+
+/**
+ * How a thumbnail is fetched, so a test can hold a load open.
+ *
+ * [ThumbnailLoad.Loading] is otherwise unobservable: it lasts exactly as long as a real decode
+ * on a real IO thread, and a test asserting the fallback has *not* appeared yet is racing that
+ * thread rather than testing anything. It won on a developer machine and lost on CI, every run.
+ */
+internal val LocalThumbnailLoader = staticCompositionLocalOf<suspend (String) -> ImageBitmap?> {
+    { path -> withContext(ioDispatcher) { getCachedThumbnail(path) } }
+}
+
+@Composable
+internal fun rememberThumbnail(path: String): ThumbnailLoad {
+    val loader = LocalThumbnailLoader.current
+    val load by produceState<ThumbnailLoad>(ThumbnailLoad.Loading, path, loader) {
+        value = loader(path)
+            ?.let { ThumbnailLoad.Ready(it) }
+            ?: ThumbnailLoad.Unavailable
+    }
+    return load
+}
+
+@Composable
+private fun PreviewUnavailableLabel() {
+    Text(
+        stringResource(Res.string.lib_preview_unavailable),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+    )
+}
+
 @Composable
 internal fun InspectorItemDetail(
     item: LibraryItem,
@@ -604,9 +657,8 @@ internal fun InspectorItemDetail(
     onToggleFavorite: (Boolean) -> Unit = {},
 ) {
     val isVideo = item.type == "video"
-    val thumbnail by produceState<ImageBitmap?>(null, item.id) {
-        value = withContext(ioDispatcher) { getCachedThumbnail(item.id) }
-    }
+    val thumbnailLoad = rememberThumbnail(item.id)
+    val thumbnail = (thumbnailLoad as? ThumbnailLoad.Ready)?.bitmap
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
@@ -645,12 +697,15 @@ internal fun InspectorItemDetail(
                     )
                 }
             } else {
-                Icon(
-                    imageVector = if (isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.Image,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
-                    modifier = Modifier.size(48.dp)
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = if (isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.Image,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
+                        modifier = Modifier.size(48.dp)
+                    )
+                    if (thumbnailLoad == ThumbnailLoad.Unavailable) PreviewUnavailableLabel()
+                }
             }
 
             // Close / deselect
@@ -1114,9 +1169,8 @@ fun MediaPreviewDialog(
 @Composable
 fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit = {}) {
     val isVideo = item.type == "video"
-    val thumbnail by produceState<ImageBitmap?>(null, item.id) {
-        value = withContext(ioDispatcher) { getCachedThumbnail(item.id) }
-    }
+    val thumbnailLoad = rememberThumbnail(item.id)
+    val thumbnail = (thumbnailLoad as? ThumbnailLoad.Ready)?.bitmap
 
     Card(
         // `clickable` rather than a tap gesture, and that is load-bearing beyond the ripple:
@@ -1160,12 +1214,15 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                 )
 
                 if (thumbnail == null) {
-                    Icon(
-                        imageVector = if (isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.Image,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f),
-                        modifier = Modifier.size(44.dp)
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = if (isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.Image,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f),
+                            modifier = Modifier.size(44.dp)
+                        )
+                        if (thumbnailLoad == ThumbnailLoad.Unavailable) PreviewUnavailableLabel()
+                    }
                 }
 
                 // Type badge

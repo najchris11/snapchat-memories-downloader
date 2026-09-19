@@ -1,6 +1,7 @@
 package com.najdev.snapvault.metadata
 
 import com.najdev.snapvault.BinaryExtractor
+import com.najdev.snapvault.runCommand
 import com.najdev.snapvault.waitForOrKill
 import java.io.File
 import java.io.IOException
@@ -182,12 +183,7 @@ class DesktopMediaProcessor : MediaProcessor {
         args.add(filePath)
 
         return try {
-            // Drain stdout/stderr before waiting — the same deadlock class guarded against
-            // elsewhere in this file (see writeDateMetadataBatch.runGroup): an unread pipe
-            // buffer fills and waitFor() blocks forever on verbose exiftool output.
-            val process = ProcessBuilder(args).redirectErrorStream(true).start()
-            process.inputStream.bufferedReader().readText()
-            val exitCode = process.waitForOrKill()
+            val exitCode = runCommand(args).exitCode
 
             // Apply system modification date fallback
             if (exifDate != null) {
@@ -235,9 +231,7 @@ class DesktopMediaProcessor : MediaProcessor {
         args.add(filePath)
 
         return try {
-            val process = ProcessBuilder(args).redirectErrorStream(true).start()
-            process.inputStream.bufferedReader().readText()
-            val exitCode = process.waitForOrKill()
+            val exitCode = runCommand(args).exitCode
             if (exitCode == 0) {
                 val prefix = parseDateToFilenamePrefix(dateTimeUtc)
                 if (prefix != null && prefix.length >= 15) {
@@ -296,9 +290,7 @@ class DesktopMediaProcessor : MediaProcessor {
 
             val batchArgs = listOf(exifPath, "-overwrite_original", "-q") + tagArgs + present
             return runCatching {
-                val proc = ProcessBuilder(batchArgs).redirectErrorStream(true).start()
-                val output = proc.inputStream.bufferedReader().readText()
-                val rc = proc.waitForOrKill()
+                val (rc, output) = runCommand(batchArgs)
                 if (rc == 0) return present
 
                 // Batch failed for another reason — surface output and retry per-file to pinpoint
@@ -306,9 +298,7 @@ class DesktopMediaProcessor : MediaProcessor {
                 val succeeded = mutableListOf<String>()
                 for (path in present) {
                     val singleArgs = listOf(exifPath, "-overwrite_original", "-q") + tagArgs + listOf(path)
-                    val singleProc = ProcessBuilder(singleArgs).redirectErrorStream(true).start()
-                    val singleOut = singleProc.inputStream.bufferedReader().readText()
-                    val singleRc = singleProc.waitForOrKill()
+                    val (singleRc, singleOut) = runCommand(singleArgs)
                     if (singleRc == 0) {
                         succeeded.add(path)
                     } else {
@@ -348,7 +338,6 @@ class DesktopMediaProcessor : MediaProcessor {
 
     override fun combineVideoWithOverlay(videoPath: String, overlayPath: String, outputPath: String): Boolean {
         val ffmpegPath = BinaryExtractor.checkCommand("ffmpeg") ?: return false
-        val exiftoolPath = BinaryExtractor.checkCommand("exiftool")
 
         // Discard stdout+stderr — FFmpeg writes verbose progress to stderr and the pipe buffer
         // (~64 KB on macOS) fills up for long videos, causing waitFor() to block forever.
@@ -381,25 +370,9 @@ class DesktopMediaProcessor : MediaProcessor {
             if (usedHardware) hwEncodedCount.incrementAndGet() else swEncodedCount.incrementAndGet()
         }
 
-        if (exitCode == 0 && exiftoolPath != null) {
-            try {
-                val metaProc = ProcessBuilder(
-                    exiftoolPath,
-                    "-overwrite_original", "-q",
-                    "-TagsFromFile", videoPath,
-                    "-all:all",
-                    outputPath
-                ).redirectErrorStream(true).start()
-                val metaOut = metaProc.inputStream.bufferedReader().readText()
-                val metaRc = metaProc.waitForOrKill()
-                if (metaRc != 0 && metaOut.isNotBlank()) {
-                    System.err.println("[exiftool metadata copy rc=$metaRc] ${File(outputPath).name}: ${metaOut.trim()}")
-                }
-            } catch (e: Exception) {
-                System.err.println("[exiftool metadata copy] ${File(outputPath).name}: ${e.message}")
-            }
-        }
-
+        // Metadata is no longer copied here: OverlayCombiner.processPair runs the same
+        // copyMetadata seam it uses for images, so original-deletion is gated on the copy's
+        // actual result for video too, not on FFmpeg's exit code alone.
         return exitCode == 0
     }
 }

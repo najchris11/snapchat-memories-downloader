@@ -8,6 +8,7 @@ import platform.Foundation.NSURL
 import platform.UIKit.UIApplication
 
 actual val isAndroidBuild: Boolean = false
+actual val platformSupportPageUrl: String? = null
 actual fun binaryInstallHint(): String = ""
 
 actual fun openUrl(url: String) {
@@ -37,3 +38,8 @@ actual class SyncLock actual constructor() {
 actual val supportsFileManager: Boolean = false
 
 actual fun revealInFileManager(path: String) = Unit
+
+// iOS runs one instance of an app against a sandboxed, app-private directory, so there is no
+// second writer for a lock to arbitrate between. Unenforced here states that rather than
+// implying a guard that does not exist.
+actual val platformOutputDirectoryLocker: OutputDirectoryLocker = UnenforcedOutputDirectoryLocker

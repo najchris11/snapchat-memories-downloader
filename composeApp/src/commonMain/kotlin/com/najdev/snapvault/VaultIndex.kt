@@ -8,6 +8,21 @@ import okio.FileSystem
 import okio.Path.Companion.toPath
 
 /**
+ * The index file exists but could not be parsed.
+ *
+ * Distinct from "no index yet", which is the ordinary first-run state and means an empty map.
+ * A file that is present and unreadable is the opposite: it is data, quite possibly every
+ * favorite the user has, in a form this version cannot read — damaged, truncated by something
+ * outside the app, or written by a future version. Mutating on top of it replaces it with
+ * whatever the caller happened to know, which is how one favorite toggle could reduce a whole
+ * index to a single entry (D05). Every mutator throws this instead, leaving the bytes alone.
+ */
+class VaultIndexUnreadableException(
+    val fileName: String,
+    cause: Throwable?,
+) : Exception("$fileName exists but could not be read; refusing to overwrite it", cause)
+
+/**
  * Reading and writing `vault_index.json`.
  *
  * The index holds two kinds of thing and they have very different value. `hasGps` and
@@ -62,10 +77,34 @@ object VaultIndex {
         return if (cut == -1) path else path.substring(cut + 1)
     }
 
-    /** The index, or an empty map when it is missing or unreadable. */
+    /**
+     * The index, or an empty map when it is missing or unreadable.
+     *
+     * Total by design. This is called from `scanMediaFiles` on every Library scan, which is
+     * not a coroutine and has nowhere to put a failure; for a *reader*, "the facts are
+     * unknown" and "there are no facts" lead to the same screen. It is mutation that must not
+     * treat them alike — see [readForMutation].
+     */
     fun read(fileSystem: FileSystem, folder: String): Map<String, FileMeta> = runCatching {
         json.decodeFromString<Map<String, FileMeta>>(fileSystem.read(path(folder)) { readUtf8() })
     }.getOrDefault(emptyMap())
+
+    /**
+     * The index as a mutator must see it: empty when there is no file yet, and a throw when
+     * there is one that cannot be parsed.
+     *
+     * Absence and damage are the same value to [read] and very different to a writer. No file
+     * is the ordinary first-run state and an empty map is the truth. A file that exists and
+     * will not parse is data — possibly every favorite the user has — and continuing would
+     * replace it with whatever this caller happened to know (D05).
+     */
+    private fun readForMutation(fileSystem: FileSystem, folder: String): Map<String, FileMeta> {
+        val target = path(folder)
+        if (!fileSystem.exists(target)) return emptyMap()
+        return runCatching {
+            json.decodeFromString<Map<String, FileMeta>>(fileSystem.read(target) { readUtf8() })
+        }.getOrElse { throw VaultIndexUnreadableException(FILE_NAME, it) }
+    }
 
     /**
      * Replaces the index with [meta].
@@ -123,9 +162,31 @@ object VaultIndex {
      * favorite toggled while the run was in flight exists only on disk, and would otherwise
      * be overwritten by the run's own final write.
      */
-    suspend fun writeMerging(fileSystem: FileSystem, folder: String, meta: Map<String, FileMeta>) {
+    /*
+     * [carryFavorites] maps a source file to a file derived from it, and [remove] names entries
+     * for files that no longer exist. Both exist for the combine step, which writes a new file
+     * under a new name and then deletes its sources: without them the combined file lost its
+     * source's favorite, and the source's entry lived on describing nothing (D11).
+     *
+     * The favorite is read from disk here, under the lock, rather than from the run's copy —
+     * a heart pressed on the source while the run was in flight exists only on disk.
+     */
+    suspend fun writeMerging(
+        fileSystem: FileSystem,
+        folder: String,
+        meta: Map<String, FileMeta>,
+        carryFavorites: Map<String, String> = emptyMap(),
+        remove: Set<String> = emptySet(),
+    ) {
         lock.withLock {
-            writeAtomically(fileSystem, folder, mergeUserFields(read(fileSystem, folder), meta))
+            val onDisk = readForMutation(fileSystem, folder)
+            val merged = mergeUserFields(onDisk, meta).toMutableMap()
+            for ((source, derived) in carryFavorites) {
+                val entry = merged[derived] ?: continue
+                if (onDisk[source]?.favorited == true) merged[derived] = entry.copy(favorited = true)
+            }
+            remove.forEach { merged.remove(it) }
+            writeAtomically(fileSystem, folder, merged)
         }
     }
 
@@ -136,7 +197,7 @@ object VaultIndex {
         favorited: Boolean,
     ) {
         lock.withLock {
-            val current = read(fileSystem, folder)
+            val current = readForMutation(fileSystem, folder)
             val existing = current[fileName] ?: FileMeta(hasGps = false, hasOverlay = false)
             writeAtomically(
                 fileSystem,
@@ -157,7 +218,7 @@ object VaultIndex {
      */
     suspend fun resetKeepingFavorites(fileSystem: FileSystem, folder: String) {
         lock.withLock {
-            val kept = read(fileSystem, folder)
+            val kept = readForMutation(fileSystem, folder)
                 .filterValues { it.favorited }
                 .mapValues { FileMeta(hasGps = false, hasOverlay = false, favorited = true) }
 

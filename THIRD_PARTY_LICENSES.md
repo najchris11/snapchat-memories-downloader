@@ -19,8 +19,10 @@ bundle the following third-party tools, which remain under their own licenses.
 - **What:** video/image compositing engine, invoked as an external process.
 - **Project:** https://ffmpeg.org/
 - **License:** GNU General Public License (the bundled builds are GPL-enabled static
-  builds). License text: https://www.gnu.org/licenses/gpl-3.0.html — see also
-  https://ffmpeg.org/legal.html
+  builds): GPL-3.0-or-later for the macOS x64 and Windows builds, which enable version 3,
+  and GPL-2.0-or-later for the macOS arm64 build. License texts:
+  https://www.gnu.org/licenses/gpl-3.0.html and https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+  — see also https://ffmpeg.org/legal.html
 - **Bundled on:**
   - macOS x64 — static build from https://evermeet.cx/ffmpeg/
   - macOS arm64 — static build from https://www.osxexperts.net/
@@ -32,6 +34,13 @@ bundle the following third-party tools, which remain under their own licenses.
   build's configuration and version. On request, the SnapVault maintainers will provide a
   copy of the corresponding source for any FFmpeg binary distributed with a SnapVault
   release (open an issue on this repository).
+
+## Exact builds
+
+Every bundled archive — tool, version, pinned download URL, SHA-256 of the download, of the
+archive and of the executable, license, and source — is recorded in
+`composeApp/src/desktopMain/resources/bin/manifest.json`, which also ships inside the app as
+`bin/manifest.json`. Each executable was checked byte-for-byte against its upstream download.
 
 ## Runtime
 

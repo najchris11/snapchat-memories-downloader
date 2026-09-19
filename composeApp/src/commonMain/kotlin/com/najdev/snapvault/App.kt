@@ -17,6 +17,7 @@ import com.najdev.snapvault.ui.components.AppTopBar
 import com.najdev.snapvault.ui.components.UnsavedFavoritesDialog
 import com.najdev.snapvault.ui.theme.SnapVaultTheme
 import com.najdev.snapvault.viewmodel.DashboardViewModel
+import io.ktor.client.HttpClient
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okio.FileSystem
@@ -42,6 +43,11 @@ fun App(
     // Reaches the machine's preference store by default, so tests that are not about it pass
     // OutputFolderMemory.None rather than reading and writing real settings.
     outputFolderMemory: OutputFolderMemory = OutputFolderMemory.Platform,
+    // Same reason as outputFolderMemory above: the default reaches the real network, so a UI
+    // test that is not about downloading passes a mock engine rather than letting a run make
+    // a live request. A real request made the run's duration depend on the machine's network,
+    // which is what made ControlsDuringARunTest flaky under full-suite load.
+    httpClientFactory: () -> HttpClient = { HttpClient() },
 ) {
     var currentScreen by remember { mutableStateOf(Screen.Dashboard) }
     var themeMode by remember { mutableStateOf(loadThemeModePreference()) }
@@ -55,7 +61,11 @@ fun App(
     var hasFFmpeg by remember { mutableStateOf(false) }
 
     val dashboardViewModel = remember {
-        DashboardViewModel(zipPipelineRunner, mediaProcessor, fileSystem, pickers, outputFolderMemory = outputFolderMemory)
+        DashboardViewModel(
+            zipPipelineRunner, mediaProcessor, fileSystem, pickers,
+            httpClientFactory = httpClientFactory,
+            outputFolderMemory = outputFolderMemory,
+        )
     }
     DisposableEffect(Unit) { onDispose { dashboardViewModel.dispose() } }
 

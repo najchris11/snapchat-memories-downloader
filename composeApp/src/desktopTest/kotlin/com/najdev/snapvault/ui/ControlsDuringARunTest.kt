@@ -29,6 +29,11 @@ import com.najdev.snapvault.metadata.MediaProcessor
 import com.najdev.snapvault.parser.HtmlMemoryEntry
 import com.najdev.snapvault.ui.theme.SnapVaultTheme
 import com.najdev.snapvault.viewmodel.DashboardViewModel
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.http.HttpHeaders
+import io.ktor.http.headersOf
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import okio.Path.Companion.toPath
@@ -52,6 +57,14 @@ class ControlsDuringARunTest {
         override fun writeGpsMetadata(filePath: String, latitude: Double, longitude: Double, dateStr: String?) = true
         override fun writeDateMetadata(filePath: String, dateTimeUtc: String) = true
         override fun combineVideoWithOverlay(videoPath: String, overlayPath: String, outputPath: String) = true
+    }
+
+    // The download phase is not what any of these tests is about, but it runs before the
+    // extraction they wait on. Left to the default the run made a live request to
+    // example.com, so the 10s budget covered a real DNS lookup and connect — which pushed
+    // two of these tests over the limit under full-suite load while they passed alone.
+    private fun mockHttp(): () -> HttpClient = {
+        HttpClient(MockEngine { respond("zip-bytes", headers = headersOf(HttpHeaders.ContentType, "application/zip")) })
     }
 
     private class HangingRunner(val started: CompletableDeferred<Unit>) : ZipPipelineRunner {
@@ -92,6 +105,7 @@ class ControlsDuringARunTest {
         },
         pickers = Pickers(),
         outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+        httpClientFactory = mockHttp(),
         outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
     ).apply {
         changeImportMode(ImportMode.Legacy)
@@ -153,6 +167,7 @@ class ControlsDuringARunTest {
                 override fun pickMultipleZips(onResult: (List<String>) -> Unit) = onResult(emptyList())
             },
             outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+            httpClientFactory = mockHttp(),
             outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
         ).apply {
             changeImportMode(ImportMode.Legacy)
@@ -239,6 +254,7 @@ class ControlsDuringARunTest {
                         }
                     },
                     outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
+                    httpClientFactory = mockHttp(),
                 )
             }
         }

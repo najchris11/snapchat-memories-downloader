@@ -676,7 +676,7 @@ internal fun InspectorItemDetail(
         ) {
             if (thumbnail != null) {
                 Image(
-                    bitmap = thumbnail!!,
+                    bitmap = thumbnail,
                     contentDescription = item.title,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
@@ -1196,7 +1196,7 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
             ) {
                 if (thumbnail != null) {
                     Image(
-                        bitmap = thumbnail!!,
+                        bitmap = thumbnail,
                         contentDescription = item.title,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop

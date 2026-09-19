@@ -38,7 +38,7 @@ jobs:
       - name: Run Desktop Tests
         run: ./gradlew :composeApp:desktopTest
 
-  # Mobile is shelved for now — see FIX_PLAN.md. This job is informational only
+  # Mobile is shelved for now; desktop is the active release target. Informational only
   # (continue-on-error) rather than a required check: current arm64 macOS runner images no
   # longer ship the Android SDK with no setup-android step here to provision one, so
   # assembleDebug is expected to fail until mobile work resumes and that gap is closed.

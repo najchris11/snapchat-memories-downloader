@@ -30,7 +30,7 @@ Read `AGENTS.md` and `CLAUDE.md`. Existing comments and previous audit plans are
 
 ## Pass 2 — verified failures, state, and average-user expectations
 
-The four isolated probes in [desktop-audit-probes.md](desktop-audit-probes.md) **all failed for the expected safety assertion**, without changing production code. D01 reproduced twice: a two-JPEG archive was deleted with only the first JPEG preserved, and a thumbnail-only archive was deleted with no output. D03 reproduced even with an empty extraction task list. D05 below reproduced by attempting one favorite write. Probes were removed from the active test source set and preserved verbatim in that document; these are not fixes or passing regression coverage.
+The four isolated probes **all failed for the expected safety assertion**, without changing production code. They have since landed as real regression tests (`thumbnailOnlyArchiveIsKeptIntact`, `partFilesWeDoNotOwnAreNeverDeleted`, `archiveWhoseEntriesCollideIsKeptIntact` in `ZipExtractEngineTest.kt`; `aDamagedIndexIsNotReplacedByAFavoriteWrite` in `VaultIndexTest.kt`). D01 reproduced twice: a two-JPEG archive was deleted with only the first JPEG preserved, and a thumbnail-only archive was deleted with no output. D03 reproduced even with an empty extraction task list. D05 below reproduced by attempting one favorite write.
 
 ### D05 — High: a damaged index is silently replaced, losing recoverable favorites (develop feature)
 

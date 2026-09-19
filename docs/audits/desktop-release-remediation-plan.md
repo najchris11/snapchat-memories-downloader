@@ -1,9 +1,9 @@
 # Desktop release remediation plan
 
 Source: [desktop-release-audit-2026-09-15.md](desktop-release-audit-2026-09-15.md) (findings
-D01–D22, plus the unlabeled restart/resize observations) and its reproduction probes in
-[desktop-audit-probes.md](desktop-audit-probes.md). This plan turns that audit into ordered,
-testable work. It does not re-argue the findings — read the audit for evidence and rationale.
+D01–D22, plus the unlabeled restart/resize observations). This plan turns that audit into
+ordered, testable work. It does not re-argue the findings — read the audit for evidence and
+rationale.
 
 **Every item below follows the repository's TDD policy in `CLAUDE.md`: write the failing test,
 watch it fail for the right reason, then make it pass.** Nothing here is "add a test after."
@@ -34,10 +34,10 @@ For every task:
    into one commit — several of these touch the same files (`DashboardViewModel.kt`,
    `ZipExtractEngine.kt`) and reviewers need to see which change fixed which failing test.
 
-The four probes in `desktop-audit-probes.md` are pre-written failing tests for D01/D03/D05 —
-copy them into `ZipExtractEngineTest.kt` / a new `VaultIndexTest.kt` instead of writing new
-ones from scratch. They already reproduce the bug; verify they still fail on current
-`develop` before using them as your Red step.
+The four reproduction probes for D01/D03/D05 have since landed as real regression tests:
+`thumbnailOnlyArchiveIsKeptIntact`, `partFilesWeDoNotOwnAreNeverDeleted` and
+`archiveWhoseEntriesCollideIsKeptIntact` in `ZipExtractEngineTest.kt`, and
+`aDamagedIndexIsNotReplacedByAFavoriteWrite` in `VaultIndexTest.kt`.
 
 ---
 
@@ -52,10 +52,9 @@ more once defaults are made safer, so get the defaults safe first.
 - **File:** `composeApp/src/jvmSharedMain/kotlin/com/najdev/snapvault/downloader/ZipExtractEngine.kt`
   (`extractDownloadedArchives`)
 - **Test file:** `composeApp/src/desktopTest/kotlin/com/najdev/snapvault/downloader/ZipExtractEngineTest.kt`
-- **Red:** Add the two probe tests verbatim from `desktop-audit-probes.md`:
-  `unrelatedArchiveWithCollidingEntriesMustBeRetained` and `thumbnailOnlyArchiveMustBeRetained`.
-  Confirm both fail on current `develop` first (the audit reproduced them on `7b0cfa2`; behavior
-  is unchanged since).
+- **Red:** the two probes for this finding landed as `archiveWhoseEntriesCollideIsKeptIntact`
+  and `thumbnailOnlyArchiveIsKeptIntact` in `ZipExtractEngineTest.kt`. Both were confirmed to
+  fail on `7b0cfa2` before the fix.
 - **Fix direction:** pass `extractDownloadedArchives` the explicit set of archive paths this
   run downloaded, not a directory scan. Before deleting a source archive, verify every non-
   thumbnail entry was written to a distinct output path (fail/skip the archive, don't silently

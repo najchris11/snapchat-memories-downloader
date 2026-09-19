@@ -54,6 +54,7 @@ reference. `onNode`/`onAllNodes` are receiver methods, not imports.
 ### Verify before claiming done
 
 ```
+./gradlew detekt                                      # lint (CI runs this first)
 ./gradlew :composeApp:desktopTest                     # full suite
 ./gradlew :composeApp:compileKotlinDesktop            # desktop
 ./gradlew :composeApp:compileDebugKotlinAndroid       # Android
@@ -63,8 +64,10 @@ reference. `onNode`/`onAllNodes` are receiver methods, not imports.
 A `commonMain` change compiles for three targets. Desktop passing does not mean Android and
 iOS do — check all three.
 
-There is no detekt/ktlint yet, so unused imports and dead code are on you to catch. Eleven
-unused imports and two never-called public composables reached `main` this way.
+detekt runs in CI ahead of the tests — run `./gradlew detekt` too. It catches unused imports,
+private members, parameters and properties; eleven unused imports and two never-called public
+composables reached `main` before it existed. Do not silence a new finding by adding it to
+`config/detekt/baseline.xml`.
 
 ## Commits
 

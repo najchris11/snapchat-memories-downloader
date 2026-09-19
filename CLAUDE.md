@@ -49,6 +49,7 @@ reference example. `onNode`/`onAllNodes` are receiver methods, not imports.
 ### Commands
 
 ```
+./gradlew detekt                                  # lint (CI runs this before the tests)
 ./gradlew :composeApp:desktopTest                 # full suite
 ./gradlew :composeApp:desktopTest --tests "…"     # one class
 ./gradlew :composeApp:compileKotlinDesktop        # desktop
@@ -59,8 +60,11 @@ reference example. `onNode`/`onAllNodes` are receiver methods, not imports.
 A commonMain change compiles for three targets. Check all three before claiming it builds —
 desktop passing does not mean Android and iOS do.
 
-There is no detekt/ktlint. Until there is, unused imports and dead code are on you to catch:
-eleven unused imports and two never-called public composables reached `main` this way.
+detekt runs in CI ahead of the tests (`./gradlew detekt`, config in `config/detekt/`). It
+catches unused imports, private members, parameters and properties — eleven unused imports
+and two never-called public composables reached `main` before it existed. The complexity
+rules are deliberately off; file size and method length are still your judgement. Run it
+before claiming done, and do not add to `config/detekt/baseline.xml` to silence a new finding.
 
 ## Theming rules
 
@@ -86,12 +90,14 @@ Avoid `"item${if (n == 1) "" else "s"}"` — use a plural resource.
 ## Known footguns
 
 - **`AppBuildConfig.IS_DEBUG` flips on the Gradle task name.** `:composeApp:run` sets it
-  `true`; `compileKotlinDesktop` and `desktopTest` set it `false`. It is a `const val`, so
-  it is inlined at every use site and each alternation invalidates everything referencing
-  it. Alternating between running the app and running tests causes large recompiles, and
-  can leave `build/classes` inconsistent — the symptom is a `NoClassDefFoundError` for a
-  synthetic lambda class such as `DraggableAreaKt$DraggableArea$2$1$1`. `./gradlew clean`
-  clears it.
+  `true`; `compileKotlinDesktop` and `desktopTest` set it `false`. It is deliberately a
+  plain `val`, not a `const val`: as a const it was inlined at every use site, so each
+  alternation between running the app and running tests invalidated everything referencing
+  it, causing large recompiles and leaving `build/classes` holding synthetic lambda classes
+  from two compilations — the symptom was a `NoClassDefFoundError` for something like
+  `DraggableAreaKt$DraggableArea$2$1$1`. As a `val` only `AppBuildConfig.kt` recompiles.
+  Do not turn it back into a `const val`. If you do see that `NoClassDefFoundError`,
+  `./gradlew clean` still clears it.
 - The debug build caps imports at 2,500 items. Never diagnose "missing memories" without
   checking `IS_DEBUG` first.
 - `iosMain`'s `VideoPlayer` builds its `AVPlayer` outside `remember`, so it is recreated on

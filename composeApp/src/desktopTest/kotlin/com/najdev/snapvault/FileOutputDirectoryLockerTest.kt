@@ -83,13 +83,40 @@ class FileOutputDirectoryLockerTest {
     // A lock nobody releases is a library nobody can sync again. The holder exiting must hand
     // the directory back — including when it exits without a clean release, which for a
     // desktop app closed with the red button is the ordinary case, not the exotic one.
+    //
+    // Claimed with a bounded retry rather than in one shot. POSIX hands the lock back before
+    // waitFor() returns, but Windows signals the process object before it has finished tearing
+    // the handle down, so an immediate claim raced the OS and failed there — and only there.
+    // The retry is what makes the assertion portable, not what makes it pass: a lock that is
+    // genuinely never released stays unclaimable for the whole window and still fails.
     @Test
     fun theDirectoryIsClaimableAgainOnceTheOtherProcessExits() {
         val folder = tempDir("snapvault-lock-handback")
         holdInAnotherProcess(folder).stopAndWait()
 
         // The OS drops a file lock when the process holding it dies, however it died.
-        locker.lock(folder.absolutePath, noWarnings()).release()
+        claimWithin(HANDBACK_TIMEOUT_MILLIS, folder).release()
+    }
+
+    /**
+     * Takes the lock on [folder], retrying refusals until [timeoutMillis] has passed.
+     *
+     * Only [OutputDirectoryInUseException] is retried — every other failure is the answer.
+     */
+    private fun claimWithin(timeoutMillis: Long, folder: File): OutputDirectoryLock {
+        val deadline = System.currentTimeMillis() + timeoutMillis
+        var refusals = 0
+        while (true) {
+            val attempt = runCatching { locker.lock(folder.absolutePath, noWarnings()) }
+            attempt.getOrNull()?.let { return it }
+            val failure = attempt.exceptionOrNull()!!
+            if (failure !is OutputDirectoryInUseException) throw failure
+            refusals++
+            if (System.currentTimeMillis() >= deadline) {
+                fail("the directory was still held ${timeoutMillis}ms after the holder exited ($refusals refusals)")
+            }
+            Thread.sleep(HANDBACK_POLL_MILLIS)
+        }
     }
 
     @Test
@@ -186,4 +213,12 @@ class FileOutputDirectoryLockerTest {
         assertTrue(added.single().name.startsWith("."), "the sentinel must be hidden: ${added.single().name}")
         assertEquals(0L, added.single().length(), "the sentinel carries no data, only the lock")
     }
+
+    private companion object {
+        // Generous next to the millisecond-scale handle teardown this covers, because the only
+        // cost of waiting is on a failure that is already a real bug.
+        const val HANDBACK_TIMEOUT_MILLIS = 10_000L
+        const val HANDBACK_POLL_MILLIS = 50L
+    }
+
 }

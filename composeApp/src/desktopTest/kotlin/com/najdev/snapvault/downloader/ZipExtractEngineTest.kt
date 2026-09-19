@@ -172,6 +172,27 @@ class ZipExtractEngineTest {
     }
 
     @Test
+    fun legacyArchiveIsRetainedWhenAnExistingFileWasSkipped() {
+        // A skipped destination proves only existence, not that this archive's bytes landed.
+        // Previously this deleted the only copy of the incoming photo after a name collision.
+        val archive = legacyArchive("collision.zip", linkedMapOf("photo.jpg" to "incoming"))
+        val before = archive.readBytes().toList()
+        val existing = File(outDir, "collision-main.jpg").apply { writeText("personal") }
+        val warnings = mutableListOf<String>()
+
+        runBlocking {
+            ZipExtractEngine().extractDownloadedArchives(outDir.path, listOf(archive.path)) {
+                warnings.add(it)
+            }
+        }
+
+        assertTrue(archive.exists(), "an unverified skip must not authorize source deletion")
+        assertEquals(before, archive.readBytes().toList())
+        assertEquals("personal", existing.readText())
+        assertTrue(warnings.any { "collision-main.jpg" in it && "kept" in it }, warnings.toString())
+    }
+
+    @Test
     fun extractsLegacyArchiveAsMainOverlayPairAndDeletesIt() {
         val archive = legacyArchive(
             "20231012_153000_abc.zip",

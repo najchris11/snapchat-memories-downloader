@@ -88,6 +88,23 @@ class DashboardScreenTest {
     }
 
     @Test
+    fun combiningDisclosesSourceCleanupBeforeStart() = runComposeUiTest {
+        // Combine removes originals by design; its label previously mentioned only videos
+        // and gave no indication that enabling it also authorized source-pair cleanup.
+        val viewModel = idleDashboardViewModel()
+        setContent {
+            SnapVaultTheme(darkMode = true) { DashboardScreen(viewModel = viewModel, onNavigateToSettings = {}) }
+        }
+        val notice = "After a successful merge and metadata copy, the original photo or video and its overlay are permanently deleted."
+        onNodeWithText("Combine photo and video overlays").assertIsDisplayed()
+        onNodeWithText(notice).assertIsDisplayed()
+        onNode(hasText("Combine photo and video overlays") and isToggleable()).performClick()
+        waitForIdle()
+        onAllNodes(hasText(notice)).assertCountEquals(0)
+        viewModel.dispose()
+    }
+
+    @Test
     fun dryRunTogglePresentsItselfAsOn() = runComposeUiTest {
         val label = stringResource("opt_dedupe_dry_run")
         val helper = stringResource("opt_dedupe_dry_run_helper")

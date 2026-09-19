@@ -42,7 +42,8 @@
     </plurals>
     <string name="lowspace_confirm">Import and delete each ZIP</string>
     <string name="lowspace_cancel">Not now</string>
-    <string name="opt_combine_overlays">Merge Video Overlays</string>
+    <string name="opt_combine_overlays">Combine photo and video overlays</string>
+    <string name="opt_combine_cleanup_helper">After a successful merge and metadata copy, the original photo or video and its overlay are permanently deleted.</string>
     <string name="opt_clean_duplicates">Clean Duplicate Files</string>
     <string name="opt_dedupe_dry_run">Preview duplicate removal</string>
     <string name="opt_dedupe_dry_run_helper">Imports and metadata processing still run. No duplicate files will be removed.</string>

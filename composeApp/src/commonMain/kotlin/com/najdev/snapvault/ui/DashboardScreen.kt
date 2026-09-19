@@ -377,7 +377,13 @@ private fun DashboardControls(
                             enabled = editable,
                         ) { options.preciseMatching = it }
                     }
-                    PipelineItem(Icons.Outlined.Layers, stringResource(Res.string.opt_combine_overlays), options.runCombine, enabled = editable) { options.runCombine = it }
+                    PipelineItem(
+                        Icons.Outlined.Layers,
+                        stringResource(Res.string.opt_combine_overlays),
+                        options.runCombine,
+                        helperText = stringResource(Res.string.opt_combine_cleanup_helper).takeIf { options.runCombine },
+                        enabled = editable,
+                    ) { options.runCombine = it }
                     PipelineItem(Icons.Outlined.AutoDelete, stringResource(Res.string.opt_clean_duplicates), options.runDedupe, enabled = editable) { options.runDedupe = it }
                     // Dedupe deletes files — give it a preview mode. The helper text is not
                     // decoration: this switch governs deduplication only, and its old

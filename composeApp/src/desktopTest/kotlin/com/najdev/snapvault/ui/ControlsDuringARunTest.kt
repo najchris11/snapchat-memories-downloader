@@ -113,7 +113,7 @@ class ControlsDuringARunTest {
         setContent {
             SnapVaultTheme(darkMode = true) { DashboardScreen(viewModel = viewModel, onNavigateToSettings = {}) }
         }
-        val labels = arrayOf("Write Metadata (GPS + Date)", "Merge Video Overlays", "Clean Duplicate Files")
+        val labels = arrayOf("Write Metadata (GPS + Date)", "Combine photo and video overlays", "Clean Duplicate Files")
 
         switches(*labels).forEach { it.assertIsEnabled() }
 

@@ -249,7 +249,13 @@ class ZipExtractEngine(
                     var allOk = true
                     for ((destName, entryName) in planned) {
                         when (val res = extractEntry(zf, entryName, destName, outDir, staging)) {
-                            "ok", "skipped" -> extracted.add(File(outDir, destName).absolutePath)
+                            "ok" -> extracted.add(File(outDir, destName).absolutePath)
+                            "skipped" -> {
+                                // Existence is enough for non-destructive resume, but cannot
+                                // prove this archive's content survived a filename collision.
+                                allOk = false
+                                onWarn("${archive.name}: $destName already exists and was not verified — archive kept")
+                            }
                             else -> {
                                 allOk = false
                                 onWarn("${archive.name} → $destName: $res")

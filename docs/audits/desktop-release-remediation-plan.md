@@ -92,6 +92,10 @@ more once defaults are made safer, so get the defaults safe first.
   cosmetic nit.
 
 ### Task 1.4 — D02: overlay combination must not unconditionally delete originals and overwrite output
+**Maintainer decision, reconfirmed 2026-09-18:** preserve automatic source-pair cleanup
+after successful combination and metadata copy. The default-off cleanup recommendation
+below is superseded by that decision; the Dashboard now discloses permanent deletion.
+
 - **Files:** `composeApp/src/commonMain/kotlin/com/najdev/snapvault/viewmodel/DashboardViewModel.kt`
   (`runCombinePhase`, the hardcoded `deleteOriginals = true`) and
   `composeApp/src/desktopMain/kotlin/com/najdev/snapvault/downloader/OverlayCombiner.kt`.
@@ -513,6 +517,13 @@ this plan.
   and Linux window behavior are unaffected by the change (they should already be decorated —
   verify, don't assume).
 ### Batch 6 status (2026-09-17)
+
+**2026-09-18 correction:** D20's delete-as-you-go offer is disabled in production
+(`LOW_SPACE_DELETE_ENABLED = false`, commit `e6733de`). The implementation below remains
+experimental and testable, but is not available to users. Size-only verification cannot
+distinguish different content of the same size; unrecognized archive contents and history
+backup failures can also escape the deletion gate. Do not enable it until those cases and
+the durable recovery contract are resolved. Ordinary imports retain the source export ZIPs.
 
 - **D20 — landed (desktop).** `planLowSpaceImport` decides whether an import fits one archive at
   a time, smallest first, keeping the same 1 GiB processing reserve; archives on another drive

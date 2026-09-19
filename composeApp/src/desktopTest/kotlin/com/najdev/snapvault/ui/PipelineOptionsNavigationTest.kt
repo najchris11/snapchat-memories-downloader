@@ -175,7 +175,7 @@ class PipelineOptionsNavigationTest {
         const val OUTPUT_PLACEHOLDER = "Select destination folder"
         const val DOWNLOAD = "Download Memories"
         const val METADATA = "Write Metadata (GPS + Date)"
-        const val COMBINE = "Merge Video Overlays"
+        const val COMBINE = "Combine photo and video overlays"
         const val DEDUPE = "Clean Duplicate Files"
         const val DRY_RUN = "Preview duplicate removal"
         const val START = "Start Download"

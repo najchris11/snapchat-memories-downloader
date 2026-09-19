@@ -3,8 +3,9 @@ package com.najdev.snapvault.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.*
+import com.najdev.snapvault.viewmodel.DashboardViewModel
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -22,8 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.AppBuildConfig
 import com.najdev.snapvault.binaryInstallHint
-import com.najdev.snapvault.ui.theme.ElectricPurple
-import com.najdev.snapvault.ui.theme.InfoBlue
+import com.najdev.snapvault.platformSupportPageUrl
 import com.najdev.snapvault.ui.theme.SnapVaultColors
 import com.najdev.snapvault.LayoutOverride
 import com.najdev.snapvault.ThemeMode
@@ -42,6 +43,11 @@ fun SettingsScreen(
     onThemeModeChange: (ThemeMode) -> Unit,
     layoutOverride: LayoutOverride,
     onLayoutOverrideChange: (LayoutOverride) -> Unit,
+    outputFolderChangeable: Boolean = true,
+    resetOutcome: DashboardViewModel.IndexResetOutcome? = null,
+    supportPageUrl: String? = platformSupportPageUrl,
+    onOpenSupportPage: (suspend (String) -> Unit)? = null,
+    onCopySupportPage: ((String) -> Unit)? = null,
 ) {
     Column(
         modifier = Modifier
@@ -59,9 +65,9 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onBackground
             )
             Text(
-                text = "Manage system dependencies and utility preferences.",
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                text = stringResource(Res.string.set_subtitle),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
@@ -74,25 +80,11 @@ fun SettingsScreen(
                 )
 
                 // Theme mode selector
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                SettingsRow(
+                    icon = Icons.Outlined.DarkMode,
+                    title = stringResource(Res.string.set_theme_label),
+                    description = stringResource(Res.string.set_theme_description),
                 ) {
-                    Icon(
-                        Icons.Outlined.DarkMode,
-                        null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        Text(stringResource(Res.string.set_theme_label), fontSize = 13.sp)
-                        Text(
-                            "Choose between light, dark, or system default theme.",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
-                    }
                     Row(
                         modifier = Modifier
                             .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
@@ -101,24 +93,25 @@ fun SettingsScreen(
                     ) {
                         ThemeMode.values().forEach { mode ->
                             val active = themeMode == mode
-                            val label = when (mode) {
-                                ThemeMode.SYSTEM -> "System"
-                                ThemeMode.LIGHT -> "Light"
-                                ThemeMode.DARK -> "Dark"
-                            }
+                            val label = mode.label()
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(5.dp))
-                                    .background(if (active) SnapVaultColors.electricPurple.copy(alpha = 0.15f) else Color.Transparent)
-                                    .clickable { onThemeModeChange(mode) }
+                                    .background(if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent)
+                                    .selectable(
+                                        selected = active,
+                                        role = Role.RadioButton,
+                                        onClick = { onThemeModeChange(mode) },
+                                    )
+                                    .minimumInteractiveComponentSize()
                                     .padding(horizontal = 12.dp, vertical = 6.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     text = label,
-                                    fontSize = 12.sp,
+                                    style = MaterialTheme.typography.bodySmall,
                                     fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (active) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -127,25 +120,11 @@ fun SettingsScreen(
 
                 // Layout selector: force the phone (bottom-nav) or desktop (sidebar)
                 // layout, or let window width decide.
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                SettingsRow(
+                    icon = Icons.Outlined.Dashboard,
+                    title = stringResource(Res.string.set_layout_label),
+                    description = stringResource(Res.string.set_layout_description),
                 ) {
-                    Icon(
-                        Icons.Outlined.Dashboard,
-                        null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        Text("Layout", fontSize = 13.sp)
-                        Text(
-                            "Auto switches by window width; Compact forces the phone layout.",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
-                    }
                     Row(
                         modifier = Modifier
                             .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
@@ -157,16 +136,21 @@ fun SettingsScreen(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(5.dp))
-                                    .background(if (active) SnapVaultColors.electricPurple.copy(alpha = 0.15f) else Color.Transparent)
-                                    .clickable { onLayoutOverrideChange(option) }
+                                    .background(if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent)
+                                    .selectable(
+                                        selected = active,
+                                        role = Role.RadioButton,
+                                        onClick = { onLayoutOverrideChange(option) },
+                                    )
+                                    .minimumInteractiveComponentSize()
                                     .padding(horizontal = 12.dp, vertical = 6.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = option.name,
-                                    fontSize = 12.sp,
+                                    text = option.label(),
+                                    style = MaterialTheme.typography.bodySmall,
                                     fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (active) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -190,14 +174,14 @@ fun SettingsScreen(
                 ) {
                     DependencyItem(
                         name = "ExifTool",
-                        description = "GPS metadata injection",
+                        description = stringResource(Res.string.set_dep_exiftool_description),
                         status = if (hasExifTool) DependencyStatus.READY else DependencyStatus.MISSING,
                         icon = Icons.Outlined.GpsFixed,
                         modifier = Modifier.weight(1f)
                     )
                     DependencyItem(
                         name = "FFmpeg",
-                        description = "Video overlay processing",
+                        description = stringResource(Res.string.set_dep_ffmpeg_description),
                         status = if (hasFFmpeg) DependencyStatus.READY else DependencyStatus.MISSING,
                         icon = Icons.Outlined.Videocam,
                         modifier = Modifier.weight(1f)
@@ -208,21 +192,22 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = stringResource(Res.string.set_deps_refresh),
-                        fontSize = 12.sp,
-                        color = SnapVaultColors.info,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clickable { onVerifyDependencies() }.padding(vertical = 8.dp)
-                    )
+                    TextButton(onClick = onVerifyDependencies) {
+                        Text(
+                            text = stringResource(Res.string.set_deps_refresh),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = SnapVaultColors.info,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                 }
                 val hint = binaryInstallHint()
                 if ((!hasExifTool || !hasFFmpeg) && hint.isNotEmpty()) {
                     Text(
                         hint,
-                        fontSize = 11.sp,
+                        style = MaterialTheme.typography.labelSmall,
                         lineHeight = 16.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -254,11 +239,11 @@ fun SettingsScreen(
                             modifier = Modifier.size(16.dp)
                         )
                         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                            Text(stringResource(Res.string.set_reset_index_label), fontSize = 13.sp)
+                            Text(stringResource(Res.string.set_reset_index_label), style = MaterialTheme.typography.bodyMedium)
                             Text(
                                 stringResource(Res.string.set_reset_index_desc),
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -269,43 +254,49 @@ fun SettingsScreen(
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                     ) {
-                        Text(stringResource(Res.string.set_reset_index_btn), fontSize = 12.sp)
+                        Text(stringResource(Res.string.set_reset_index_btn), style = MaterialTheme.typography.bodySmall)
                     }
                 }
 
-                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                // The press used to leave no trace either way (D12). Each refusal names its fix.
+                resetOutcome?.let { outcome ->
+                    val cleared = outcome == DashboardViewModel.IndexResetOutcome.Cleared
+                    Text(
+                        stringResource(
+                            when (outcome) {
+                                DashboardViewModel.IndexResetOutcome.Cleared -> Res.string.set_reset_result_cleared
+                                DashboardViewModel.IndexResetOutcome.RunInProgress -> Res.string.set_reset_result_running
+                                DashboardViewModel.IndexResetOutcome.NoFolder -> Res.string.set_reset_result_no_folder
+                                DashboardViewModel.IndexResetOutcome.Failed -> Res.string.set_reset_result_failed
+                            }
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (cleared) SnapVaultColors.success else MaterialTheme.colorScheme.error,
+                    )
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 // Output path
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                SettingsRow(
+                    icon = Icons.Outlined.FolderOpen,
+                    title = stringResource(Res.string.set_output_path_label),
+                    description = downloadFolder ?: stringResource(Res.string.set_output_path_unset),
+                    descriptionMaxLines = 1,
                 ) {
-                    Icon(
-                        Icons.Outlined.FolderOpen,
-                        null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        Text("Output Path", fontSize = 13.sp)
-                        Text(
-                            downloadFolder ?: "Not set",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
                     TextButton(
                         onClick = onEditOutputPath,
+                        // A run captured the folder it writes to; see outputFolderChangeable.
+                        enabled = outputFolderChangeable,
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        Text("Edit", fontSize = 12.sp, color = SnapVaultColors.electricPurple, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(Res.string.set_output_path_edit), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
         }
+
+        SupportSection(supportPageUrl, onOpenSupportPage, onCopySupportPage)
 
         Spacer(Modifier.height(8.dp))
 
@@ -318,13 +309,13 @@ fun SettingsScreen(
             Icon(
                 Icons.Outlined.Info,
                 null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(13.dp)
             )
             Text(
-                "SnapVault ${AppBuildConfig.VERSION} — GPL-3.0 License",
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                stringResource(Res.string.set_licence_footer, AppBuildConfig.VERSION),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -334,7 +325,7 @@ fun SettingsScreen(
 fun SettingsCard(content: @Composable () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f),
+        color = MaterialTheme.colorScheme.surfaceContainer,
         contentColor = MaterialTheme.colorScheme.onSurface,
         shape = RoundedCornerShape(14.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
@@ -352,31 +343,50 @@ fun SettingsSectionLabel(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(7.dp)
     ) {
-        Icon(icon, null, tint = SnapVaultColors.electricPurple, modifier = Modifier.size(14.dp))
-        Text(text, fontWeight = FontWeight.Bold, color = SnapVaultColors.electricPurple, fontSize = 13.sp)
+        Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
+        Text(text, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
+/**
+ * A settings line: icon, title, explanatory line, and whatever control sits on the right.
+ *
+ * This existed and was called from nowhere while Settings hand-wrote the same layout three
+ * times. [trailing] is what it was missing — every real use has a control on the right, so
+ * without a slot for one it could not be adopted anywhere.
+ */
 @Composable
 fun SettingsRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
-    description: String
+    description: String,
+    modifier: Modifier = Modifier,
+    // The output path is a filesystem path in a fixed-width row, so it needs to truncate.
+    descriptionMaxLines: Int = Int.MAX_VALUE,
+    trailing: @Composable () -> Unit = {},
 ) {
     Row(
+        modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Icon(
             icon,
             null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(16.dp)
         )
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(title, fontSize = 13.sp)
-            Text(description, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                description,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = descriptionMaxLines,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
+        trailing()
     }
 }
 
@@ -403,15 +413,15 @@ fun DependencyItem(
             modifier = Modifier
                 .size(36.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(SnapVaultColors.electricPurple.copy(alpha = 0.1f)),
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, null, tint = SnapVaultColors.electricPurple, modifier = Modifier.size(18.dp))
+            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
         }
 
         Column(modifier = Modifier.weight(1f)) {
-            Text(name, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-            Text(description, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+            Text(name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+            Text(description, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
         Row(
@@ -426,7 +436,7 @@ fun DependencyItem(
             )
             Text(
                 if (isReady) stringResource(Res.string.set_dep_detected) else stringResource(Res.string.set_dep_missing),
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = statusColor
             )

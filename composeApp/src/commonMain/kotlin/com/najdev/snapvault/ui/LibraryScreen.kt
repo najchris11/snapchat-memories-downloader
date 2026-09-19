@@ -9,12 +9,17 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -25,6 +30,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
@@ -34,27 +49,301 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.najdev.snapvault.WindowSize
+import com.najdev.snapvault.getCachedThumbnail
+import com.najdev.snapvault.loadFullImage
+import com.najdev.snapvault.revealInFileManager
+import com.najdev.snapvault.supportsFileManager
 import com.najdev.snapvault.ioDispatcher
-import com.najdev.snapvault.loadThumbnail
 import com.najdev.snapvault.scanMediaFiles
-import com.najdev.snapvault.ui.theme.ElectricPurple
-import com.najdev.snapvault.ui.theme.InfoBlue
+import com.najdev.snapvault.ui.theme.MediaColors
 import com.najdev.snapvault.ui.theme.SnapVaultColors
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import snapchat_memories_downloader.composeapp.generated.resources.*
+
+/**
+ * Which media the Library is showing.
+ *
+ * This was a `String` holding "All", "Photos" or "Videos", with those literals driving the
+ * predicate, the tab list and the resource lookup independently — three copies of one fact,
+ * held together by nothing. [matches] is the predicate; [label] is what it is called on
+ * screen; neither can drift from the other now.
+ */
+enum class MediaFilter {
+    All,
+    Photos,
+    Videos,
+
+    // The only filter that is not about what the file is. It sits in the same strip because
+    // it answers the same question — which of these am I looking at — and because a library
+    // has exactly one axis of "show me less".
+    Favorites;
+
+    fun matches(item: LibraryItem): Boolean = when (this) {
+        All -> true
+        Photos -> item.type == "photo"
+        Videos -> item.type == "video"
+        Favorites -> item.favorited
+    }
+}
+
+@Composable
+internal fun MediaFilter.label(): String = when (this) {
+    MediaFilter.All -> stringResource(Res.string.lib_filter_all)
+    MediaFilter.Photos -> stringResource(Res.string.lib_filter_photos)
+    MediaFilter.Videos -> stringResource(Res.string.lib_filter_videos)
+    MediaFilter.Favorites -> stringResource(Res.string.lib_filter_favorites)
+}
+
+// Typographic, not copy: an em dash standing in for a statistic that has no value yet, and
+// the separator between two counts on one line. Neither is translated text.
+private const val EMPTY_STAT = "—"
+private const val STAT_SEPARATOR = " · "
+
+/**
+ * Why the Library grid has nothing to draw.
+ *
+ * These three shared one message and one (conditional) control, which made the third case
+ * read as data loss: filter a full library to Videos when it holds only photos and the screen
+ * said "No memories found".
+ */
+enum class LibraryEmptyReason { NoFolder, NoMedia, FilteredOut }
+
+/**
+ * The order the grid draws memories in.
+ *
+ * Applied here rather than in `scanMediaFiles` so that changing it does not re-read the
+ * folder, and so the scanner keeps its capture-date-over-mtime ordering as the default —
+ * which is what [Newest] is: the scan order, untouched. `LibraryItem.date` is a formatted
+ * display string, so it cannot be sorted on directly.
+ */
+enum class MediaSort {
+    Newest,
+    Oldest,
+    Largest,
+    Name;
+
+    fun applyTo(items: List<LibraryItem>): List<LibraryItem> = when (this) {
+        Newest -> items
+        Oldest -> items.reversed()
+        Largest -> items.sortedByDescending { it.fileSizeBytes }
+        // Case-insensitive: otherwise a capital letter sorts an item to the front, which
+        // reads as a broken sort rather than as ASCII ordering.
+        Name -> items.sortedBy { it.title.lowercase() }
+    }
+}
+
+@Composable
+internal fun MediaSort.label(): String = when (this) {
+    MediaSort.Newest -> stringResource(Res.string.lib_sort_newest)
+    MediaSort.Oldest -> stringResource(Res.string.lib_sort_oldest)
+    MediaSort.Largest -> stringResource(Res.string.lib_sort_largest)
+    MediaSort.Name -> stringResource(Res.string.lib_sort_name)
+}
+
+/**
+ * Sort picker. A menu rather than another tab strip: the filter row already needs ~384dp of
+ * the ~328dp a phone has, so a fourth control in it would not fit at any width.
+ */
+@Composable
+internal fun LibrarySortMenu(
+    selected: MediaSort,
+    onSelect: (MediaSort) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier) {
+        IconButton(onClick = { expanded = true }, modifier = Modifier.size(32.dp)) {
+            Icon(
+                Icons.Outlined.SwapVert,
+                contentDescription = stringResource(Res.string.lib_sort_label),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            MediaSort.entries.forEach { sort ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            sort.label(),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = if (sort == selected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (sort == selected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        )
+                    },
+                    onClick = { onSelect(sort); expanded = false },
+                )
+            }
+        }
+    }
+}
+
+/** Returns why the grid is empty, or `null` when it has something to show. */
+internal fun libraryEmptyReason(downloadFolder: String?, scanned: Int, filtered: Int): LibraryEmptyReason? = when {
+    filtered > 0 -> null
+    downloadFolder == null -> LibraryEmptyReason.NoFolder
+    scanned == 0 -> LibraryEmptyReason.NoMedia
+    else -> LibraryEmptyReason.FilteredOut
+}
+
+@Composable
+internal fun libraryEmptyMessage(reason: LibraryEmptyReason): String = when (reason) {
+    LibraryEmptyReason.NoFolder -> stringResource(Res.string.lib_empty_no_folder)
+    LibraryEmptyReason.NoMedia -> stringResource(Res.string.lib_empty_no_media)
+    LibraryEmptyReason.FilteredOut -> stringResource(Res.string.lib_empty_filtered)
+}
+
+/**
+ * The empty grid, with the way out of whichever situation caused it.
+ *
+ * Every case offers at least one control. The previous version offered one only when no
+ * folder had been chosen, so the most common way to arrive here — a folder that turned out to
+ * be wrong — was a dead end with no way to see, change or rescan the folder in question.
+ */
+@Composable
+internal fun LibraryEmptyState(
+    reason: LibraryEmptyReason,
+    downloadFolder: String?,
+    onOpenFolder: () -> Unit,
+    onRefresh: () -> Unit,
+    onClearFilters: () -> Unit,
+    modifier: Modifier = Modifier,
+    folderChangeable: Boolean = true,
+) {
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                Icons.Outlined.PhotoLibrary,
+                null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                modifier = Modifier.size(48.dp)
+            )
+            Text(
+                libraryEmptyMessage(reason),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 280.dp)
+            )
+            // Which folder is being scanned was invisible from here, so "no memories found"
+            // gave no way to tell a wrong folder from an empty one.
+            if (reason != LibraryEmptyReason.NoFolder && downloadFolder != null) {
+                Text(
+                    downloadFolder,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 280.dp)
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                when (reason) {
+                    LibraryEmptyReason.NoFolder -> EmptyStateAction(
+                        label = stringResource(Res.string.lib_select_folder),
+                        onClick = onOpenFolder,
+                        enabled = folderChangeable,
+                    )
+                    LibraryEmptyReason.NoMedia -> {
+                        EmptyStateAction(stringResource(Res.string.lib_change_folder), onOpenFolder, enabled = folderChangeable)
+                        EmptyStateAction(stringResource(Res.string.lib_refresh_action), onRefresh)
+                    }
+                    LibraryEmptyReason.FilteredOut ->
+                        EmptyStateAction(stringResource(Res.string.lib_clear_filters), onClearFilters)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyStateAction(label: String, onClick: () -> Unit, enabled: Boolean = true) {
+    TextButton(onClick = onClick, enabled = enabled) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+/**
+ * The Library header's platform actions. Empty on the mobile targets, where there is no file
+ * manager to open — see [supportsFileManager].
+ */
+@Composable
+internal fun LibraryHeaderActions(
+    downloadFolder: String?,
+    canRevealFiles: Boolean = supportsFileManager,
+    onOpenOutputFolder: (String) -> Unit = ::revealInFileManager,
+) {
+    if (downloadFolder == null || !canRevealFiles) return
+    IconButton(onClick = { onOpenOutputFolder(downloadFolder) }, modifier = Modifier.size(32.dp)) {
+        Icon(
+            Icons.Outlined.FolderOpen,
+            contentDescription = stringResource(Res.string.lib_open_output_folder),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(16.dp)
+        )
+    }
+}
+
+@Composable
+private fun InspectorAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    tint: Color? = null,
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(8.dp),
+        color = Color.Transparent,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                icon,
+                contentDescription = label,
+                tint = tint ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(14.dp)
+            )
+            Text(
+                label,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
 
 data class LibraryItem(
     val id: String,
     val date: String,
     val title: String,
     val type: String,
-    val duration: String?,
     val hasGps: Boolean,
+    // True only when an overlay has been combined into this file — it is drawn as "Combined".
+    // Scanners fill it from FileMeta.combined, not FileMeta.hasOverlay (D11).
     val hasOverlay: Boolean,
     val favorited: Boolean = false,
     val fileSizeBytes: Long = 0L
@@ -63,40 +352,88 @@ data class LibraryItem(
 @Composable
 fun LibraryScreen(
     downloadFolder: String?,
-    onOpenFolder: () -> Unit
+    onOpenFolder: () -> Unit,
+    windowSize: WindowSize = WindowSize.Expanded,
+    // False while a run is in progress: the run captured its folder (D12).
+    folderChangeable: Boolean = true,
+    // Favorites are owned by the view model, not by this screen: the write has to outlive the
+    // composition (navigating away used to cancel it) and a failed write has to be able to
+    // revert the heart and say so. Defaulted so the screen still renders standalone.
+    favoriteOverrides: Map<String, Boolean> = emptyMap(),
+    onToggleFavorite: (LibraryItem, Boolean) -> Unit = { _, _ -> },
+    onFavoritesScanned: (List<String>) -> Unit = {},
 ) {
+    // The inspector is a hard 280dp sibling column. Alongside a 160dp-minimum adaptive grid
+    // and 24dp padding it left roughly 72dp for the grid on a 400dp window — less than half
+    // of one cell — so it is Expanded-only. Everything it shows for a selected item is also
+    // in MediaPreviewDialog, which a tap already opens.
+    val showInspector = windowSize == WindowSize.Expanded
+    val compact = windowSize == WindowSize.Compact
+
     var refreshKey by remember { mutableStateOf(0) }
     // Off the UI thread: scanning stats every file in the folder, which visibly hitches
     // composition for large libraries.
-    val items by produceState(emptyList<LibraryItem>(), downloadFolder, refreshKey) {
+    val scanned by produceState(emptyList<LibraryItem>(), downloadFolder, refreshKey) {
         value = if (downloadFolder != null) {
             withContext(ioDispatcher) { scanMediaFiles(downloadFolder) }
         } else emptyList()
     }
 
-    var selectedFilter by remember { mutableStateOf("All") }
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedItem by remember { mutableStateOf<LibraryItem?>(null) }
-    var showPreview by remember { mutableStateOf(false) }
-
-    val filteredItems = remember(items, selectedFilter, searchQuery) {
-        items
-            .filter { item ->
-                when (selectedFilter) {
-                    "Photos" -> item.type == "photo"
-                    "Videos" -> item.type == "video"
-                    else -> true
-                }
-            }
-            .filter { item ->
-                searchQuery.isBlank() || item.title.contains(searchQuery, ignoreCase = true)
-            }
+    // Favorites are applied over the scan rather than triggering one. A rescan would re-stat
+    // the whole folder and decode thumbnails again to change one boolean, and the write that
+    // backs the toggle is asynchronous — so the heart would lag the press by a disk round trip.
+    val items = remember(scanned, favoriteOverrides) {
+        if (favoriteOverrides.isEmpty()) scanned
+        else scanned.map { item -> favoriteOverrides[item.id]?.let { item.copy(favorited = it) } ?: item }
     }
 
-    Row(modifier = Modifier.fillMaxSize()) {
+    // Once a scan has landed, the index on disk is the truth and an override that outlives it
+    // only masks that truth — Refresh is precisely what a user presses to ask whether a
+    // favorite saved.
+    LaunchedEffect(scanned) { onFavoritesScanned(scanned.map { it.id }) }
+
+    var selectedFilter by remember { mutableStateOf(MediaFilter.All) }
+    var selectedSort by remember { mutableStateOf(MediaSort.Newest) }
+    var searchQuery by remember { mutableStateOf("") }
+    // An index rather than the item itself: the keyboard moves the selection by position,
+    // and "the item after this one" is not a question a LibraryItem can answer.
+    var selectedIndex by remember { mutableStateOf(LIBRARY_NO_SELECTION) }
+    var showPreview by remember { mutableStateOf(false) }
+
+    val gridFocus = remember { FocusRequester() }
+    val searchFocus = remember { FocusRequester() }
+    var searchFocused by remember { mutableStateOf(false) }
+
+    val filteredItems = remember(items, selectedFilter, searchQuery, selectedSort) {
+        selectedSort.applyTo(
+            items
+                .filter(selectedFilter::matches)
+                .filter { item ->
+                    searchQuery.isBlank() || item.title.contains(searchQuery, ignoreCase = true)
+                }
+        )
+    }
+    val selectedItem = filteredItems.getOrNull(selectedIndex)
+
+    // Filtering re-indexes everything, so a held index would point at a different memory —
+    // or past the end. Dropping it is the only honest answer.
+    //
+    // Keyed on the ids rather than on `filteredItems`, because the list compares structurally
+    // and a favorite toggle changes an item's *contents* without moving it. Keying on the
+    // list itself dropped the selection on every toggle, closing the inspector out from under
+    // the press that caused it. Positions are what the index means; only those matter here.
+    val itemOrder = remember(filteredItems) { filteredItems.map { it.id } }
+    LaunchedEffect(itemOrder) { selectedIndex = LIBRARY_NO_SELECTION }
+
+    // Counted once rather than rescanned inside each chip's label.
+    val photoCount = items.count { it.type == "photo" }
+    val videoCount = items.count { it.type == "video" }
+    val gpsCount = items.count { it.hasGps }
+
+    Row(modifier = Modifier.fillMaxSize().focusSearchOnSlash(searchFocus) { searchFocused }) {
         // ── Main content ─────────────────────────────────────────────────────
         Column(
-            modifier = Modifier.weight(1f).fillMaxHeight().padding(24.dp),
+            modifier = Modifier.weight(1f).fillMaxHeight().padding(if (compact) 16.dp else 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Stats row
@@ -105,229 +442,223 @@ fun LibraryScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Scrolls rather than overflowing: four chips need more width than a phone
+                // has, and the row sits next to the refresh button.
+                Row(
+                    modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     StatChip(
                         icon = Icons.Outlined.PhotoLibrary,
-                        label = "${items.size} Memories",
-                        tint = SnapVaultColors.electricPurple
+                        label = pluralStringResource(Res.plurals.lib_memory_count, items.size, items.size),
+                        tint = MaterialTheme.colorScheme.primary
                     )
                     StatChip(
                         icon = Icons.Outlined.Image,
-                        label = "${items.count { it.type == "photo" }} Photos",
-                        tint = SnapVaultColors.electricPurple
+                        label = photoCount.let { pluralStringResource(Res.plurals.lib_photo_count, it, it) },
+                        tint = MaterialTheme.colorScheme.primary
                     )
                     StatChip(
                         icon = Icons.Outlined.Videocam,
-                        label = "${items.count { it.type == "video" }} Videos",
+                        label = videoCount.let { pluralStringResource(Res.plurals.lib_video_count, it, it) },
                         tint = SnapVaultColors.info
                     )
                     StatChip(
                         icon = Icons.Outlined.GpsFixed,
-                        label = "${items.count { it.hasGps }} with GPS",
+                        label = gpsCount.let { pluralStringResource(Res.plurals.lib_gps_chip_count, it, it) },
                         tint = SnapVaultColors.success
                     )
+                    // Total size otherwise only appears in the inspector, so without this it
+                    // would simply vanish on narrower windows.
+                    if (!showInspector && items.isNotEmpty()) {
+                        StatChip(
+                            icon = Icons.Outlined.Storage,
+                            label = formatBytes(items.sumOf { it.fileSizeBytes }),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
                 if (downloadFolder != null) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .clickable { refreshKey++ }
-                            .padding(horizontal = 8.dp, vertical = 5.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    LibraryHeaderActions(downloadFolder = downloadFolder)
+                    LibrarySortMenu(selected = selectedSort, onSelect = { selectedSort = it })
+                    IconButton(onClick = { refreshKey++ }, modifier = Modifier.size(32.dp)) {
                         Icon(
                             Icons.Outlined.Refresh,
-                            contentDescription = "Refresh library",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            contentDescription = stringResource(Res.string.lib_refresh),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(16.dp)
                         )
                     }
                 }
             }
 
-            // Filter + search bar + sorting controls
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            // Filter tabs plus search. Side by side these need about 384dp — roughly 184dp
+            // of tabs and a fixed 200dp field — which is more than Compact (~328dp) or the
+            // narrow end of Medium (~332dp, after the 220dp sidebar) can give, so the field
+            // clipped off-screen. Below Expanded they stack, and the field is flexible
+            // rather than fixed so it cannot overflow at any width.
+            if (showInspector) {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Type filter tabs
-                    Row(
-                        modifier = Modifier
-                            .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                            .padding(3.dp)
-                    ) {
-                        listOf("All", "Photos", "Videos").forEach { filter ->
-                            val active = selectedFilter == filter
-                            val label = when (filter) {
-                                "All" -> stringResource(Res.string.lib_filter_all)
-                                "Photos" -> stringResource(Res.string.lib_filter_photos)
-                                "Videos" -> stringResource(Res.string.lib_filter_videos)
-                                else -> filter
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(5.dp))
-                                    .background(if (active) SnapVaultColors.electricPurple.copy(alpha = 0.15f) else Color.Transparent)
-                                    .clickable { selectedFilter = filter }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = label,
-                                    fontSize = 12.sp,
-                                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = if (active) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
-                                )
-                            }
-                        }
-                    }
-
-                }
-
-                // Search field
-                Row(
-                    modifier = Modifier
-                        .width(200.dp)
-                        .height(32.dp)
-                        .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                        .padding(horizontal = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(
-                        Icons.Outlined.Search,
-                        null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        modifier = Modifier.size(13.dp)
+                    LibraryFilterTabs(
+                        selected = selectedFilter,
+                        onSelect = { selectedFilter = it },
                     )
-                    BasicTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        textStyle = LocalTextStyle.current.copy(
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 12.sp
-                        ),
-                        cursorBrush = SolidColor(SnapVaultColors.electricPurple),
-                        decorationBox = { inner ->
-                            if (searchQuery.isEmpty()) {
-                                Text(
-                                    stringResource(Res.string.lib_search_placeholder),
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                )
-                            }
-                            inner()
-                        }
+                    LibrarySearchField(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        focusRequester = searchFocus,
+                        onFocusChanged = { searchFocused = it },
+                        modifier = Modifier.width(200.dp),
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    LibraryFilterTabs(
+                        selected = selectedFilter,
+                        onSelect = { selectedFilter = it },
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    )
+                    LibrarySearchField(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        focusRequester = searchFocus,
+                        onFocusChanged = { searchFocused = it },
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
 
             // Grid or empty state
-            if (filteredItems.isEmpty()) {
-                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(
-                            Icons.Outlined.PhotoLibrary,
-                            null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                            modifier = Modifier.size(48.dp)
-                        )
-                        Text(
-                            stringResource(Res.string.lib_empty_state),
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            modifier = Modifier.widthIn(max = 280.dp)
-                        )
-                        if (downloadFolder == null) {
-                            TextButton(onClick = onOpenFolder) {
-                                Text(
-                                    "Select Download Folder",
-                                    fontSize = 12.sp,
-                                    color = SnapVaultColors.electricPurple,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        }
-                    }
-                }
+            val emptyReason = libraryEmptyReason(downloadFolder, items.size, filteredItems.size)
+            if (emptyReason != null) {
+                LibraryEmptyState(
+                    reason = emptyReason,
+                    downloadFolder = downloadFolder,
+                    onOpenFolder = onOpenFolder,
+                    onRefresh = { refreshKey++ },
+                    onClearFilters = { selectedFilter = MediaFilter.All; searchQuery = "" },
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    folderChangeable = folderChangeable,
+                )
             } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 160.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    items(filteredItems) { item ->
-                        MediaCard(
-                            item = item,
-                            selected = item == selectedItem,
-                            onClick = {
-                                selectedItem = item
-                                showPreview = true
-                            }
-                        )
-                    }
-                }
+                LibraryGrid(
+                    items = filteredItems,
+                    selectedIndex = selectedIndex,
+                    onSelect = { selectedIndex = it },
+                    onOpen = { selectedIndex = it; showPreview = true },
+                    compact = compact,
+                    focusRequester = gridFocus,
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
 
         if (showPreview && selectedItem != null) {
             MediaPreviewDialog(
-                item = selectedItem!!,
-                onDismiss = { showPreview = false }
+                item = selectedItem,
+                onDismiss = { showPreview = false },
+                onToggleFavorite = { onToggleFavorite(selectedItem, it) },
             )
         }
 
-        // ── Inspector panel ──────────────────────────────────────────────────
-        Surface(
-            modifier = Modifier.width(280.dp).fillMaxHeight(),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            shape = RoundedCornerShape(0.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            AnimatedContent(
-                targetState = selectedItem,
-                transitionSpec = { fadeIn() togetherWith fadeOut() },
-                label = "inspector"
-            ) { selected ->
-                if (selected != null) {
-                    InspectorItemDetail(
-                        item = selected,
-                        onPreview = { showPreview = true },
-                        onClearSelection = { selectedItem = null }
-                    )
-                } else {
-                    InspectorGlobalStats(items = items)
+        // ── Inspector panel (Expanded only) ──────────────────────────────────
+        if (showInspector) {
+            Surface(
+                modifier = Modifier.width(280.dp).fillMaxHeight(),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                shape = RoundedCornerShape(0.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                AnimatedContent(
+                    targetState = selectedItem,
+                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    label = "inspector"
+                ) { selected ->
+                    if (selected != null) {
+                        InspectorItemDetail(
+                            item = selected,
+                            onPreview = { showPreview = true },
+                            onClearSelection = { selectedIndex = LIBRARY_NO_SELECTION },
+                            onToggleFavorite = { onToggleFavorite(selected, it) },
+                        )
+                    } else {
+                        InspectorGlobalStats(items = items)
+                    }
                 }
             }
         }
     }
 }
 
+/**
+ * Where a thumbnail load has got to.
+ *
+ * A bare nullable could not tell "still loading" from "nothing can be shown", so a memory no
+ * decoder could read looked like one mid-load forever — a faint icon with no word that the
+ * file itself was fine (D19).
+ */
+internal sealed interface ThumbnailLoad {
+    data object Loading : ThumbnailLoad
+    data class Ready(val bitmap: ImageBitmap) : ThumbnailLoad
+    data object Unavailable : ThumbnailLoad
+}
+
+/**
+ * How a thumbnail is fetched, so a test can hold a load open.
+ *
+ * [ThumbnailLoad.Loading] is otherwise unobservable: it lasts exactly as long as a real decode
+ * on a real IO thread, and a test asserting the fallback has *not* appeared yet is racing that
+ * thread rather than testing anything. It won on a developer machine and lost on CI, every run.
+ */
+internal val LocalThumbnailLoader = staticCompositionLocalOf<suspend (String) -> ImageBitmap?> {
+    { path -> withContext(ioDispatcher) { getCachedThumbnail(path) } }
+}
+
 @Composable
-private fun InspectorItemDetail(
+internal fun rememberThumbnail(path: String): ThumbnailLoad {
+    val loader = LocalThumbnailLoader.current
+    val load by produceState<ThumbnailLoad>(ThumbnailLoad.Loading, path, loader) {
+        value = loader(path)
+            ?.let { ThumbnailLoad.Ready(it) }
+            ?: ThumbnailLoad.Unavailable
+    }
+    return load
+}
+
+@Composable
+private fun PreviewUnavailableLabel() {
+    Text(
+        stringResource(Res.string.lib_preview_unavailable),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+    )
+}
+
+@Composable
+internal fun InspectorItemDetail(
     item: LibraryItem,
     onPreview: () -> Unit,
-    onClearSelection: () -> Unit
+    onClearSelection: () -> Unit,
+    // Passed rather than read from `supportsFileManager` directly so the absent case is
+    // reachable in a test: on desktop that constant is true, so only the present half would
+    // ever be asserted and the mobile no-op would go unverified.
+    canRevealFiles: Boolean = supportsFileManager,
+    onReveal: (String) -> Unit = ::revealInFileManager,
+    onToggleFavorite: (Boolean) -> Unit = {},
 ) {
     val isVideo = item.type == "video"
-    val thumbnail by produceState<ImageBitmap?>(null, item.id) {
-        value = withContext(Dispatchers.Default) { loadThumbnail(item.id) }
-    }
+    val thumbnailLoad = rememberThumbnail(item.id)
+    val thumbnail = (thumbnailLoad as? ThumbnailLoad.Ready)?.bitmap
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
@@ -338,37 +669,43 @@ private fun InspectorItemDetail(
                 .fillMaxWidth()
                 .aspectRatio(1f)
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .clickable(enabled = !isVideo) { onPreview() },
+                // Was enabled = !isVideo, because the preview dialog could not show a video.
+                // It can now, so videos open from here too.
+                .clickable(role = Role.Button) { onPreview() },
             contentAlignment = Alignment.Center
         ) {
             if (thumbnail != null) {
                 Image(
-                    bitmap = thumbnail!!,
+                    bitmap = thumbnail,
                     contentDescription = item.title,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
-                // Hover hint for photos
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.2f)),
+                        .background(MediaColors.scrimHover),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.Outlined.ZoomIn,
-                        contentDescription = "Open preview",
-                        tint = Color.White.copy(alpha = 0.8f),
+                        if (isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.ZoomIn,
+                        contentDescription = stringResource(
+                            if (isVideo) Res.string.lib_play_video else Res.string.lib_open_preview
+                        ),
+                        tint = MediaColors.onMedia,
                         modifier = Modifier.size(32.dp)
                     )
                 }
             } else {
-                Icon(
-                    imageVector = if (isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.Image,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
-                    modifier = Modifier.size(48.dp)
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = if (isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.Image,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
+                        modifier = Modifier.size(48.dp)
+                    )
+                    if (thumbnailLoad == ThumbnailLoad.Unavailable) PreviewUnavailableLabel()
+                }
             }
 
             // Close / deselect
@@ -378,8 +715,8 @@ private fun InspectorItemDetail(
             ) {
                 Icon(
                     Icons.Default.Close,
-                    "Clear selection",
-                    tint = Color.White,
+                    stringResource(Res.string.lib_clear_selection),
+                    tint = MediaColors.onMedia,
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -390,14 +727,14 @@ private fun InspectorItemDetail(
                     .align(Alignment.TopStart)
                     .padding(8.dp)
                     .clip(RoundedCornerShape(100))
-                    .background(if (isVideo) SnapVaultColors.info.copy(alpha = 0.25f) else SnapVaultColors.electricPurple.copy(alpha = 0.25f))
+                    .background(if (isVideo) SnapVaultColors.info.copy(alpha = 0.25f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
                     .padding(horizontal = 8.dp, vertical = 3.dp)
             ) {
                 Text(
                     item.type.uppercase(),
-                    fontSize = 9.sp,
+                    style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
-                    color = if (isVideo) SnapVaultColors.info else SnapVaultColors.electricPurple
+                    color = if (isVideo) SnapVaultColors.info else MaterialTheme.colorScheme.primary
                 )
             }
         }
@@ -410,60 +747,88 @@ private fun InspectorItemDetail(
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(
                     item.title,
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     item.date,
-                    fontSize = 10.sp,
+                    style = MaterialTheme.typography.labelSmall,
                     fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
             // Metadata rows
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 InspectorDetailRow(
-                    label = "SIZE",
-                    value = if (item.fileSizeBytes > 0) formatBytes(item.fileSizeBytes) else "—",
-                    valueColor = SnapVaultColors.electricPurple
+                    label = stringResource(Res.string.lib_detail_size),
+                    value = if (item.fileSizeBytes > 0) formatBytes(item.fileSizeBytes) else EMPTY_STAT,
+                    valueColor = MaterialTheme.colorScheme.primary
                 )
                 InspectorDetailRow(
-                    label = "GPS",
-                    value = if (item.hasGps) "Tagged" else "No data",
-                    valueColor = if (item.hasGps) SnapVaultColors.success else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    label = stringResource(Res.string.lib_detail_gps),
+                    value = stringResource(if (item.hasGps) Res.string.lib_gps_tagged else Res.string.lib_gps_none),
+                    valueColor = if (item.hasGps) SnapVaultColors.success else MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 InspectorDetailRow(
-                    label = "OVERLAY",
-                    value = if (item.hasOverlay) "Combined" else "None",
-                    valueColor = if (item.hasOverlay) SnapVaultColors.info else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    label = stringResource(Res.string.lib_detail_overlay),
+                    value = stringResource(if (item.hasOverlay) Res.string.lib_overlay_combined else Res.string.lib_overlay_none),
+                    valueColor = if (item.hasOverlay) SnapVaultColors.info else MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                item.duration?.let {
-                    InspectorDetailRow(label = "DURATION", value = it, valueColor = MaterialTheme.colorScheme.onSurface)
-                }
             }
 
-            if (!isVideo) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                Surface(
-                    onClick = onPreview,
-                    shape = RoundedCornerShape(8.dp),
-                    color = SnapVaultColors.electricPurple.copy(alpha = 0.1f),
-                    border = BorderStroke(1.dp, SnapVaultColors.electricPurple.copy(alpha = 0.25f)),
-                    modifier = Modifier.fillMaxWidth()
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            // The label says what pressing does, not what the item currently is — that is
+            // what a button's accessible name is for, and the filled/outlined heart already
+            // carries the state visually.
+            InspectorAction(
+                icon = if (item.favorited) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                label = stringResource(
+                    if (item.favorited) Res.string.lib_favorite_remove else Res.string.lib_favorite_add
+                ),
+                onClick = { onToggleFavorite(!item.favorited) },
+                tint = if (item.favorited) MaterialTheme.colorScheme.error else null,
+            )
+
+            if (canRevealFiles) {
+                InspectorAction(
+                    icon = Icons.Outlined.FolderOpen,
+                    label = stringResource(Res.string.lib_reveal_file),
+                    onClick = { onReveal(item.id) },
+                )
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Surface(
+                onClick = onPreview,
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Outlined.ZoomIn, null, tint = SnapVaultColors.electricPurple, modifier = Modifier.size(15.dp))
-                        Text("Open Preview", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = SnapVaultColors.electricPurple)
-                    }
+                    Icon(
+                        if (isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.ZoomIn,
+                        null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Text(
+                        stringResource(
+                            if (isVideo) Res.string.lib_play_video else Res.string.lib_open_preview
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
         }
@@ -473,8 +838,8 @@ private fun InspectorItemDetail(
 @Composable
 private fun InspectorDetailRow(label: String, value: String, valueColor: Color) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
-        Text(value, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = valueColor)
+        Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = valueColor)
     }
 }
 
@@ -491,7 +856,7 @@ private fun InspectorGlobalStats(items: List<LibraryItem>) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(Icons.Outlined.Info, null, tint = SnapVaultColors.electricPurple, modifier = Modifier.size(16.dp))
+            Icon(Icons.Outlined.Info, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
             Text(
                 stringResource(Res.string.lib_inspector_title),
                 style = MaterialTheme.typography.titleSmall,
@@ -508,54 +873,56 @@ private fun InspectorGlobalStats(items: List<LibraryItem>) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                Icon(Icons.Outlined.Storage, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), modifier = Modifier.size(11.dp))
-                Text(stringResource(Res.string.lib_storage_label), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f))
+                Icon(Icons.Outlined.Storage, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(11.dp))
+                Text(stringResource(Res.string.lib_storage_label), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
-                    if (items.isEmpty()) "—" else "${items.size} file${if (items.size == 1) "" else "s"}",
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    if (items.isEmpty()) EMPTY_STAT else pluralStringResource(Res.plurals.lib_file_count, items.size, items.size),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    if (items.isEmpty()) "—" else formatBytes(totalBytes),
-                    fontSize = 10.sp,
+                    if (items.isEmpty()) EMPTY_STAT else formatBytes(totalBytes),
+                    style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
-                    color = SnapVaultColors.electricPurple
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
             if (items.isNotEmpty()) {
                 val photoCount = items.count { it.type == "photo" }
                 val videoCount = items.count { it.type == "video" }
                 Text(
-                    "$photoCount photo${if (photoCount == 1) "" else "s"} · $videoCount video${if (videoCount == 1) "" else "s"}",
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    pluralStringResource(Res.plurals.lib_photo_count, photoCount, photoCount) +
+                        STAT_SEPARATOR +
+                        pluralStringResource(Res.plurals.lib_video_count, videoCount, videoCount),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
 
-        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                Icon(Icons.Outlined.Tag, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), modifier = Modifier.size(11.dp))
-                Text(stringResource(Res.string.lib_metadata_label), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f))
+                Icon(Icons.Outlined.Tag, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(11.dp))
+                Text(stringResource(Res.string.lib_metadata_label), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             MetadataRow(
                 icon = Icons.Outlined.GpsFixed,
-                iconTint = SnapVaultColors.electricPurple,
+                iconTint = MaterialTheme.colorScheme.primary,
                 title = stringResource(Res.string.lib_gps_verified),
-                subtitle = if (items.isEmpty()) "—" else "$gpsCount item${if (gpsCount == 1) "" else "s"} tagged"
+                subtitle = if (items.isEmpty()) EMPTY_STAT else pluralStringResource(Res.plurals.lib_tagged_count, gpsCount, gpsCount)
             )
             MetadataRow(
                 icon = Icons.Outlined.Layers,
                 iconTint = SnapVaultColors.info,
                 title = stringResource(Res.string.lib_overlay_detected),
-                subtitle = if (items.isEmpty()) "—" else "$overlayCount asset${if (overlayCount == 1) "" else "s"} combined"
+                subtitle = if (items.isEmpty()) EMPTY_STAT else pluralStringResource(Res.plurals.lib_asset_count, overlayCount, overlayCount)
             )
         }
 
@@ -578,7 +945,7 @@ fun StatChip(
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Icon(icon, null, tint = tint, modifier = Modifier.size(13.dp))
-        Text(label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = tint)
+        Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = tint)
     }
 }
 
@@ -603,33 +970,77 @@ fun MetadataRow(
             Icon(icon, null, tint = iconTint, modifier = Modifier.size(15.dp))
         }
         Column {
-            Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+            Text(title, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 
 @Composable
-fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
+fun MediaPreviewDialog(
+    item: LibraryItem,
+    onDismiss: () -> Unit,
+    // Injected so the progressive load can be asserted without real files on disk. The
+    // default is the real loader, on the same dispatcher as the thumbnail path.
+    loadFull: suspend (String) -> ImageBitmap? = { path -> withContext(ioDispatcher) { loadFullImage(path) } },
+    // The dialog is the only surface reachable at every width: the inspector renders at
+    // Expanded only, so without this there is no way to favorite anything on a phone.
+    onToggleFavorite: ((Boolean) -> Unit)? = null,
+) {
     val isVideo = item.type == "video"
     val thumbnail by produceState<ImageBitmap?>(null, item.id) {
-        value = withContext(Dispatchers.Default) { loadThumbnail(item.id) }
+        // Videos are rendered by VideoPlayer, which loads its own (cached) frame.
+        value = if (isVideo) null else withContext(ioDispatcher) { getCachedThumbnail(item.id) }
     }
+
+    // Progressive, not a straight swap: the cached thumbnail is already in memory and shows
+    // immediately, then this replaces it. loadFullImage was implemented on all four targets
+    // and called from nowhere, so every photo preview was the 320px-wide cached JPEG drawn
+    // into a surface up to 860x680 — a 2.7x upscale of a recompressed thumbnail.
+    val fullImage by produceState<ImageBitmap?>(null, item.id, isVideo) {
+        value = if (isVideo) null else loadFull(item.id)
+    }
+    val preview = fullImage ?: thumbnail
+
+    // The dialog covers the whole window, so Escape has to work: without it the only exits
+    // are a click on the scrim or on the close button in the corner.
+    //
+    // The scrim takes focus on open, and that is load-bearing rather than tidiness: key
+    // events are routed along the focus path, so with nothing in the dialog focused the
+    // handler below never fires at all. Removing the focusable was tried; the test caught it.
+    val dismissFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { dismissFocus.requestFocus() }
 
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Box(
-            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.88f)).clickable { onDismiss() },
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MediaColors.scrimDialog)
+                .clickable { onDismiss() }
+                .focusRequester(dismissFocus)
+                .focusable()
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
+                        onDismiss()
+                        true
+                    } else {
+                        false
+                    }
+                },
             contentAlignment = Alignment.Center
         ) {
             Surface(
                 modifier = Modifier
                     .widthIn(max = 860.dp)
                     .heightIn(max = 680.dp)
-                    .clickable { }, // absorb clicks so the scrim handler doesn't fire
+                    // Consume taps so the scrim's dismiss handler doesn't fire. Deliberately
+                    // not clickable { }: that made the whole card focusable, gave it a ripple,
+                    // and announced it as a control that does nothing.
+                    .pointerInput(Unit) { detectTapGestures { } },
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.surface,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
@@ -640,31 +1051,31 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                            .background(Color.Black),
+                            .background(MediaColors.letterbox),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (thumbnail != null) {
-                            Image(
-                                bitmap = thumbnail!!,
+                        when {
+                            // VideoPlayer draws its own cached frame and play affordance, and
+                            // hands the file to the system player on click. It has been
+                            // implemented on every platform since the Library was written and
+                            // was never called — this spot used to read "Video preview not
+                            // available" instead.
+                            isVideo -> VideoPlayer(
+                                videoPath = item.id,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                            preview != null -> Image(
+                                bitmap = preview,
                                 contentDescription = item.title,
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Fit
                             )
-                        } else {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Icon(
-                                    if (isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.Image,
-                                    null,
-                                    tint = Color.White.copy(alpha = 0.25f),
-                                    modifier = Modifier.size(72.dp)
-                                )
-                                if (isVideo) {
-                                    Text("Video preview not available", fontSize = 13.sp, color = Color.White.copy(alpha = 0.4f))
-                                }
-                            }
+                            else -> Icon(
+                                Icons.Outlined.Image,
+                                contentDescription = null,
+                                tint = MediaColors.onMediaMuted,
+                                modifier = Modifier.size(72.dp)
+                            )
                         }
 
                         // Close button
@@ -676,10 +1087,10 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
                                 Modifier
                                     .size(28.dp)
                                     .clip(RoundedCornerShape(100))
-                                    .background(Color.Black.copy(alpha = 0.5f)),
+                                    .background(MediaColors.scrimBadge),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Default.Close, "Close", tint = Color.White, modifier = Modifier.size(14.dp))
+                                Icon(Icons.Default.Close, stringResource(Res.string.lib_close_preview), tint = MediaColors.onMedia, modifier = Modifier.size(14.dp))
                             }
                         }
                     }
@@ -694,27 +1105,44 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(item.title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(item.date, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                            Text(item.title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(item.date, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
+                            if (onToggleFavorite != null) {
+                                IconButton(onClick = { onToggleFavorite(!item.favorited) }) {
+                                    Icon(
+                                        if (item.favorited) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                        contentDescription = stringResource(
+                                            if (item.favorited) Res.string.lib_favorite_remove
+                                            else Res.string.lib_favorite_add
+                                        ),
+                                        tint = if (item.favorited) {
+                                            MaterialTheme.colorScheme.error
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                            }
                             if (item.fileSizeBytes > 0) {
-                                Text(formatBytes(item.fileSizeBytes), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SnapVaultColors.electricPurple)
+                                Text(formatBytes(item.fileSizeBytes), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                             }
                             if (item.hasGps) {
                                 Row(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(6.dp))
-                                        .background(SnapVaultColors.electricPurple.copy(alpha = 0.1f))
+                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
                                         .padding(horizontal = 7.dp, vertical = 3.dp),
                                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Outlined.GpsFixed, null, tint = SnapVaultColors.electricPurple, modifier = Modifier.size(11.dp))
-                                    Text("GPS", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = SnapVaultColors.electricPurple)
+                                    Icon(Icons.Outlined.GpsFixed, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(11.dp))
+                                    Text(stringResource(Res.string.lib_detail_gps), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                                 }
                             }
                             if (item.hasOverlay) {
@@ -727,7 +1155,7 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(Icons.Outlined.Layers, null, tint = SnapVaultColors.info, modifier = Modifier.size(11.dp))
-                                    Text("OVERLAY", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = SnapVaultColors.info)
+                                    Text(stringResource(Res.string.lib_detail_overlay), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = SnapVaultColors.info)
                                 }
                             }
                         }
@@ -741,17 +1169,20 @@ fun MediaPreviewDialog(item: LibraryItem, onDismiss: () -> Unit) {
 @Composable
 fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit = {}) {
     val isVideo = item.type == "video"
-    val thumbnail by produceState<ImageBitmap?>(null, item.id) {
-        value = withContext(Dispatchers.Default) { loadThumbnail(item.id) }
-    }
+    val thumbnailLoad = rememberThumbnail(item.id)
+    val thumbnail = (thumbnailLoad as? ThumbnailLoad.Ready)?.bitmap
 
     Card(
-        modifier = Modifier.fillMaxWidth().clickable { onClick() },
+        // `clickable` rather than a tap gesture, and that is load-bearing beyond the ripple:
+        // it makes the card focusable and takes focus on click, which is the only way arrow
+        // navigation ever starts for a mouse user. Swapping it for detectTapGestures fails
+        // two tests in LibraryKeyboardTest.
+        modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { onClick() },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(12.dp),
         border = BorderStroke(
             if (selected) 2.dp else 1.dp,
-            if (selected) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.outlineVariant
+            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
         )
     ) {
         Column {
@@ -765,7 +1196,7 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
             ) {
                 if (thumbnail != null) {
                     Image(
-                        bitmap = thumbnail!!,
+                        bitmap = thumbnail,
                         contentDescription = item.title,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
@@ -777,18 +1208,21 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                         .fillMaxSize()
                         .background(
                             androidx.compose.ui.graphics.Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.5f))
+                                colors = listOf(Color.Transparent, MediaColors.scrimBadge)
                             )
                         )
                 )
 
                 if (thumbnail == null) {
-                    Icon(
-                        imageVector = if (isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.Image,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f),
-                        modifier = Modifier.size(44.dp)
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = if (isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.Image,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f),
+                            modifier = Modifier.size(44.dp)
+                        )
+                        if (thumbnailLoad == ThumbnailLoad.Unavailable) PreviewUnavailableLabel()
+                    }
                 }
 
                 // Type badge
@@ -797,39 +1231,20 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                         .align(Alignment.TopEnd)
                         .padding(7.dp)
                         .clip(RoundedCornerShape(100))
-                        .background(if (isVideo) SnapVaultColors.info.copy(alpha = 0.2f) else SnapVaultColors.electricPurple.copy(alpha = 0.2f))
+                        .background(if (isVideo) SnapVaultColors.info.copy(alpha = 0.2f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
                         .border(
                             1.dp,
-                            if (isVideo) SnapVaultColors.info.copy(alpha = 0.3f) else SnapVaultColors.electricPurple.copy(alpha = 0.3f),
+                            if (isVideo) SnapVaultColors.info.copy(alpha = 0.3f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
                             RoundedCornerShape(100)
                         )
                         .padding(horizontal = 7.dp, vertical = 2.dp)
                 ) {
                     Text(
                         text = item.type.uppercase(),
-                        fontSize = 8.sp,
+                        style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        color = if (isVideo) SnapVaultColors.info else SnapVaultColors.electricPurple
+                        color = if (isVideo) SnapVaultColors.info else MaterialTheme.colorScheme.primary
                     )
-                }
-
-                // Duration badge
-                if (item.duration != null) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(7.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(Color.Black.copy(alpha = 0.55f))
-                            .padding(horizontal = 5.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            item.duration,
-                            fontSize = 9.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = Color.White
-                        )
-                    }
                 }
 
                 // Favorite badge
@@ -842,7 +1257,7 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                         Icon(
                             Icons.Default.Favorite,
                             null,
-                            tint = SnapVaultColors.electricPurple,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(14.dp)
                         )
                     }
@@ -858,24 +1273,180 @@ fun MediaCard(item: LibraryItem, selected: Boolean = false, onClick: () -> Unit 
                 ) {
                     Text(
                         item.date,
-                        fontSize = 9.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontFamily = FontFamily.Monospace
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        if (item.hasGps) Icon(Icons.Outlined.GpsFixed, "GPS", tint = SnapVaultColors.electricPurple, modifier = Modifier.size(11.dp))
-                        if (item.hasOverlay) Icon(Icons.Outlined.Layers, "Overlay", tint = SnapVaultColors.info, modifier = Modifier.size(11.dp))
+                        if (item.hasGps) Icon(Icons.Outlined.GpsFixed, stringResource(Res.string.lib_detail_gps), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(11.dp))
+                        if (item.hasOverlay) Icon(Icons.Outlined.Layers, stringResource(Res.string.lib_overlay_badge), tint = SnapVaultColors.info, modifier = Modifier.size(11.dp))
                     }
                 }
                 Text(
                     item.title,
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
         }
+    }
+}
+
+/**
+ * The media grid, extracted so its keyboard handling has somewhere to live — and somewhere to
+ * be tested, which inline in [LibraryScreen] it did not, since reaching it needed a real
+ * folder on disk.
+ */
+@Composable
+internal fun LibraryGrid(
+    items: List<LibraryItem>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    onOpen: (Int) -> Unit,
+    compact: Boolean,
+    focusRequester: FocusRequester,
+    modifier: Modifier = Modifier,
+) {
+    val gridState = rememberLazyGridState()
+
+    // The grid is Adaptive, so the column count only exists after layout. Items on one row
+    // share a y offset, and counting them is the only way to ask what it came out as.
+    val columns by remember(gridState) {
+        derivedStateOf {
+            val visible = gridState.layoutInfo.visibleItemsInfo
+            val topRow = visible.firstOrNull()?.offset?.y ?: return@derivedStateOf 1
+            visible.count { it.offset.y == topRow }.coerceAtLeast(1)
+        }
+    }
+
+    // Walking the selection past the visible rows has to bring it back on screen, or the
+    // keyboard moves something the user cannot see.
+    LaunchedEffect(selectedIndex) {
+        if (selectedIndex >= 0 && gridState.layoutInfo.visibleItemsInfo.none { it.index == selectedIndex }) {
+            gridState.animateScrollToItem(selectedIndex)
+        }
+    }
+
+    LazyVerticalGrid(
+        state = gridState,
+        columns = GridCells.Adaptive(minSize = if (compact) 130.dp else 160.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = modifier
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val target = libraryGridTarget(event.key, selectedIndex, items.size, columns)
+                when {
+                    target != null -> { onSelect(target); true }
+                    selectedIndex >= 0 && (event.key == Key.Enter || event.key == Key.Spacebar) -> {
+                        onOpen(selectedIndex)
+                        true
+                    }
+                    else -> false
+                }
+            }
+    ) {
+        itemsIndexed(items) { index, item ->
+            MediaCard(
+                item = item,
+                selected = index == selectedIndex,
+                onClick = { onOpen(index) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun LibraryFilterTabs(
+    selected: MediaFilter,
+    onSelect: (MediaFilter) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+            .padding(3.dp)
+    ) {
+        MediaFilter.entries.forEach { filter ->
+            val active = selected == filter
+            val label = filter.label()
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent)
+                    .selectable(
+                        selected = active,
+                        role = Role.RadioButton,
+                        onClick = { onSelect(filter) },
+                    )
+                    .minimumInteractiveComponentSize()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibrarySearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    focusRequester: FocusRequester,
+    onFocusChanged: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .height(32.dp)
+            .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Icon(
+            Icons.Outlined.Search,
+            null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(13.dp)
+        )
+        BasicTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            modifier = Modifier
+                .weight(1f)
+                .focusRequester(focusRequester)
+                .onFocusChanged { onFocusChanged(it.isFocused) },
+            singleLine = true,
+            // BasicTextField takes a whole TextStyle rather than a style + overrides, so
+            // the role is merged rather than substituted.
+            textStyle = MaterialTheme.typography.bodySmall.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+            ),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            decorationBox = { inner ->
+                if (query.isEmpty()) {
+                    Text(
+                        stringResource(Res.string.lib_search_placeholder),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                inner()
+            }
+        )
     }
 }
 

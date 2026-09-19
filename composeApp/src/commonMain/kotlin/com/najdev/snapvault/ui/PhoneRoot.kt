@@ -3,13 +3,6 @@ package com.najdev.snapvault.ui
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.outlined.Dashboard
-import androidx.compose.material.icons.outlined.PhotoLibrary
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -21,17 +14,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.LayoutOverride
 import com.najdev.snapvault.Screen
 import com.najdev.snapvault.ThemeMode
-import com.najdev.snapvault.ui.theme.SnapVaultColors
+import com.najdev.snapvault.WindowSize
 import com.najdev.snapvault.viewmodel.DashboardViewModel
+import kotlinx.coroutines.launch
 
 // Compact-width root: replaces the desktop sidebar with a bottom NavigationBar.
 // Hosts the same three screens as the expanded layout.
 @Composable
 fun PhoneRoot(
+    currentScreen: Screen,
+    onNavigate: (Screen) -> Unit,
     dashboardViewModel: DashboardViewModel,
     hasExifTool: Boolean,
     hasFFmpeg: Boolean,
@@ -41,35 +36,24 @@ fun PhoneRoot(
     layoutOverride: LayoutOverride,
     onLayoutOverrideChange: (LayoutOverride) -> Unit,
 ) {
-    var currentScreen by remember { mutableStateOf(Screen.Dashboard) }
+    // Resetting the index is a disk write under VaultIndex's lock, so it suspends.
+    val resetScope = rememberCoroutineScope()
 
     Scaffold(
         bottomBar = {
             NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
                 tonalElevation = 0.dp
             ) {
-                PhoneNavItem(
-                    label = "Dashboard",
-                    selected = currentScreen == Screen.Dashboard,
-                    selectedIcon = Icons.Filled.Dashboard,
-                    unselectedIcon = Icons.Outlined.Dashboard,
-                    onClick = { currentScreen = Screen.Dashboard },
-                )
-                PhoneNavItem(
-                    label = "Library",
-                    selected = currentScreen == Screen.Library,
-                    selectedIcon = Icons.Filled.PhotoLibrary,
-                    unselectedIcon = Icons.Outlined.PhotoLibrary,
-                    onClick = { currentScreen = Screen.Library },
-                )
-                PhoneNavItem(
-                    label = "Settings",
-                    selected = currentScreen == Screen.Settings,
-                    selectedIcon = Icons.Filled.Settings,
-                    unselectedIcon = Icons.Outlined.Settings,
-                    onClick = { currentScreen = Screen.Settings },
-                )
+                Screen.entries.forEach { screen ->
+                    PhoneNavItem(
+                        label = screen.navLabel(),
+                        selected = currentScreen == screen,
+                        selectedIcon = screen.navIconActive,
+                        unselectedIcon = screen.navIconInactive,
+                        onClick = { onNavigate(screen) },
+                    )
+                }
             }
         }
     ) { paddingValues ->
@@ -81,19 +65,31 @@ fun PhoneRoot(
             when (currentScreen) {
                 Screen.Dashboard -> DashboardScreen(
                     viewModel = dashboardViewModel,
-                    onNavigateToSettings = { currentScreen = Screen.Settings },
+                    onNavigateToSettings = { onNavigate(Screen.Settings) },
+                    hasExifTool = hasExifTool,
+                    hasFFmpeg = hasFFmpeg,
+                    windowSize = WindowSize.Compact,
                 )
                 Screen.Library -> LibraryScreen(
                     downloadFolder = dashboardViewModel.downloadFolder,
                     onOpenFolder = dashboardViewModel::pickOutputFolder,
+                    folderChangeable = dashboardViewModel.outputFolderChangeable,
+                    windowSize = WindowSize.Compact,
+                    favoriteOverrides = dashboardViewModel.favoriteOverrides,
+                    onToggleFavorite = { item, favorited ->
+                        dashboardViewModel.setFavorite(item.id, favorited)
+                    },
+                    onFavoritesScanned = dashboardViewModel::reconcileFavorites,
                 )
                 Screen.Settings -> SettingsScreen(
                     hasExifTool = hasExifTool,
                     hasFFmpeg = hasFFmpeg,
                     onVerifyDependencies = onVerifyDependencies,
                     downloadFolder = dashboardViewModel.downloadFolder,
-                    onResetIndex = { dashboardViewModel.resetVaultIndex() },
+                    onResetIndex = { resetScope.launch { dashboardViewModel.resetVaultIndex() } },
                     onEditOutputPath = { dashboardViewModel.pickOutputFolder() },
+                    outputFolderChangeable = dashboardViewModel.outputFolderChangeable,
+                    resetOutcome = dashboardViewModel.lastIndexReset,
                     themeMode = themeMode,
                     onThemeModeChange = onThemeModeChange,
                     layoutOverride = layoutOverride,
@@ -115,7 +111,7 @@ private fun androidx.compose.foundation.layout.RowScope.PhoneNavItem(
     NavigationBarItem(
         selected = selected,
         onClick = onClick,
-        label = { Text(label, fontSize = 10.sp) },
+        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
         icon = {
             Icon(
                 imageVector = if (selected) selectedIcon else unselectedIcon,
@@ -123,9 +119,9 @@ private fun androidx.compose.foundation.layout.RowScope.PhoneNavItem(
             )
         },
         colors = NavigationBarItemDefaults.colors(
-            selectedIconColor = SnapVaultColors.electricPurple,
-            selectedTextColor = SnapVaultColors.electricPurple,
-            indicatorColor = SnapVaultColors.electricPurple.copy(alpha = 0.12f)
+            selectedIconColor = MaterialTheme.colorScheme.primary,
+            selectedTextColor = MaterialTheme.colorScheme.primary,
+            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
         )
     )
 }

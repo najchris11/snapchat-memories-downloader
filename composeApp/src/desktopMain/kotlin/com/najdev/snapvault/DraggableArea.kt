@@ -21,7 +21,9 @@ val LocalAwtWindow = compositionLocalOf<Window?> { null }
 @Composable
 actual fun DraggableArea(modifier: Modifier, content: @Composable BoxScope.() -> Unit) {
     val window = LocalAwtWindow.current
-    if (window == null) {
+    // With the native title bar (macOS), that bar moves the window; making the content drag it
+    // too would move the window whenever someone dragged across the app's own top bar (D21).
+    if (window == null || !platformWindowChrome.dragFromContent) {
         Box(modifier = modifier, content = content)
         return
     }

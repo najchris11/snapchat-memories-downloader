@@ -4,9 +4,17 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import platform.Foundation.NSRecursiveLock
+import platform.Foundation.NSURL
+import platform.UIKit.UIApplication
 
 actual val isAndroidBuild: Boolean = false
+actual val platformSupportPageUrl: String? = null
 actual fun binaryInstallHint(): String = ""
+
+actual fun openUrl(url: String) {
+    val nsUrl = NSURL.URLWithString(url) ?: return
+    UIApplication.sharedApplication.openURL(nsUrl)
+}
 
 // Kotlin/Native has no thread interruption; cancellation is handled at suspension points.
 actual suspend fun <T> runInterruptibleCompat(block: () -> T): T = block()
@@ -24,3 +32,14 @@ actual class SyncLock actual constructor() {
         }
     }
 }
+
+// No user-facing file manager to reveal into on this platform; the UI hides the action
+// rather than wiring it to something that does nothing.
+actual val supportsFileManager: Boolean = false
+
+actual fun revealInFileManager(path: String) = Unit
+
+// iOS runs one instance of an app against a sandboxed, app-private directory, so there is no
+// second writer for a lock to arbitrate between. Unenforced here states that rather than
+// implying a guard that does not exist.
+actual val platformOutputDirectoryLocker: OutputDirectoryLocker = UnenforcedOutputDirectoryLocker

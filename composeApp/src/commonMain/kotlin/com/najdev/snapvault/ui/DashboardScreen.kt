@@ -6,6 +6,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -23,7 +24,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
@@ -34,32 +38,430 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.ImportMode
+import com.najdev.snapvault.WindowSize
 import com.najdev.snapvault.ZipSourceMode
+import com.najdev.snapvault.binaryInstallHint
 import com.najdev.snapvault.isAndroidBuild
-import com.najdev.snapvault.ui.theme.ElectricPurple
-import com.najdev.snapvault.ui.theme.InfoBlue
-import com.najdev.snapvault.ui.theme.SecondaryBlue
-import com.najdev.snapvault.ui.theme.TertiaryCyan
+import com.najdev.snapvault.ui.theme.LogColors
 import com.najdev.snapvault.ui.theme.SnapVaultColors
+import com.najdev.snapvault.ui.components.LowSpaceOfferDialog
 import com.najdev.snapvault.viewmodel.DashboardViewModel
+import com.najdev.snapvault.viewmodel.formatBytes
+import com.najdev.snapvault.viewmodel.PipelineOptions
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import snapchat_memories_downloader.composeapp.generated.resources.*
+
+internal fun usesCompactDashboardLayout(windowSize: WindowSize): Boolean =
+    windowSize != WindowSize.Expanded
+
+// Both steppers count to this. It was a literal 4 in the compact layout and four hand-written
+// call sites in the expanded one, which is how they were free to disagree.
+internal const val DASHBOARD_STEP_COUNT = 4
 
 @Composable
 fun DashboardScreen(
     viewModel: DashboardViewModel,
     onNavigateToSettings: () -> Unit,
+    hasExifTool: Boolean = true,
+    hasFFmpeg: Boolean = true,
+    windowSize: WindowSize = WindowSize.Expanded,
 ) {
-    // These are local UI preferences, not pipeline state
-    var runDownload by remember { mutableStateOf(true) }
-    var runMetadata by remember { mutableStateOf(true) }
-    var experimentalMetadataMatching by remember { mutableStateOf(true) }
-    var runCombine by remember { mutableStateOf(true) }
-    var runDedupe by remember { mutableStateOf(true) }
-    var dryRun by remember { mutableStateOf(false) }
+    // Owned by the view model, not remembered here: this composable leaves composition every
+    // time the user visits another screen or crosses a layout boundary, and remembered state
+    // leaves with it (D22).
+    val options = viewModel.pipelineOptions
+
+    // An import refused for space is a dead end on its own; this is the way through it, and it
+    // asks before deleting anything (D20). On the Dashboard because that is where the run the
+    // user just started was refused.
+    viewModel.lowSpaceOffer?.let { offer ->
+        LowSpaceOfferDialog(
+            archiveNames = offer.archiveNames,
+            requiredText = formatBytes(offer.requiredBytes),
+            availableText = formatBytes(offer.availableBytes),
+            reclaimableText = formatBytes(offer.reclaimableBytes),
+            onConfirm = viewModel::acceptLowSpaceOffer,
+            onDismiss = viewModel::dismissLowSpaceOffer,
+        )
+    }
+
+    if (usesCompactDashboardLayout(windowSize)) {
+        // One scrolling column. Compact cannot fit the two panels, and Medium retains the
+        // 220dp sidebar, leaving too little content width for the four-circle stepper.
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+            Column(
+                modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                DashboardControls(viewModel, options, onNavigateToSettings, hasExifTool, hasFFmpeg)
+                DashboardStatus(viewModel, compact = true)
+            }
+            Spacer(Modifier.height(16.dp))
+            DashboardActions(viewModel)
+        }
+    } else {
+        Row(
+            modifier = Modifier.fillMaxSize().padding(24.dp),
+            horizontalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            // Controls left, status right. The cards scroll; the action row below stays
+            // pinned, so Start stays reachable however tall the cards get.
+            Column(modifier = Modifier.weight(0.4f)) {
+                Column(
+                    modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    DashboardControls(viewModel, options, onNavigateToSettings, hasExifTool, hasFFmpeg)
+                }
+                Spacer(Modifier.height(16.dp))
+                DashboardActions(viewModel)
+            }
+            DashboardStatus(
+                viewModel = viewModel,
+                compact = false,
+                modifier = Modifier.weight(0.6f).fillMaxHeight(),
+            )
+        }
+    }
+}
+
+// ── Controls ─────────────────────────────────────────────────────────────────
+
+@Composable
+private fun DashboardControls(
+    viewModel: DashboardViewModel,
+    options: PipelineOptions,
+    onNavigateToSettings: () -> Unit,
+    hasExifTool: Boolean,
+    hasFFmpeg: Boolean,
+) {
+    // Android preview banner
+    if (isAndroidBuild) {
+        InlineBanner(
+            icon = Icons.Outlined.Info,
+            accent = SnapVaultColors.warning,
+            title = stringResource(Res.string.banner_android_preview_title),
+            body = stringResource(Res.string.banner_android_preview_body),
+        )
+    }
+
+    // A missing binary means a pipeline step silently does nothing, and the only
+    // place that said so — along with the install instructions — was Settings,
+    // which the Dashboard had no route to. Gated on binaryInstallHint() being
+    // non-empty, the same condition Settings uses, so this stays off on Android
+    // and iOS where neither tool applies and the banner above covers the gap.
+    val missingDeps = buildList {
+        if (!hasExifTool) add(stringResource(Res.string.banner_deps_exiftool))
+        if (!hasFFmpeg) add(stringResource(Res.string.banner_deps_ffmpeg))
+    }
+    if (missingDeps.isNotEmpty() && binaryInstallHint().isNotEmpty()) {
+        InlineBanner(
+            icon = Icons.Outlined.ErrorOutline,
+            accent = SnapVaultColors.warning,
+            title = stringResource(Res.string.banner_deps_title),
+            body = missingDeps.joinToString(" "),
+            actionLabel = stringResource(Res.string.btn_open_settings),
+            onAction = onNavigateToSettings,
+        )
+    }
+
+    // Source & Destination card
+    ControlCard {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            SectionLabel(
+                icon = Icons.Outlined.FolderOpen,
+                text = stringResource(Res.string.dash_source_title)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // ZIP first: it's the recommended path and the only mode that reads the
+                // raw export archives directly.
+                ModeToggleButton(
+                    label = stringResource(Res.string.opt_mode_zip),
+                    selected = viewModel.importMode == ImportMode.Zip,
+                    onClick = { viewModel.changeImportMode(ImportMode.Zip) },
+                    modifier = Modifier.weight(1f),
+                    enabled = !viewModel.isRunning
+                )
+                ModeToggleButton(
+                    label = stringResource(Res.string.opt_mode_legacy),
+                    selected = viewModel.importMode == ImportMode.Legacy,
+                    onClick = { viewModel.changeImportMode(ImportMode.Legacy) },
+                    modifier = Modifier.weight(1f),
+                    enabled = !viewModel.isRunning
+                )
+            }
+
+            if (viewModel.importMode == ImportMode.Zip) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    ModeToggleButton(
+                        label = stringResource(Res.string.zip_source_folder),
+                        selected = viewModel.zipSourceMode == ZipSourceMode.Folder,
+                        onClick = { viewModel.changeZipSourceMode(ZipSourceMode.Folder) },
+                        modifier = Modifier.weight(1f),
+                        enabled = !viewModel.isRunning
+                    )
+                    ModeToggleButton(
+                        label = stringResource(Res.string.zip_source_files),
+                        selected = viewModel.zipSourceMode == ZipSourceMode.MultipleFiles,
+                        onClick = { viewModel.changeZipSourceMode(ZipSourceMode.MultipleFiles) },
+                        modifier = Modifier.weight(1f),
+                        enabled = !viewModel.isRunning
+                    )
+                }
+
+                if (viewModel.zipSourceMode == ZipSourceMode.Folder) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(stringResource(Res.string.zip_folder_label), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        FilePickerBox(
+                            icon = Icons.Outlined.FolderZip,
+                            label = viewModel.zipFolder ?: stringResource(Res.string.zip_folder_placeholder),
+                            onClick = viewModel::pickZipFolder,
+                            isSelected = viewModel.zipFolder != null,
+                            enabled = !viewModel.isRunning
+                        )
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(stringResource(Res.string.zip_files_label), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (viewModel.selectedZipFiles.isNotEmpty()) {
+                                TextButton(
+                                    onClick = { viewModel.changeZipSourceMode(ZipSourceMode.MultipleFiles) },
+                                    enabled = !viewModel.isRunning,
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                ) {
+                                    Text(
+                                        stringResource(Res.string.btn_clear),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
+                            }
+                        }
+                        FilePickerBox(
+                            icon = Icons.Outlined.FolderZip,
+                            label = when (viewModel.selectedZipFiles.size) {
+                                0 -> "Select mydata~*.zip files…"
+                                1 -> viewModel.selectedZipFiles[0].substringAfterLast('/').substringAfterLast('\\')
+                                else -> "${viewModel.selectedZipFiles.size} ZIP files selected"
+                            },
+                            onClick = viewModel::pickMultipleZips,
+                            isSelected = viewModel.selectedZipFiles.isNotEmpty(),
+                            enabled = !viewModel.isRunning
+                        )
+                        if (viewModel.selectedZipFiles.size > 1) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                viewModel.selectedZipFiles.take(4).forEach { path ->
+                                    Text(
+                                        path.substringAfterLast('/').substringAfterLast('\\'),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                if (viewModel.selectedZipFiles.size > 4) {
+                                    Text(
+                                        "+ ${viewModel.selectedZipFiles.size - 4} more",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        stringResource(Res.string.dash_history_label),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    FilePickerBox(
+                        icon = Icons.Outlined.FileOpen,
+                        label = viewModel.htmlFile ?: stringResource(Res.string.dash_history_placeholder),
+                        onClick = viewModel::pickHtmlFile,
+                        isSelected = viewModel.htmlFile != null,
+                        enabled = !viewModel.isRunning
+                    )
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    stringResource(Res.string.dash_output_label),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                FilePickerBox(
+                    icon = Icons.Outlined.FolderOpen,
+                    label = viewModel.downloadFolder ?: stringResource(Res.string.dash_output_placeholder),
+                    onClick = viewModel::pickOutputFolder,
+                    isSelected = viewModel.downloadFolder != null,
+                    enabled = !viewModel.isRunning
+                )
+            }
+        }
+    }
+
+    // Pipeline options card
+    ControlCard {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable(role = Role.Button) { options.expanded = !options.expanded },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                SectionLabel(
+                    icon = Icons.Outlined.AccountTree,
+                    text = stringResource(Res.string.dash_pipeline_title)
+                )
+                Icon(
+                    if (options.expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            AnimatedVisibility(visible = options.expanded) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    // A run copies these values when it starts, so while one is in progress a
+                    // switch that still moves changes nothing — turning combination off mid-run
+                    // looked like it had stopped the step that deletes originals (D12).
+                    val editable = !viewModel.isRunning
+                    if (viewModel.importMode == ImportMode.Legacy) {
+                        PipelineItem(Icons.Outlined.CloudDownload, stringResource(Res.string.opt_download_memories), options.runDownload, enabled = editable) { options.runDownload = it }
+                    }
+                    val isZipMode = viewModel.importMode != ImportMode.Legacy
+                    // A position written into a file travels with every copy shared from it, so
+                    // say so under whichever switch is the one writing it — and only while it
+                    // is: date-only ZIP metadata writes no location (D18).
+                    val gpsDisclosure = stringResource(Res.string.opt_gps_disclosure)
+                    PipelineItem(
+                        icon = if (isZipMode) Icons.Outlined.CalendarMonth else Icons.Outlined.GpsFixed,
+                        label = if (isZipMode) stringResource(Res.string.opt_write_date_metadata) else stringResource(Res.string.opt_inject_gps),
+                        checked = options.runMetadata,
+                        helperText = gpsDisclosure.takeIf { !isZipMode && options.runMetadata },
+                        enabled = editable,
+                        onCheckedChange = { options.runMetadata = it }
+                    )
+                    AnimatedVisibility(visible = isZipMode && options.runMetadata) {
+                        PipelineItem(
+                            Icons.Outlined.Info,
+                            stringResource(Res.string.opt_precise_matching),
+                            options.preciseMatching,
+                            helperText = gpsDisclosure.takeIf { options.preciseMatching },
+                            enabled = editable,
+                        ) { options.preciseMatching = it }
+                    }
+                    PipelineItem(
+                        Icons.Outlined.Layers,
+                        stringResource(Res.string.opt_combine_overlays),
+                        options.runCombine,
+                        helperText = stringResource(Res.string.opt_combine_cleanup_helper).takeIf { options.runCombine },
+                        enabled = editable,
+                    ) { options.runCombine = it }
+                    PipelineItem(Icons.Outlined.AutoDelete, stringResource(Res.string.opt_clean_duplicates), options.runDedupe, enabled = editable) { options.runDedupe = it }
+                    // Dedupe deletes files — give it a preview mode. The helper text is not
+                    // decoration: this switch governs deduplication only, and its old
+                    // "nothing deleted" wording read as a promise about the whole run (D09).
+                    AnimatedVisibility(visible = options.runDedupe) {
+                        PipelineItem(
+                            Icons.Outlined.Visibility,
+                            stringResource(Res.string.opt_dedupe_dry_run),
+                            options.dryRun,
+                            helperText = stringResource(Res.string.opt_dedupe_dry_run_helper),
+                            enabled = editable,
+                        ) { options.dryRun = it }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── Action row ───────────────────────────────────────────────────────────────
+
+@Composable
+private fun DashboardActions(viewModel: DashboardViewModel) {
+    // Action buttons
+    val canStart = viewModel.downloadFolder != null && when (viewModel.importMode) {
+        ImportMode.Zip -> when (viewModel.zipSourceMode) {
+            ZipSourceMode.Folder -> viewModel.zipFolder != null
+            ZipSourceMode.MultipleFiles -> viewModel.selectedZipFiles.isNotEmpty()
+        }
+        ImportMode.Legacy -> viewModel.htmlFile != null
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Button(
+            onClick = { viewModel.startSync() },
+            enabled = !viewModel.isRunning && canStart,
+            modifier = Modifier.weight(1f).height(52.dp),
+            shape = RoundedCornerShape(10.dp),
+            // No colour override: primary is the brand violet, so the default container is
+            // already right and contentColor resolves to onPrimary rather than to whatever
+            // LocalContentColor happens to be.
+        ) {
+            Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(Res.string.btn_start_sync), fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleMedium)
+        }
+
+        Surface(
+            onClick = viewModel::stopSync,
+            enabled = viewModel.isRunning,
+            color = if (viewModel.isRunning) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surfaceContainerLowest,
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.size(52.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Default.Stop,
+                    contentDescription = stringResource(Res.string.btn_stop),
+                    tint = if (viewModel.isRunning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                )
+            }
+        }
+    }
+}
+
+// ── Status panel ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun DashboardStatus(
+    viewModel: DashboardViewModel,
+    compact: Boolean,
+    modifier: Modifier = Modifier,
+) {
     var logsExpanded by remember { mutableStateOf(false) }
-    var pipelineExpanded by remember { mutableStateOf(false) }
     var logsCopied by remember { mutableStateOf(false) }
 
     @Suppress("DEPRECATION")
@@ -72,481 +474,174 @@ fun DashboardScreen(
         }
     }
 
-    Row(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        horizontalArrangement = Arrangement.spacedBy(24.dp)
+    Surface(
+        modifier = if (compact) modifier.fillMaxWidth() else modifier,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        // ── Left column: controls (40%) ──────────────────────────────────────
         Column(
-            modifier = Modifier.weight(0.4f).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier = (if (compact) Modifier.fillMaxWidth() else Modifier.fillMaxSize())
+                .padding(20.dp)
         ) {
-            // Android preview banner
-            if (isAndroidBuild) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(SnapVaultColors.warning.copy(alpha = 0.12f))
-                        .border(1.dp, SnapVaultColors.warning.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Icon(
-                        Icons.Outlined.Info,
-                        contentDescription = null,
-                        tint = SnapVaultColors.warning,
-                        modifier = Modifier.size(15.dp).padding(top = 1.dp)
-                    )
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(
-                            "Android Preview",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SnapVaultColors.warning
-                        )
-                        Text(
-                            "Video overlay combining is not yet implemented on Android. ZIP extraction and date/GPS tagging for images work.",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
-                    }
-                }
-            }
+    // The four-circle stepper needs roughly 270dp (4 x 30dp circles, 3 x 36dp dividers, plus
+    // labels). Below that it squashes, so compact gets a single-line equivalent instead.
+    if (compact) {
+        CompactStepper(currentStep = viewModel.currentStep, hasWarnings = viewModel.hasWarnings)
+    } else {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            StepItem(1, stringResource(Res.string.dash_step_setup), viewModel.currentStep == 0, viewModel.currentStep > 0, Icons.Outlined.Edit)
+            StepperDivider(viewModel.currentStep > 0)
+            StepItem(2, stringResource(Res.string.dash_step_syncing), viewModel.currentStep == 1, viewModel.currentStep > 1, Icons.Outlined.CloudSync)
+            StepperDivider(viewModel.currentStep > 1)
+            StepItem(3, stringResource(Res.string.dash_step_processing), viewModel.currentStep == 2, viewModel.currentStep > 2, Icons.Outlined.AutoFixHigh)
+            StepperDivider(viewModel.currentStep > 2)
+            StepItem(4, stringResource(Res.string.dash_step_complete), viewModel.currentStep == 3, viewModel.currentStep > 3, Icons.Outlined.TaskAlt, warning = viewModel.hasWarnings)
+        }
+    }
 
-            // Source & Destination card
-            ControlCard {
-                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    SectionLabel(
-                        icon = Icons.Outlined.FolderOpen,
-                        text = stringResource(Res.string.dash_source_title)
-                    )
+    // A weight() spacer needs a bounded height. In the compact layout this panel sits inside
+    // a verticalScroll, where height is infinite, so it gets fixed spacing instead.
+    if (compact) Spacer(Modifier.height(20.dp)) else Spacer(Modifier.weight(1f))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        ModeToggleButton(
-                            label = "Legacy (HTML/JSON)",
-                            selected = viewModel.importMode == ImportMode.Legacy,
-                            onClick = { viewModel.changeImportMode(ImportMode.Legacy) },
-                            modifier = Modifier.weight(1f),
-                            enabled = !viewModel.isRunning
-                        )
-                        ModeToggleButton(
-                            label = "ZIP Import",
-                            selected = viewModel.importMode == ImportMode.Zip,
-                            onClick = { viewModel.changeImportMode(ImportMode.Zip) },
-                            modifier = Modifier.weight(1f),
-                            enabled = !viewModel.isRunning
-                        )
-                    }
+    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        PipelineProgressRing(
+            progress = viewModel.progress,
+            indeterminate = viewModel.indeterminate,
+        )
+    }
 
-                    if (viewModel.importMode == ImportMode.Zip) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            ModeToggleButton(
-                                label = "ZIP Folder",
-                                selected = viewModel.zipSourceMode == ZipSourceMode.Folder,
-                                onClick = { viewModel.changeZipSourceMode(ZipSourceMode.Folder) },
-                                modifier = Modifier.weight(1f),
-                                enabled = !viewModel.isRunning
-                            )
-                            ModeToggleButton(
-                                label = "Pick Files",
-                                selected = viewModel.zipSourceMode == ZipSourceMode.MultipleFiles,
-                                onClick = { viewModel.changeZipSourceMode(ZipSourceMode.MultipleFiles) },
-                                modifier = Modifier.weight(1f),
-                                enabled = !viewModel.isRunning
-                            )
-                        }
+    Spacer(Modifier.height(14.dp))
 
-                        if (viewModel.zipSourceMode == ZipSourceMode.Folder) {
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("ZIP Export Folder", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                FilePickerBox(
-                                    icon = Icons.Outlined.FolderZip,
-                                    label = viewModel.zipFolder ?: "Select folder containing mydata~*.zip files",
-                                    onClick = viewModel::pickZipFolder,
-                                    isSelected = viewModel.zipFolder != null,
-                                    enabled = !viewModel.isRunning
-                                )
-                            }
-                        } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("ZIP Files", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    if (viewModel.selectedZipFiles.isNotEmpty()) {
-                                        Text(
-                                            "Clear",
-                                            fontSize = 11.sp,
-                                            color = SnapVaultColors.electricPurple.copy(alpha = if (viewModel.isRunning) 0.5f else 1f),
-                                            fontWeight = FontWeight.SemiBold,
-                                            modifier = Modifier.clickable(enabled = !viewModel.isRunning) {
-                                                viewModel.changeZipSourceMode(ZipSourceMode.MultipleFiles)
-                                            }
-                                        )
-                                    }
-                                }
-                                FilePickerBox(
-                                    icon = Icons.Outlined.FolderZip,
-                                    label = when (viewModel.selectedZipFiles.size) {
-                                        0 -> "Select mydata~*.zip files…"
-                                        1 -> viewModel.selectedZipFiles[0].substringAfterLast('/').substringAfterLast('\\')
-                                        else -> "${viewModel.selectedZipFiles.size} ZIP files selected"
-                                    },
-                                    onClick = viewModel::pickMultipleZips,
-                                    isSelected = viewModel.selectedZipFiles.isNotEmpty(),
-                                    enabled = !viewModel.isRunning
-                                )
-                                if (viewModel.selectedZipFiles.size > 1) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-                                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                                    ) {
-                                        viewModel.selectedZipFiles.take(4).forEach { path ->
-                                            Text(
-                                                path.substringAfterLast('/').substringAfterLast('\\'),
-                                                fontSize = 10.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
-                                        if (viewModel.selectedZipFiles.size > 4) {
-                                            Text(
-                                                "+ ${viewModel.selectedZipFiles.size - 4} more",
-                                                fontSize = 10.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                stringResource(Res.string.dash_history_label),
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            FilePickerBox(
-                                icon = Icons.Outlined.FileOpen,
-                                label = viewModel.htmlFile ?: stringResource(Res.string.dash_history_placeholder),
-                                onClick = viewModel::pickHtmlFile,
-                                isSelected = viewModel.htmlFile != null,
-                                enabled = !viewModel.isRunning
-                            )
-                        }
-                    }
+    Text(
+        viewModel.progressText.ifEmpty { stringResource(Res.string.status_idle) },
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.SemiBold,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth()
+    )
 
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            stringResource(Res.string.dash_output_label),
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        FilePickerBox(
-                            icon = Icons.Outlined.FolderOpen,
-                            label = viewModel.downloadFolder ?: stringResource(Res.string.dash_output_placeholder),
-                            onClick = viewModel::pickOutputFolder,
-                            isSelected = viewModel.downloadFolder != null,
-                            enabled = !viewModel.isRunning
-                        )
-                    }
-                }
-            }
+    // A run can finish having reported failures. Without this the only signal is
+    // step 4's circle turning amber, which reads as a slightly different success.
+    AnimatedVisibility(visible = viewModel.hasWarnings) {
+        Box(modifier = Modifier.padding(top = 12.dp)) {
+            RunOutcomeBanner(
+                failureCount = viewModel.failureCount,
+                warningCount = viewModel.warningCount,
+                onViewLog = { logsExpanded = true },
+            )
+        }
+    }
 
-            // Pipeline options card
-            ControlCard {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth()
-                            .clip(RoundedCornerShape(6.dp))
-                            .clickable { pipelineExpanded = !pipelineExpanded },
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        SectionLabel(
-                            icon = Icons.Outlined.AccountTree,
-                            text = stringResource(Res.string.dash_pipeline_title)
-                        )
-                        Icon(
-                            if (pipelineExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                    AnimatedVisibility(visible = pipelineExpanded) {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            if (viewModel.importMode == ImportMode.Legacy) {
-                                PipelineItem(Icons.Outlined.CloudDownload, stringResource(Res.string.opt_download_memories), runDownload) { runDownload = it }
-                            }
-                            val isZipMode = viewModel.importMode != ImportMode.Legacy
-                            PipelineItem(
-                                icon = if (isZipMode) Icons.Outlined.CalendarMonth else Icons.Outlined.GpsFixed,
-                                label = if (isZipMode) stringResource(Res.string.opt_write_date_metadata) else stringResource(Res.string.opt_inject_gps),
-                                checked = runMetadata,
-                                onCheckedChange = { runMetadata = it }
-                            )
-                            AnimatedVisibility(visible = isZipMode && runMetadata) {
-                                Box(modifier = Modifier.padding(start = 26.dp)) {
-                                    PipelineItem(
-                                        Icons.Outlined.Info,
-                                        "Precise time + GPS matching (experimental, can be turned off)",
-                                        experimentalMetadataMatching
-                                    ) { experimentalMetadataMatching = it }
-                                }
-                            }
-                            PipelineItem(Icons.Outlined.Layers, stringResource(Res.string.opt_combine_overlays), runCombine) { runCombine = it }
-                            PipelineItem(Icons.Outlined.AutoDelete, stringResource(Res.string.opt_clean_duplicates), runDedupe) { runDedupe = it }
-                            // Dedupe deletes files — give it a preview mode.
-                            AnimatedVisibility(visible = runDedupe) {
-                                Box(modifier = Modifier.padding(start = 26.dp)) {
-                                    PipelineItem(
-                                        Icons.Outlined.Visibility,
-                                        stringResource(Res.string.opt_dedupe_dry_run),
-                                        dryRun
-                                    ) { dryRun = it }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+    Spacer(Modifier.height(10.dp))
 
-            Spacer(Modifier.height(16.dp))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MetricChip(viewModel.speedText)
+            MetricChip(viewModel.etaText)
+        }
+    }
 
-            // Action buttons
-            val canStart = viewModel.downloadFolder != null && when (viewModel.importMode) {
-                ImportMode.Zip -> when (viewModel.zipSourceMode) {
-                    ZipSourceMode.Folder -> viewModel.zipFolder != null
-                    ZipSourceMode.MultipleFiles -> viewModel.selectedZipFiles.isNotEmpty()
-                }
-                ImportMode.Legacy -> viewModel.htmlFile != null
-            }
+    if (compact) Spacer(Modifier.height(16.dp)) else Spacer(Modifier.weight(1f))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Button(
-                    onClick = { viewModel.startSync(runDownload, runMetadata, experimentalMetadataMatching, runCombine, runDedupe, dryRun) },
-                    enabled = !viewModel.isRunning && canStart,
-                    modifier = Modifier.weight(1f).height(52.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = SnapVaultColors.electricPurple)
-                ) {
-                    Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(Res.string.btn_start_sync), fontWeight = FontWeight.Black, fontSize = 15.sp)
-                }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    Spacer(Modifier.height(10.dp))
 
-                Surface(
-                    onClick = viewModel::stopSync,
-                    enabled = viewModel.isRunning,
-                    color = if (viewModel.isRunning) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surfaceContainerLowest,
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.size(52.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.Default.Stop,
-                            contentDescription = stringResource(Res.string.btn_stop),
-                            tint = if (viewModel.isRunning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                        )
-                    }
-                }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(6.dp))
+                .clickable(role = Role.Button) { logsExpanded = !logsExpanded }
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(
+                if (logsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(14.dp)
+            )
+            Text(stringResource(Res.string.log_view_logs), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (viewModel.logs.isNotEmpty() && !logsExpanded) {
+                Text(
+                    viewModel.logs.last(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
 
-        // ── Right column: status-first layout (60%) ──────────────────────────
+        if (viewModel.logs.isNotEmpty()) {
+            IconButton(
+                onClick = {
+                    @Suppress("DEPRECATION")
+                    clipboardManager.setText(
+                        AnnotatedString(viewModel.supportLogText())
+                    )
+                    logsCopied = true
+                    logScope.launch {
+                        kotlinx.coroutines.delay(2000)
+                        logsCopied = false
+                    }
+                },
+                modifier = Modifier.size(32.dp),
+            ) {
+                if (logsCopied) {
+                    Text(
+                        stringResource(Res.string.status_copied),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SnapVaultColors.success,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                } else {
+                    Icon(
+                        Icons.Outlined.ContentCopy,
+                        contentDescription = stringResource(Res.string.btn_copy_logs),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(13.dp)
+                    )
+                }
+            }
+        }
+    }
+
+    AnimatedVisibility(visible = logsExpanded) {
         Surface(
-            modifier = Modifier.weight(0.6f).fillMaxHeight(),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f),
-            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth().height(200.dp).padding(top = 8.dp),
+            color = LogColors.surface,
+            shape = RoundedCornerShape(8.dp),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(20.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            SelectionContainer {
+                LazyColumn(
+                    state = logListState,
+                    modifier = Modifier.fillMaxSize().padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
-                    StepItem(1, stringResource(Res.string.dash_step_setup), viewModel.currentStep == 0, viewModel.currentStep > 0, Icons.Outlined.Edit)
-                    StepperDivider(viewModel.currentStep > 0)
-                    StepItem(2, stringResource(Res.string.dash_step_syncing), viewModel.currentStep == 1, viewModel.currentStep > 1, Icons.Outlined.CloudSync)
-                    StepperDivider(viewModel.currentStep > 1)
-                    StepItem(3, stringResource(Res.string.dash_step_processing), viewModel.currentStep == 2, viewModel.currentStep > 2, Icons.Outlined.AutoFixHigh)
-                    StepperDivider(viewModel.currentStep > 2)
-                    StepItem(4, stringResource(Res.string.dash_step_complete), viewModel.currentStep == 3, viewModel.currentStep > 3, Icons.Outlined.TaskAlt, warning = viewModel.hasWarnings)
-                }
-
-                Spacer(Modifier.weight(1f))
-
-                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Box(modifier = Modifier.size(110.dp), contentAlignment = Alignment.Center) {
-                        if (viewModel.indeterminate) {
-                            // Real work is happening but has no per-item signal to report
-                            // (post-combine date fallback, dedupe scanning) — an animated
-                            // indeterminate ring, not a percentage that would otherwise sit
-                            // at a misleadingly precise 0%.
-                            CircularProgressIndicator(
-                                modifier = Modifier.fillMaxSize(),
-                                color = SnapVaultColors.electricPurple,
-                                trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                                strokeWidth = 9.dp
-                            )
-                        } else {
-                            CircularProgressIndicator(
-                                progress = { viewModel.progress.coerceIn(0f, 1f) },
-                                modifier = Modifier.fillMaxSize(),
-                                color = SnapVaultColors.electricPurple,
-                                trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                                strokeWidth = 9.dp
-                            )
-                            Text(
-                                "${(viewModel.progress * 100).toInt()}%",
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(14.dp))
-
-                Text(
-                    viewModel.progressText.ifEmpty { stringResource(Res.string.status_idle) },
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(Modifier.height(10.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        MetricChip(viewModel.speedText)
-                        MetricChip(viewModel.etaText)
-                    }
-                }
-
-                Spacer(Modifier.weight(1f))
-
-                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                Spacer(Modifier.height(10.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(6.dp))
-                            .clickable { logsExpanded = !logsExpanded }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            if (logsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text("View Logs", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
-                        if (viewModel.logs.isNotEmpty() && !logsExpanded) {
-                            Text(
-                                viewModel.logs.last(),
-                                fontSize = 10.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-
-                    if (viewModel.logs.isNotEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .clickable {
-                                    @Suppress("DEPRECATION")
-                                    clipboardManager.setText(
-                                        AnnotatedString(viewModel.logs.joinToString("\n"))
-                                    )
-                                    logsCopied = true
-                                    logScope.launch {
-                                        kotlinx.coroutines.delay(2000)
-                                        logsCopied = false
-                                    }
-                                }
-                                .padding(horizontal = 6.dp, vertical = 3.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (logsCopied) {
-                                Text("Copied!", fontSize = 10.sp, color = SnapVaultColors.success, fontWeight = FontWeight.SemiBold)
-                            } else {
-                                Icon(
-                                    Icons.Outlined.ContentCopy,
-                                    contentDescription = "Copy logs",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                    modifier = Modifier.size(13.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                AnimatedVisibility(visible = logsExpanded) {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth().height(200.dp).padding(top = 8.dp),
-                        color = Color.Black.copy(alpha = 0.45f),
-                        shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                    ) {
-                        SelectionContainer {
-                            LazyColumn(
-                                state = logListState,
-                                modifier = Modifier.fillMaxSize().padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(3.dp)
-                            ) {
-                                items(viewModel.logs) { log -> TerminalLogLine(log) }
-                                if (viewModel.isRunning) {
-                                    item {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text("$ ", color = ElectricPurple, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-                                            Text("running_pipeline", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-                                            BlinkingCursor()
-                                        }
-                                    }
-                                }
+                    items(viewModel.logs) { log -> TerminalLogLine(log) }
+                    if (viewModel.isRunning) {
+                        item {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("$ ", color = LogColors.prompt, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                                Text("running_pipeline", color = LogColors.onSurface, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                                BlinkingCursor()
                             }
                         }
                     }
@@ -554,9 +649,90 @@ fun DashboardScreen(
             }
         }
     }
+        }
+    }
 }
 
 // ── Shared sub-components ────────────────────────────────────────────────────
+
+/**
+ * Tinted advisory strip used for every inline Dashboard notice — the Android feature-gap
+ * banner, a missing-dependency warning, and a finished run that reported failures — so all
+ * three read as the same kind of message rather than three bespoke layouts.
+ */
+/**
+ * The headline for a run that finished with something to report.
+ *
+ * A run can now finish with warnings and no failures (D10) — originals kept, an archive left
+ * unextracted — and the old banner could only say "N step(s) failed", which would have read
+ * "0 step(s) failed" over exactly those runs. Failures lead when there are any; the log carries
+ * the rest either way.
+ */
+@Composable
+internal fun RunOutcomeBanner(failureCount: Int, warningCount: Int, onViewLog: () -> Unit) {
+    val failed = failureCount > 0
+    InlineBanner(
+        icon = Icons.Outlined.WarningAmber,
+        accent = SnapVaultColors.warning,
+        title = if (failed) {
+            pluralStringResource(Res.plurals.warn_run_failures_title, failureCount, failureCount)
+        } else {
+            pluralStringResource(Res.plurals.warn_run_warnings_title, warningCount, warningCount)
+        },
+        body = stringResource(if (failed) Res.string.warn_run_failures_body else Res.string.warn_run_warnings_body),
+        actionLabel = stringResource(Res.string.btn_view_log),
+        onAction = onViewLog,
+    )
+}
+
+@Composable
+fun InlineBanner(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    accent: Color,
+    title: String,
+    body: String? = null,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(accent.copy(alpha = 0.12f))
+            .border(1.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = accent,
+            modifier = Modifier.size(15.dp).padding(top = 1.dp)
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(title, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = accent)
+            if (body != null) {
+                Text(
+                    body,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        if (actionLabel != null && onAction != null) {
+            TextButton(
+                onClick = onAction,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Text(actionLabel, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = accent)
+            }
+        }
+    }
+}
 
 @Composable
 private fun MetricChip(text: String) {
@@ -567,7 +743,7 @@ private fun MetricChip(text: String) {
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(4.dp))
             .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
-        Text(text, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
+        Text(text, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontFamily = FontFamily.Monospace)
     }
 }
 
@@ -578,7 +754,7 @@ fun SectionLabel(icon: androidx.compose.ui.graphics.vector.ImageVector, text: St
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(13.dp))
-        Text(text = text, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, letterSpacing = 0.8.sp)
+        Text(text = text, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, letterSpacing = 0.8.sp)
     }
 }
 
@@ -586,7 +762,7 @@ fun SectionLabel(icon: androidx.compose.ui.graphics.vector.ImageVector, text: St
 fun ControlCard(content: @Composable () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f),
+        color = MaterialTheme.colorScheme.surfaceContainer,
         shape = RoundedCornerShape(14.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
@@ -609,7 +785,7 @@ fun FilePickerBox(
             .height(42.dp)
             .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-            .clickable(enabled = enabled) { onClick() }
+            .clickable(enabled = enabled, role = Role.Button) { onClick() }
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -621,7 +797,7 @@ fun FilePickerBox(
         )
         Text(
             text = label,
-            fontSize = 12.sp,
+            style = MaterialTheme.typography.bodySmall,
             color = if (isSelected) {
                 MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f * contentAlpha)
             } else {
@@ -633,8 +809,8 @@ fun FilePickerBox(
         )
         Text(
             stringResource(Res.string.browse_btn),
-            fontSize = 10.sp,
-            color = SnapVaultColors.electricPurple.copy(alpha = contentAlpha),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary.copy(alpha = contentAlpha),
             fontWeight = FontWeight.Bold
         )
     }
@@ -645,37 +821,54 @@ fun PipelineItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     checked: Boolean,
+    // For an option whose label cannot carry its own caveat. The dry-run switch needs one:
+    // it reads like a global promise but governs only the deduplication step (D09).
+    // Declared before onCheckedChange so existing trailing-lambda call sites still bind.
+    helperText: String? = null,
+    enabled: Boolean = true,
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
-            .clickable { onCheckedChange(!checked) }
+            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
+            .minimumInteractiveComponentSize()
             .padding(vertical = 6.dp, horizontal = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(icon, null, tint = if (checked) SnapVaultColors.electricPurple else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
-            Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(icon, null, tint = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+            Column {
+                Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                if (helperText != null) {
+                    Text(
+                        helperText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange,
+            // Null: the row above owns both the interaction and the semantics, so the
+            // Switch must not announce itself as a second control for the same option.
+            onCheckedChange = null,
+            enabled = enabled,
             colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = SnapVaultColors.electricPurple,
-                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                uncheckedThumbColor = MaterialTheme.colorScheme.outline,
                 uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
             )
         )
     }
-}
-
-@Composable
-fun TerminalDot(color: Color) {
-    Box(Modifier.size(10.dp).clip(RoundedCornerShape(100)).background(color.copy(alpha = 0.6f)))
 }
 
 @Composable
@@ -689,7 +882,7 @@ fun BlinkingCursor() {
         ),
         label = "blink"
     )
-    Box(Modifier.padding(start = 3.dp).width(7.dp).height(14.dp).alpha(alpha).background(SnapVaultColors.electricPurple))
+    Box(Modifier.padding(start = 3.dp).width(7.dp).height(14.dp).alpha(alpha).background(MaterialTheme.colorScheme.primary))
 }
 
 @Composable
@@ -710,20 +903,84 @@ fun TerminalLogLine(log: String) {
             Text(
                 text = "[$tag]",
                 color = when (tag) {
-                    "SUCCESS", "DL", "DEDUPE" -> SnapVaultColors.success
-                    "ERROR" -> SnapVaultColors.error
-                    "WARN" -> SnapVaultColors.warning
-                    "META" -> SnapVaultColors.info
-                    "SKIP" -> SecondaryBlue.copy(alpha = 0.85f)
-                    else -> SnapVaultColors.info
+                    "SUCCESS", "DL", "DEDUPE" -> LogColors.success
+                    "ERROR" -> LogColors.error
+                    "WARN" -> LogColors.warning
+                    "META" -> LogColors.info
+                    "SKIP" -> LogColors.muted
+                    else -> LogColors.info
                 },
                 fontFamily = FontFamily.Monospace,
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold
             )
         }
-        Text(text = content, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+        Text(text = content, color = LogColors.onSurface, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.labelSmall)
     }
+}
+
+/**
+ * The overall-progress ring, extracted from the status panel so its semantics can be
+ * asserted. Material's indicators publish a [androidx.compose.ui.semantics.ProgressBarRangeInfo]
+ * of their own; what they cannot supply is what the bar is measuring, so the label is set here.
+ */
+@Composable
+internal fun PipelineProgressRing(
+    progress: Float,
+    indeterminate: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val label = stringResource(Res.string.dash_progress_ring)
+    Box(modifier = modifier.size(110.dp), contentAlignment = Alignment.Center) {
+        if (indeterminate) {
+            // Real work is happening but has no per-item signal to report (post-combine date
+            // fallback, dedupe scanning) — an animated indeterminate ring, not a percentage
+            // that would otherwise sit at a misleadingly precise 0%.
+            CircularProgressIndicator(
+                modifier = Modifier.fillMaxSize().semantics { contentDescription = label },
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                strokeWidth = 9.dp
+            )
+        } else {
+            CircularProgressIndicator(
+                progress = { progress.coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxSize().semantics { contentDescription = label },
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                strokeWidth = 9.dp
+            )
+            Text(
+                "${(progress * 100).toInt()}%",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+/**
+ * The sentence a screen reader gets for one step — "Step 2 of 4, in progress".
+ *
+ * Shared by both steppers so they cannot describe the same state differently. The expanded
+ * stepper draws this state as fill and border and nothing else, which is why it needs a state
+ * description at all.
+ */
+@Composable
+internal fun stepStateDescription(
+    step: Int,
+    active: Boolean,
+    complete: Boolean,
+    warning: Boolean = false,
+): String {
+    val status = when {
+        complete && warning -> stringResource(Res.string.dash_step_state_warnings)
+        complete -> stringResource(Res.string.dash_step_state_complete)
+        active -> stringResource(Res.string.dash_step_state_active)
+        else -> stringResource(Res.string.dash_step_state_pending)
+    }
+    return stringResource(Res.string.dash_step_state, step, DASHBOARD_STEP_COUNT, status)
 }
 
 @Composable
@@ -735,10 +992,17 @@ fun StepItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     warning: Boolean = false,
 ) {
+    val state = stepStateDescription(step, active, complete, warning)
     // A run can reach the terminal step while reporting failures (BUG-15/BUG-01-class
     // issues) — that must not render identically to a clean success.
-    val accentColor = if (complete && warning) SnapVaultColors.warning else SnapVaultColors.electricPurple
+    val accentColor = if (complete && warning) SnapVaultColors.warning else MaterialTheme.colorScheme.primary
+    // The check sits on that fill, so its colour has to follow it: white was unreadable on
+    // the amber warning state and only marginal on the violet.
+    val onAccentColor = if (complete && warning) SnapVaultColors.onWarning else MaterialTheme.colorScheme.onPrimary
     Column(
+        // Merged so the circle and the label read as one item rather than a shape followed
+        // by a word — the number, icon and fill carry no text of their own.
+        modifier = Modifier.semantics(mergeDescendants = true) { stateDescription = state },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
@@ -751,23 +1015,83 @@ fun StepItem(
             contentAlignment = Alignment.Center
         ) {
             when {
-                complete -> Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(15.dp))
-                active -> Icon(icon, null, tint = SnapVaultColors.electricPurple, modifier = Modifier.size(15.dp))
-                else -> Text(step.toString(), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                complete -> Icon(Icons.Default.Check, null, tint = onAccentColor, modifier = Modifier.size(15.dp))
+                active -> Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(15.dp))
+                else -> Text(step.toString(), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         Text(
             text = label,
-            fontSize = 10.sp,
+            style = MaterialTheme.typography.labelSmall,
             fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (active || complete) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            color = if (active || complete) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/**
+ * Single-line equivalent of the four-circle stepper, for windows too narrow to fit it.
+ * Carries the same three facts — which step, how many, and whether the finished run
+ * reported failures — as text plus dots, in a row that cannot squash.
+ */
+@Composable
+internal fun CompactStepper(currentStep: Int, hasWarnings: Boolean) {
+    val labels = listOf(
+        stringResource(Res.string.dash_step_setup),
+        stringResource(Res.string.dash_step_syncing),
+        stringResource(Res.string.dash_step_processing),
+        stringResource(Res.string.dash_step_complete),
+    )
+    val index = currentStep.coerceIn(0, labels.lastIndex)
+    val accent = if (currentStep >= labels.lastIndex && hasWarnings) {
+        SnapVaultColors.warning
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
+
+    // Same state, same sentence as the expanded stepper — the dots are decoration and carry
+    // no semantics of their own.
+    val state = stepStateDescription(
+        step = index + 1,
+        active = currentStep == index,
+        complete = currentStep > index,
+        warning = hasWarnings,
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) { stateDescription = state },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            labels.indices.forEach { i ->
+                Box(
+                    Modifier
+                        .size(if (i == index) 8.dp else 6.dp)
+                        .clip(RoundedCornerShape(100))
+                        .background(
+                            if (i <= currentStep) accent else MaterialTheme.colorScheme.outlineVariant
+                        )
+                )
+            }
+        }
+        Text(
+            text = stringResource(Res.string.dash_step_progress, index + 1, DASHBOARD_STEP_COUNT, labels[index]),
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }
 
 @Composable
 fun StepperDivider(filled: Boolean = false) {
-    Box(Modifier.width(36.dp).height(1.5.dp).background(if (filled) SnapVaultColors.electricPurple.copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant))
+    Box(Modifier.width(36.dp).height(1.5.dp).background(if (filled) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant))
 }
 
 @Composable
@@ -784,16 +1108,16 @@ private fun ModeToggleButton(
         enabled = enabled,
         modifier = modifier.height(32.dp),
         shape = RoundedCornerShape(6.dp),
-        color = if (selected) SnapVaultColors.electricPurple.copy(alpha = 0.15f * contentAlpha) else MaterialTheme.colorScheme.surfaceContainerLowest,
-        border = BorderStroke(1.dp, if (selected) SnapVaultColors.electricPurple.copy(alpha = 0.5f * contentAlpha) else MaterialTheme.colorScheme.outlineVariant)
+        color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f * contentAlpha) else MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f * contentAlpha) else MaterialTheme.colorScheme.outlineVariant)
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
             Text(
                 text = label,
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 color = if (selected) {
-                    SnapVaultColors.electricPurple.copy(alpha = contentAlpha)
+                    MaterialTheme.colorScheme.primary.copy(alpha = contentAlpha)
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f * contentAlpha)
                 }

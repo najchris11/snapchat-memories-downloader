@@ -4,10 +4,12 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.attribute.FileTime
 import java.time.Instant
+import java.util.Locale
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 // Regression for BUG-18: MediaScanner's Library filter used to be a narrower,
@@ -16,15 +18,57 @@ import kotlin.test.assertTrue
 // the Library despite being a real, successfully imported file.
 class MediaScannerTest {
     private lateinit var dir: File
+    private lateinit var originalLocale: Locale
 
     @BeforeTest
     fun setUp() {
         dir = File.createTempFile("scanner-test", "").apply { delete(); mkdirs() }
+        // Dates now follow the default locale, so the assertions below have to pin one or
+        // they pass or fail depending on whose machine runs them.
+        originalLocale = Locale.getDefault()
+        Locale.setDefault(Locale.US)
     }
 
     @AfterTest
     fun tearDown() {
+        Locale.setDefault(originalLocale)
         dir.deleteRecursively()
+    }
+
+    // Capture dates were assembled as `date.month.name.take(3)` — the first three letters of
+    // the Java enum constant, so JAN/FEB/MAR forever — and the filesystem fallback pinned
+    // Locale.US. Two different routes to the same English-only result, on every date in the
+    // Library.
+    //
+    // Japanese rather than a European locale on purpose: French November abbreviates to
+    // "nov.", which is close enough to "NOV" that the test would pass against the bug.
+    @Test
+    fun capturedAndFallbackDatesBothFollowTheLocale() {
+        File(dir, "2024-11-28_memory.png").writeBytes(byteArrayOf(1))
+        val fallback = File(dir, "holiday.png").apply { writeBytes(byteArrayOf(1)) }
+        Files.setLastModifiedTime(fallback.toPath(), FileTime.from(Instant.parse("2024-11-28T12:00:00Z")))
+
+        Locale.setDefault(Locale.US)
+        val english = scanMediaFiles(dir.absolutePath).associateBy { it.title }
+        assertEquals("NOV 28, 2024", english.getValue("2024-11-28_memory").date)
+
+        Locale.setDefault(Locale.JAPAN)
+        val japanese = scanMediaFiles(dir.absolutePath).associateBy { it.title }
+
+        // The filename-dated file and the mtime-fallback file reach this string by different
+        // code paths, so both are checked.
+        assertTrue(
+            japanese.getValue("2024-11-28_memory").date.contains("11"),
+            "capture date ignored the locale: ${japanese.getValue("2024-11-28_memory").date}",
+        )
+        assertFalse(
+            japanese.getValue("2024-11-28_memory").date.contains("NOV"),
+            "capture date is still the English enum name: ${japanese.getValue("2024-11-28_memory").date}",
+        )
+        assertFalse(
+            japanese.getValue("holiday").date.contains("NOV"),
+            "the filesystem-date fallback still pins Locale.US: ${japanese.getValue("holiday").date}",
+        )
     }
 
     @Test
@@ -130,5 +174,63 @@ class MediaScannerTest {
         val items = scanMediaFiles(dir.absolutePath)
 
         assertEquals(listOf("2024-06-01_memory", "added-later"), items.map { it.title })
+    }
+
+    // MediaCard has drawn a heart badge for `item.favorited` since the Library existed, but
+    // nothing ever set the flag: the scanner read `hasGps` and `hasOverlay` out of
+    // vault_index.json and stopped there. The badge was unreachable UI.
+    @Test
+    fun scanReadsFavoritesFromTheVaultIndex() {
+        File(dir, "2024-06-01_kept.png").writeBytes(byteArrayOf(1))
+        File(dir, "2024-06-02_plain.png").writeBytes(byteArrayOf(1))
+        File(dir, VaultIndex.FILE_NAME).writeText(
+            """{"2024-06-01_kept.png":{"hasGps":false,"hasOverlay":false,"favorited":true},""" +
+                """"2024-06-02_plain.png":{"hasGps":false,"hasOverlay":false,"favorited":false}}"""
+        )
+
+        val byTitle = scanMediaFiles(dir.absolutePath).associateBy { it.title }
+
+        assertEquals(true, byTitle["2024-06-01_kept"]?.favorited)
+        assertEquals(false, byTitle["2024-06-02_plain"]?.favorited)
+    }
+
+    // A folder scanned before favorites existed, and a folder never processed at all, both
+    // have to scan rather than throw.
+    @Test
+    fun scanTreatsAMissingFavoriteFieldAsNotFavorited() {
+        File(dir, "2024-06-01_memory.png").writeBytes(byteArrayOf(1))
+        File(dir, VaultIndex.FILE_NAME)
+            .writeText("""{"2024-06-01_memory.png":{"hasGps":true,"hasOverlay":true}}""")
+
+        val item = scanMediaFiles(dir.absolutePath).single()
+
+        assertEquals(false, item.favorited)
+        assertTrue(item.hasGps, "the fields that were there must survive")
+    }
+
+    // D11: "Combined" was drawn from `hasOverlay`, which the pipeline set whenever a memory
+    // *had* an overlay file — before combining, and whether or not combining then ran or
+    // succeeded. Observed live: a run with combining switched off showed its untouched -main
+    // photos as "Combined". An index written that way must not keep telling that story.
+    @Test
+    fun aMemoryThatOnlyHasAnOverlayIsNotShownAsCombined() {
+        File(dir, "2024-06-01_AAA-main.jpg").writeBytes(byteArrayOf(1))
+        File(dir, VaultIndex.FILE_NAME)
+            .writeText("""{"2024-06-01_AAA-main.jpg":{"hasGps":false,"hasOverlay":true}}""")
+
+        val item = scanMediaFiles(dir.absolutePath).single()
+
+        assertEquals(false, item.hasOverlay, "an overlay existing is not an overlay combined into this file")
+    }
+
+    @Test
+    fun aFileTheCombineStepProducedIsShownAsCombined() {
+        File(dir, "2024-06-01_AAA.jpg").writeBytes(byteArrayOf(1))
+        File(dir, VaultIndex.FILE_NAME)
+            .writeText("""{"2024-06-01_AAA.jpg":{"hasGps":true,"hasOverlay":true,"combined":true}}""")
+
+        val item = scanMediaFiles(dir.absolutePath).single()
+
+        assertEquals(true, item.hasOverlay)
     }
 }

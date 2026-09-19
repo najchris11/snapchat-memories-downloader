@@ -8,21 +8,18 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.AppBuildConfig
 import com.najdev.snapvault.DraggableArea
-import com.najdev.snapvault.ui.theme.ElectricPurple
+import com.najdev.snapvault.openUrl
 import com.najdev.snapvault.ui.theme.SnapVaultColors
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
@@ -38,7 +35,7 @@ fun AppTopBar(
     DraggableArea {
         Surface(
             modifier = Modifier.fillMaxWidth().height(56.dp),
-            color = MaterialTheme.colorScheme.background.copy(alpha = 0.6f),
+            color = MaterialTheme.colorScheme.background,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
             Row(
@@ -59,7 +56,7 @@ fun AppTopBar(
                     )
                     Text(
                         text = stringResource(Res.string.app_name),
-                        fontSize = 18.sp,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Black,
                         color = MaterialTheme.colorScheme.onSurface,
                         letterSpacing = (-0.5).sp
@@ -69,34 +66,30 @@ fun AppTopBar(
                 }
 
                 // Actions
+                //
+                // Search and Notifications used to sit here as bare Icons with no onClick —
+                // three affordances styled like the window controls beside them, two of which
+                // could never do anything. They're gone until there is something to search or
+                // notify; Help is a real button.
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        Icons.Default.Search,
-                        contentDescription = stringResource(Res.string.topbar_search),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Icon(
-                        Icons.Outlined.NotificationsNone,
-                        contentDescription = stringResource(Res.string.topbar_notifications),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Icon(
-                        Icons.AutoMirrored.Outlined.HelpOutline,
-                        contentDescription = stringResource(Res.string.topbar_help),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.size(18.dp)
-                    )
+                    val helpUrl = stringResource(Res.string.help_url)
+                    IconButton(onClick = { openUrl(helpUrl) }) {
+                        Icon(
+                            Icons.AutoMirrored.Outlined.HelpOutline,
+                            contentDescription = stringResource(Res.string.topbar_help),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                     if (showWindowControls) {
                         Box(
                             Modifier
                                 .width(1.dp)
                                 .height(16.dp)
-                                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+                                .background(MaterialTheme.colorScheme.outlineVariant)
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                             WindowControlButton("−", onMinimize)
@@ -115,10 +108,10 @@ private fun VersionBadge(version: String) {
     Box(
         Modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(SnapVaultColors.electricPurple.copy(alpha = 0.15f))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
-        Text(version, fontSize = 10.sp, color = SnapVaultColors.electricPurple, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+        Text(version, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
     }
 }
 
@@ -130,7 +123,7 @@ private fun DebugBadge() {
             .background(SnapVaultColors.warning.copy(alpha = 0.15f))
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
-        Text("DEBUG", fontSize = 9.sp, color = SnapVaultColors.warning, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+        Text(stringResource(Res.string.badge_debug), style = MaterialTheme.typography.labelSmall, color = SnapVaultColors.warning, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
     }
 }
 
@@ -145,7 +138,7 @@ private fun WindowControlButton(label: String, onClick: () -> Unit) {
     ) {
         Text(
             text = label,
-            fontSize = 13.sp,
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             fontWeight = FontWeight.Normal
         )

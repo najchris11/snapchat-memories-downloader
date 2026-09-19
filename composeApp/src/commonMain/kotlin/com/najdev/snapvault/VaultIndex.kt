@@ -1,10 +1,13 @@
 package com.najdev.snapvault
 
 import com.najdev.snapvault.model.FileMeta
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import okio.FileSystem
+import okio.IOException
+import okio.Path
 import okio.Path.Companion.toPath
 
 /**
@@ -50,6 +53,12 @@ class VaultIndexUnreadableException(
 object VaultIndex {
 
     const val FILE_NAME = "vault_index.json"
+
+    // Enough to outlast a reader holding the index across a few attempts (~0.5s in total),
+    // and short enough that a real permission failure still surfaces promptly.
+    private const val MOVE_ATTEMPTS = 10
+    private const val INITIAL_MOVE_BACKOFF_MILLIS = 5L
+    private const val MAX_MOVE_BACKOFF_MILLIS = 100L
 
     // Explicit defaults so a favorite is visible in the file rather than encoded as an
     // absence. This file is the only place one lives, and a user looking for it should be
@@ -117,11 +126,11 @@ object VaultIndex {
      * caller holds [lock]: two writers reaching here at once would write the same temp file.
      * Private, and every entry point takes the lock, so that stays true.
      */
-    private fun writeAtomically(fileSystem: FileSystem, folder: String, meta: Map<String, FileMeta>) {
+    private suspend fun writeAtomically(fileSystem: FileSystem, folder: String, meta: Map<String, FileMeta>) {
         val target = path(folder)
         val temp = "$folder/$FILE_NAME.tmp".toPath()
         fileSystem.write(temp) { writeUtf8(json.encodeToString(meta)) }
-        runCatching { fileSystem.atomicMove(temp, target) }
+        runCatching { moveIntoPlaceRetrying(fileSystem, temp, target) }
             .onFailure { e ->
                 // A temp file left behind is one the next write would find in its way, and a
                 // stray vault_index.json.tmp in the output folder is not something a user
@@ -129,6 +138,36 @@ object VaultIndex {
                 runCatching { fileSystem.delete(temp) }
                 throw e
             }
+    }
+
+    /**
+     * Replaces [target] with [temp], retrying briefly while the platform refuses.
+     *
+     * Windows will not replace a file another handle has open, so this move fails with
+     * `AccessDeniedException` whenever a reader happens to hold the index — and [read] takes
+     * no lock, by design, so that is an ordinary interleaving rather than a rare one. It cost
+     * a favorite every time it happened: the write threw, and the heart the user pressed was
+     * gone. POSIX `rename(2)` ignores open handles, which is why this only ever appeared on
+     * the Windows build.
+     *
+     * A retry rather than a non-atomic copy: the reader's handle is gone in microseconds, and
+     * copying onto [target] in place would reintroduce exactly the torn read the temp file
+     * exists to prevent. The budget is bounded so a genuine permission problem still surfaces
+     * rather than hanging — and the last failure is rethrown unchanged, so the caller sees the
+     * real cause and not a wrapper.
+     */
+    private suspend fun moveIntoPlaceRetrying(fileSystem: FileSystem, temp: Path, target: Path) {
+        var backoffMillis = INITIAL_MOVE_BACKOFF_MILLIS
+        repeat(MOVE_ATTEMPTS - 1) {
+            val failure = runCatching { fileSystem.atomicMove(temp, target) }.exceptionOrNull()
+                ?: return
+            // Anything that is not the filesystem refusing is not what the retry is for.
+            if (failure !is IOException) throw failure
+            delay(backoffMillis)
+            backoffMillis = (backoffMillis * 2).coerceAtMost(MAX_MOVE_BACKOFF_MILLIS)
+        }
+        // The last attempt is deliberately unguarded: its exception is the caller's answer.
+        fileSystem.atomicMove(temp, target)
     }
 
     suspend fun write(fileSystem: FileSystem, folder: String, meta: Map<String, FileMeta>) {

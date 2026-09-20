@@ -1,11 +1,12 @@
 # Windows: the index swap, and a read that reports empty — 2026-09-19
 
-Open finding, blocking the v1.0.14 release. One half is fixed and on `develop`; the other
-half is diagnosed but **not** fixed, and is the reason nothing has been published.
+Both halves are now fixed and on `develop`. See "Resolved — 2026-09-20" below for the read-side
+fix; everything else in this document is preserved as the diagnostic record that led to it.
 
-Handoff for debugging on a real Windows machine. Everything below was observed on GitHub's
-`windows-latest` runner, which is the only Windows this has ever run on — `check.yml` builds
-on Linux only, so no PR has ever exercised these paths on Windows.
+Handoff for debugging on a real Windows machine. Everything through "What happened, in order"
+below was observed on GitHub's `windows-latest` runner, which was the only Windows this had run
+on at the time — `check.yml` builds on Linux only, so no PR had exercised these paths on
+Windows until the reproduction described below.
 
 ## Status
 
@@ -127,3 +128,48 @@ message. A user who force-quits and relaunches within milliseconds on Windows ca
   every PR. Consider adding a Windows test job, at least for the `VaultIndex` and locker
   suites — the release workflow is currently the only thing that runs them on Windows, which
   is far too late to find out.
+
+## Resolved — 2026-09-20
+
+Diagnosed and fixed on real Windows hardware (not `windows-latest`), which made looping the
+failing test to reproduction practical for the first time.
+
+**Hypothesis 1 confirmed, hypothesis 2 ruled out.** Instrumenting `read()`'s `onFailure` and
+looping `VaultIndexConcurrencyTest` reproduced the failure at roughly the same 1-in-15–20 rate
+implied by the CI history above. The caught exception was consistently:
+
+```text
+java.io.FileNotFoundException: ...\vault_index.json (The process cannot access the file
+because it is being used by another process)
+```
+
+That message is a Windows sharing violation, not a genuine absence — hypothesis 1. No case
+produced hypothesis 2 (`NoSuchFileException`) or the third, worse case (a torn read parsing to
+valid-but-empty JSON). The swap itself was never the problem; only the reader's own retry
+behavior was missing.
+
+**Fix:** `VaultIndex.read` (`VaultIndex.kt:117`) now retries on `IOException` while
+`FileSystem.exists(target)` still says the file is there, on the same bounded backoff
+(`READ_ATTEMPTS`/`INITIAL_READ_BACKOFF_MILLIS`/`MAX_READ_BACKOFF_MILLIS`, mirroring
+`MOVE_ATTEMPTS` for the write side) rather than by matching the exception message. If the file
+is genuinely gone, the first attempt still returns `emptyMap()` immediately — the ordinary
+first-run path gets no added latency. `read` stays a plain, non-suspend function (Library scans
+still aren't coroutines); the backoff uses `runBlocking { delay(...) }` rather than
+`Thread.sleep`, since this file is `commonMain` and `java.lang.Thread` isn't available on the
+iOS target.
+
+**Test:** `VaultIndexReadRetryTest` drives the failure through a `ForwardingFileSystem` that
+throws the exact exception above on the first N opens of the index, so this is provable without
+Windows hardware and runs in `check.yml`. Confirmed failing against the pre-fix `read()` (2 of 4
+cases failed on the retry assertion, not a compile error) before restoring the fix.
+
+**CI evidence:** `PR Check` on `develop` passed (Linux). A `dry_run` `Release` workflow run
+(`35541042394`) then passed on all four platforms, including `build (windows-x64)` running the
+full desktop test suite. Per the "one green run" caution earlier in this document, one clean
+Windows CI pass is supporting evidence, not proof the intermittent case is gone at CI's single-
+run-per-push cadence — but the fix targets the confirmed mechanism (the specific transient
+exception is now retried) rather than a timing change that could get lucky, which is the
+material difference from the earlier false-green run described above.
+
+Commit: `d209622` on `develop`. Not yet merged to `main`; the v1.0.14 release-follow-up
+decision above is still open.

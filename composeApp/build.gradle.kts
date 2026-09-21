@@ -202,6 +202,10 @@ val isDebugBuild: Boolean =
 // re-runs the check that the scripts still verify what the manifest records.
 tasks.named<Test>("desktopTest") {
     inputs.dir(rootProject.file("scripts")).withPropertyName("runtimeFetchScripts")
+    // Same reason as scripts above: CommitMsgHookTest runs the tracked hook as a process, so
+    // without this an edit to the hook leaves the task up-to-date and the test passes on the
+    // previous run's result — a broken hook reported as a working one.
+    inputs.dir(rootProject.file(".githooks")).withPropertyName("gitHooks")
 }
 
 // Ship the third-party license notices inside the app (classpath root), so every
@@ -235,6 +239,43 @@ val generateBuildConfig by tasks.registering {
 
 kotlin.sourceSets.getByName("commonMain").kotlin
     .srcDir(generateBuildConfig.map { it.outputs.files })
+
+// Point git at the tracked hooks directory.
+//
+// .git/hooks is not version controlled, so a hook living there protects one working copy and
+// no one else's — and a fresh clone silently loses it. The hooks are committed under
+// .githooks instead, and this repoints core.hooksPath at them. Wired into the desktop compile
+// so a clone picks it up on the first build rather than on remembering to read the README.
+//
+// Idempotent, and a no-op outside a git checkout (a source tarball has no .git).
+val installGitHooks by tasks.registering {
+    group = "build setup"
+    description = "Point core.hooksPath at the tracked .githooks directory"
+    val hooksDir = rootProject.file(".githooks")
+    val gitDir = rootProject.file(".git")
+    onlyIf { gitDir.exists() && hooksDir.isDirectory }
+    doLast {
+        val current = runCatching {
+            providers.exec {
+                commandLine("git", "config", "--get", "core.hooksPath")
+                isIgnoreExitValue = true
+            }.standardOutput.asText.get().trim()
+        }.getOrDefault("")
+
+        if (current != ".githooks") {
+            providers.exec {
+                commandLine("git", "config", "core.hooksPath", ".githooks")
+            }.result.get()
+            logger.lifecycle("git hooks: core.hooksPath -> .githooks")
+        }
+
+        // git does not honour a hook that is not executable, and the permission bit can be
+        // lost on checkout on some filesystems.
+        hooksDir.listFiles()?.forEach { it.setExecutable(true) }
+    }
+}
+
+tasks.named("compileKotlinDesktop") { dependsOn(installGitHooks) }
 
 // Install the debug APK on a connected device/emulator, then launch the app.
 // Prerequisites: adb on PATH, device connected or emulator running.

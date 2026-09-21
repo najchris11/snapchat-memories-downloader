@@ -105,5 +105,14 @@ Avoid `"item${if (n == 1) "" else "s"}"` — use a plural resource.
 
 ## Commits
 
-No `Claude-Session:` trailer. Explain *why* in the body, not just what — the mechanism
-behind a bug is the part that stops it recurring.
+No `Claude-Session:` trailer, no `Co-Authored-By:` crediting an AI, no "Generated with"
+footer. A tracked `commit-msg` hook in `.githooks/` refuses all of them, and
+`CommitMsgHookTest` covers both directions — that it rejects attribution, and that it leaves
+ordinary prose about `CLAUDE.md` and real human co-authors alone.
+
+`./gradlew :composeApp:installGitHooks` points `core.hooksPath` at that directory; the desktop
+compile depends on it, so a fresh clone is covered on its first build. `.git/hooks` is not
+version controlled, which is why the hook does not live there.
+
+Explain *why* in the body, not just what — the mechanism behind a bug is the part that stops
+it recurring.

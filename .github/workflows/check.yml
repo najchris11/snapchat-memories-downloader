@@ -18,6 +18,12 @@ jobs:
 
       - name: Set up JDK 21 (JetBrains Runtime)
         uses: actions/setup-java@v4
+        # Authenticated so the JBR lookup is not subject to the runner IP's shared
+        # anonymous rate limit. release.yml has had this since 8c24306; check.yml did
+        # not, so PR runs failed with "API rate limit exceeded for <runner ip>" whenever
+        # the shared pool was busy — a red X on a PR whose code is fine.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           java-version: '21.0.7'
           distribution: 'jetbrains'
@@ -50,6 +56,12 @@ jobs:
 
       - name: Set up JDK 21 (JetBrains Runtime)
         uses: actions/setup-java@v4
+        # Authenticated so the JBR lookup is not subject to the runner IP's shared
+        # anonymous rate limit. release.yml has had this since 8c24306; check.yml did
+        # not, so PR runs failed with "API rate limit exceeded for <runner ip>" whenever
+        # the shared pool was busy — a red X on a PR whose code is fine.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           java-version: '21.0.7'
           distribution: 'jetbrains'

@@ -68,6 +68,12 @@ jobs:
   # Split out of the old macOS-only mobile-preview job. Assembling the Android app needs the
   # Android SDK, not the Apple toolchain, and a Linux runner bills at 1x against macOS's 10x
   # — this was ~70 billable-equivalent minutes per run for work Linux does in ~3.
+  #
+  # No setup-android step: the runner image ships the SDK at /usr/local/lib/android/sdk with
+  # licences accepted, and AGP fetches any missing platform itself. Adding
+  # android-actions/setup-android actively broke this — its default package set still asks
+  # for the obsolete 'tools' package, which no longer exists in the SDK repository, so
+  # sdkmanager exits 1 before Gradle runs at all.
   android:
     runs-on: ubuntu-latest
     continue-on-error: true
@@ -81,11 +87,6 @@ jobs:
         with:
           java-version: '21.0.7'
           distribution: 'jetbrains'
-
-      # compileSdk is 37, newer than the platforms baked into the runner image. This
-      # provisions the cmdline-tools and accepts the licences so AGP can fetch it.
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3

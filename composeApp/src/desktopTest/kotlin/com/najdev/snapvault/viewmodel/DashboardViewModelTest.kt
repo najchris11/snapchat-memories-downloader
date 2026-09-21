@@ -1063,6 +1063,75 @@ class DashboardViewModelTest {
         return file.absolutePath
     }
 
+    @Test
+    fun zipWithoutHistoryWritesItsVerifiedCaptureTimeInsteadOfMidnight() {
+        // Numbered ZIPs in current exports have the exact capture second in each media entry,
+        // but no memories_history.json. The old no-JSON branch bypassed the timestamp planner.
+        val zip = java.io.File.createTempFile("snapvault-zip-time-", ".zip")
+        val epoch = java.time.Instant.parse("2025-06-15T14:32:10Z").epochSecond.toInt()
+        val extra = java.nio.ByteBuffer.allocate(9).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            .putShort(0x5455.toShort()).putShort(5).put(1).putInt(epoch).array()
+        java.util.zip.ZipOutputStream(zip.outputStream()).use { stream ->
+            stream.putNextEntry(java.util.zip.ZipEntry("memories/2025-06-15_AAA-main.jpg").apply {
+                time = epoch.toLong() * 1_000
+                this.extra = extra
+            })
+            stream.write("photo".toByteArray())
+            stream.closeEntry()
+        }
+        assertEquals(
+            epoch.toLong(),
+            com.najdev.snapvault.parser.ZipImportParser.parseMemoriesFromZip(zip.absolutePath).single().captureEpochSecond,
+            "the fixture must carry the exact timestamp in its ZIP extra field",
+        )
+        val dates = mutableListOf<String>()
+        val media = object : MediaProcessor {
+            override fun checkExifTool() = true
+            override fun checkFFmpeg() = true
+            override fun writeGpsMetadata(filePath: String, latitude: Double, longitude: Double, dateStr: String?) = false
+            override fun writeDateMetadata(filePath: String, dateTimeUtc: String): Boolean {
+                dates += dateTimeUtc
+                return true
+            }
+            override fun combineVideoWithOverlay(videoPath: String, overlayPath: String, outputPath: String) = true
+        }
+        val runner = object : ZipPipelineRunner by NoOpZipPipelineRunner {
+            override fun listZipFiles(folderPath: String) = listOf(zip.absolutePath)
+        }
+        val pickers = object : PlatformPickers {
+            override fun pickHtmlFile(onResult: (String?) -> Unit) = onResult(null)
+            override fun pickOutputFolder(onResult: (String?) -> Unit) = onResult("/out")
+            override fun pickZipFolder(onResult: (String?) -> Unit) = onResult("/zips")
+            override fun pickMultipleZips(onResult: (List<String>) -> Unit) = onResult(emptyList())
+        }
+        val disk = FakeFileSystem().apply { createDirectories("/out".toPath()) }
+        val viewModel = DashboardViewModel(
+            zipPipelineRunner = runner,
+            mediaProcessor = media,
+            fileSystem = disk,
+            pickers = pickers,
+            outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+            outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
+        )
+        try {
+            viewModel.pickZipFolder()
+            viewModel.pickOutputFolder()
+            viewModel.startSync(false, true, true, false, false, true)
+            awaitCompletion(viewModel)
+
+            assertEquals("Pipeline Complete", viewModel.progressText)
+            assertEquals(listOf("2025-06-15 14:32:10 UTC"), dates)
+            assertTrue(
+                viewModel.logs.any { it.startsWith("[INFO] Precise time + GPS matching") &&
+                    it.contains("keep verified ZIP capture times") },
+                "the on-screen matching explanation must describe the actual no-history fallback",
+            )
+        } finally {
+            viewModel.dispose()
+            zip.delete()
+        }
+    }
+
     private fun outcomeViewModel(
         runner: ZipPipelineRunner,
         disk: okio.FileSystem = FakeFileSystem().apply {

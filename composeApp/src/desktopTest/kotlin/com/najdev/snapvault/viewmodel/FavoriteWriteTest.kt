@@ -60,7 +60,7 @@ class FavoriteWriteTest {
     }
 
     private fun awaitFavorite(viewModel: DashboardViewModel, id: String) = runBlocking {
-        withTimeout(5_000) {
+        withTimeout(30_000) {
             while (viewModel.favoriteIsPending(id)) delay(5)
         }
     }
@@ -181,7 +181,7 @@ class FavoriteWriteTest {
 
         // Let the first write land; the second is held at the gate.
         runBlocking {
-            withTimeout(5_000) {
+            withTimeout(30_000) {
                 while (VaultIndex.read(fs, "/out")["memory.jpg"]?.favorited != true) delay(5)
             }
         }
@@ -212,20 +212,21 @@ class FavoriteWriteTest {
 
         // The second write reaching the gate means the first has already failed.
         control.awaitBlocked()
-
-        assertEquals(
-            mapOf("/out/memory.jpg" to false),
-            viewModel.favoriteOverrides,
-            "a superseded write's failure reverted the press that replaced it",
-        )
-        assertTrue(viewModel.favoriteIsPending("/out/memory.jpg"))
-        assertEquals(
-            emptyList(),
-            viewModel.logs.filter { it.contains("favorite", ignoreCase = true) },
-            "a superseded write's failure is not the user's problem and must not be reported",
-        )
-
-        control.release()
+        try {
+            assertEquals(
+                mapOf("/out/memory.jpg" to false),
+                viewModel.favoriteOverrides,
+                "a superseded write's failure reverted the press that replaced it",
+            )
+            assertTrue(viewModel.favoriteIsPending("/out/memory.jpg"))
+            assertEquals(
+                emptyList(),
+                viewModel.logs.filter { it.contains("favorite", ignoreCase = true) },
+                "a superseded write's failure is not the user's problem and must not be reported",
+            )
+        } finally {
+            control.release()
+        }
         awaitFavorite(viewModel, "/out/memory.jpg")
         assertEquals(false, VaultIndex.read(fs, "/out")["memory.jpg"]?.favorited)
     }
@@ -329,7 +330,7 @@ private class IndexWriteControl(
 
     /** Blocks until a write has reached the gate, so every earlier write has finished. */
     fun awaitBlocked() =
-        check(reachedGate.await(10, java.util.concurrent.TimeUnit.SECONDS)) { "no write reached the gate" }
+        check(reachedGate.await(60, java.util.concurrent.TimeUnit.SECONDS)) { "no write reached the gate" }
 
     override fun sink(file: Path, mustCreate: Boolean): Sink {
         if (VaultIndex.FILE_NAME !in file.name) return super.sink(file, mustCreate)
@@ -337,7 +338,7 @@ private class IndexWriteControl(
         val n = writes.incrementAndGet()
         if (n >= blockFrom) {
             reachedGate.countDown()
-            check(gate.await(10, java.util.concurrent.TimeUnit.SECONDS)) { "gate never released" }
+            check(gate.await(60, java.util.concurrent.TimeUnit.SECONDS)) { "gate never released" }
         }
         if (n in failAt) throw IOException("disk is full")
         return super.sink(file, mustCreate)

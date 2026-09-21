@@ -2,6 +2,7 @@ package com.najdev.snapvault
 
 import com.najdev.snapvault.model.FileMeta
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
@@ -60,6 +61,12 @@ object VaultIndex {
     private const val INITIAL_MOVE_BACKOFF_MILLIS = 5L
     private const val MAX_MOVE_BACKOFF_MILLIS = 100L
 
+    // Same budget as the move retry above: enough to outlast a writer's in-flight replace,
+    // short enough that a genuinely stuck read still surfaces (as emptyMap) promptly.
+    private const val READ_ATTEMPTS = 10
+    private const val INITIAL_READ_BACKOFF_MILLIS = 5L
+    private const val MAX_READ_BACKOFF_MILLIS = 100L
+
     // Explicit defaults so a favorite is visible in the file rather than encoded as an
     // absence. This file is the only place one lives, and a user looking for it should be
     // able to find it by eye.
@@ -93,10 +100,38 @@ object VaultIndex {
      * not a coroutine and has nowhere to put a failure; for a *reader*, "the facts are
      * unknown" and "there are no facts" lead to the same screen. It is mutation that must not
      * treat them alike — see [readForMutation].
+     *
+     * Retries a transient `IOException` while the target still exists, on the same budget as
+     * [moveIntoPlaceRetrying]. Windows opening the index while [writeAtomically] is mid-replace
+     * throws `FileNotFoundException` — not `AccessDeniedException` — with the message "the
+     * process cannot access the file because it is being used by another process", and Java
+     * gives that same exception type for a file that is genuinely absent. The two are told apart
+     * by [FileSystem.exists] rather than by matching that message: if the target is gone, this
+     * is the ordinary no-index-yet case and there is nothing to retry for; if it is still there,
+     * the read hit the reader's own handle racing the writer's replace, and one more attempt a
+     * few milliseconds later almost always lands on the writer's finished result. Without this,
+     * a Library scan or a favorite toggle could observe a healthy index as empty (confirmed via
+     * `VaultIndexConcurrencyTest` under real concurrent Windows I/O — see
+     * docs/audits/windows-index-swap-2026-09-19.md).
      */
-    fun read(fileSystem: FileSystem, folder: String): Map<String, FileMeta> = runCatching {
-        json.decodeFromString<Map<String, FileMeta>>(fileSystem.read(path(folder)) { readUtf8() })
-    }.getOrDefault(emptyMap())
+    fun read(fileSystem: FileSystem, folder: String): Map<String, FileMeta> {
+        val target = path(folder)
+        var backoffMillis = INITIAL_READ_BACKOFF_MILLIS
+        repeat(READ_ATTEMPTS - 1) {
+            val outcome = decode(fileSystem, target)
+            val failure = outcome.exceptionOrNull()
+            if (failure == null) return outcome.getOrThrow()
+            if (failure !is IOException || !fileSystem.exists(target)) return outcome.getOrDefault(emptyMap())
+            runBlocking { delay(backoffMillis) }
+            backoffMillis = (backoffMillis * 2).coerceAtMost(MAX_READ_BACKOFF_MILLIS)
+        }
+        // The last attempt is unguarded: whatever it returns (or defaults to) is the answer.
+        return decode(fileSystem, target).getOrDefault(emptyMap())
+    }
+
+    private fun decode(fileSystem: FileSystem, target: Path): Result<Map<String, FileMeta>> = runCatching {
+        json.decodeFromString<Map<String, FileMeta>>(fileSystem.read(target) { readUtf8() })
+    }
 
     /**
      * The index as a mutator must see it: empty when there is no file yet, and a throw when

@@ -150,6 +150,11 @@ class FavoriteToggleTest {
             onNodeWithContentDescription(label(true)).assertExists()
             onNodeWithContentDescription(label(false)).assertDoesNotExist()
 
+            // Compose being idle does not mean the view model's IO write has finished.
+            waitUntil(timeoutMillis = 30_000) {
+                VaultIndex.read(okio.FileSystem.SYSTEM, folder.absolutePath)["2026-01-02_b.jpg"]
+                    ?.favorited == true
+            }
             assertTrue(
                 VaultIndex.read(okio.FileSystem.SYSTEM, folder.absolutePath)["2026-01-02_b.jpg"]
                     ?.favorited == true,

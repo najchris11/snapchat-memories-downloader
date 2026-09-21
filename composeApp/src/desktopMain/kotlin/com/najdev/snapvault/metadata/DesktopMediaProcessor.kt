@@ -10,6 +10,23 @@ import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
+internal fun gpsCoordinateArguments(extension: String, latitude: Double, longitude: Double): List<String> {
+    // ExifTool stores GPSLatitude/Longitude on videos as signed XMP values. A separate
+    // hemisphere Ref is ignored there, so absolute western/southern coordinates silently
+    // become east/north. Image EXIF GPS uses the traditional absolute value + Ref pair.
+    if (extension in SupportedMediaExtensions.VIDEO) {
+        return listOf("-GPSLatitude=$latitude", "-GPSLongitude=$longitude")
+    }
+    val latRef = if (latitude >= 0) "N" else "S"
+    val lonRef = if (longitude >= 0) "E" else "W"
+    return listOf(
+        "-GPSLatitude=${Math.abs(latitude)}",
+        "-GPSLatitudeRef=$latRef",
+        "-GPSLongitude=${Math.abs(longitude)}",
+        "-GPSLongitudeRef=$lonRef",
+    )
+}
+
 class DesktopMediaProcessor : MediaProcessor {
 
     // Probed once on first use; null means videos are software-encoded (libx264).
@@ -150,20 +167,12 @@ class DesktopMediaProcessor : MediaProcessor {
 
         val path = BinaryExtractor.checkCommand("exiftool") ?: return false
 
-        val latRef = if (latitude >= 0) "N" else "S"
-        val lonRef = if (longitude >= 0) "E" else "W"
-        val absLat = Math.abs(latitude)
-        val absLon = Math.abs(longitude)
-
         val args = mutableListOf(
             path,
             "-overwrite_original",
             "-q",
-            "-GPSLatitude=$absLat",
-            "-GPSLatitudeRef=$latRef",
-            "-GPSLongitude=$absLon",
-            "-GPSLongitudeRef=$lonRef"
         )
+        args += gpsCoordinateArguments(file.extension.lowercase(), latitude, longitude)
 
         val exifDate = formatToExifDate(dateStr)
         if (exifDate != null) {

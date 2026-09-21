@@ -29,6 +29,7 @@
     <string name="opt_inject_gps">Write Metadata (GPS + Date)</string>
     <string name="opt_write_date_metadata">Write Date Metadata</string>
     <string name="opt_precise_matching">Precise time + GPS matching</string>
+    <string name="zip_precise_matching_log">[INFO] Precise time + GPS matching is on (default). Verified ZIP capture times provide time of day. GPS is applied only when the exact timestamp matches a history record with an unambiguous location; other files keep verified ZIP capture times without GPS. Turn the toggle off on the Dashboard to force date-only tags.</string>
     <!-- Shown wherever the chosen options write a GPS position into the files (D18). -->
     <string name="opt_gps_disclosure">Where a location is known, it is saved inside each photo and video. Anyone you share those files with can see where they were taken.</string>
     <!-- Offered when an import will not fit, but would if each ZIP were deleted as its

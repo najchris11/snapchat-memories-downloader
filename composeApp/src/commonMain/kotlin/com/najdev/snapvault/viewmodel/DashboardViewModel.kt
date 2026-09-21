@@ -24,6 +24,9 @@ import okio.FileSystem
 import okio.Path.Companion.toPath
 import okio.buffer
 import okio.use
+import org.jetbrains.compose.resources.getString
+import snapchat_memories_downloader.composeapp.generated.resources.Res
+import snapchat_memories_downloader.composeapp.generated.resources.zip_precise_matching_log
 import kotlin.time.TimeSource
 
 private class PipelineAbortException(message: String, cause: Throwable? = null) : Exception(message, cause)
@@ -831,7 +834,7 @@ class DashboardViewModel(
         }
 
         if (runMetadata && experimentalMetadataMatching) {
-            log("[INFO] Precise time + GPS matching is on (default). GPS is only applied where a file's exact capture timestamp uniquely matches a memories_history.json record; ambiguous matches fall back to date-only metadata. Turn the toggle off on the Dashboard to force date-only tags for every file.")
+            log(getString(Res.string.zip_precise_matching_log))
         }
 
         if (AppBuildConfig.IS_DEBUG) {
@@ -957,28 +960,17 @@ class DashboardViewModel(
                     zipFiles.mapNotNull { zipPath -> readExportHistory(zipPath, outDir) }
                 }
 
-                if (memoryJsonSources.isEmpty()) {
-                    log("[WARN] Experimental metadata matching requested, but no memories_history.json was found. Falling back to date-only ZIP metadata.")
+                val records = memoryJsonSources.flatMap { parseZipMemoryRecords(it) }.distinct()
+                if (memoryJsonSources.size > 1) {
+                    log("[INFO] Experimental metadata matching found memories_history.json in ${memoryJsonSources.size} zip(s); merged into ${records.size} distinct record(s).")
+                }
+                val plan = buildExperimentalZipMetadataPlan(itemsByZip.values.flatten(), records)
+                plan.warnings.forEach { log("[WARN] $it") }
+                if (plan.targets.isEmpty()) {
+                    log("[WARN] Experimental metadata matching produced no targets; falling back to date-only ZIP metadata.")
                     writeZipDateMetadata(itemsByZip, outDir, workerCount, downloadedMeta)
                 } else {
-                    val records = memoryJsonSources.flatMap { parseZipMemoryRecords(it) }.distinct()
-                    if (memoryJsonSources.size > 1) {
-                        log("[INFO] Experimental metadata matching found memories_history.json in ${memoryJsonSources.size} zip(s); merged into ${records.size} distinct record(s).")
-                    }
-
-                    if (records.isEmpty()) {
-                        log("[WARN] Experimental metadata matching found no usable memories; falling back to date-only ZIP metadata.")
-                        writeZipDateMetadata(itemsByZip, outDir, workerCount, downloadedMeta)
-                    } else {
-                        val plan = buildExperimentalZipMetadataPlan(itemsByZip.values.flatten(), records)
-                        plan.warnings.forEach { log("[WARN] $it") }
-                        if (plan.targets.isEmpty()) {
-                            log("[WARN] Experimental metadata matching produced no targets; falling back to date-only ZIP metadata.")
-                            writeZipDateMetadata(itemsByZip, outDir, workerCount, downloadedMeta)
-                        } else {
-                            writeZipExperimentalMetadata(plan.targets, outDir, workerCount, downloadedMeta)
-                        }
-                    }
+                    writeZipExperimentalMetadata(plan.targets, outDir, workerCount, downloadedMeta)
                 }
             } else {
                 writeZipDateMetadata(itemsByZip, outDir, workerCount, downloadedMeta)

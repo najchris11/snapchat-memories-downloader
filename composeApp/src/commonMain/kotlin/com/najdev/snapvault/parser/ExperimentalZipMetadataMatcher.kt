@@ -4,9 +4,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlin.math.acos
-import kotlin.math.cos
-import kotlin.math.sin
 
 data class ZipMetadataTarget(
     val fileName: String,
@@ -105,6 +102,9 @@ fun buildExperimentalZipMetadataPlan(
     val consolidated: Map<RecordKey, ZipMemoryRecord> = recordsByKey.mapValues { (_, group) ->
         consolidateByLocation(group)
     }
+    val filesByKey = entries.mapNotNull { entry ->
+        entry.captureEpochSecond?.let { RecordKey(it, if (entry.isVideo) MediaKind.Video else MediaKind.Image) }
+    }.groupingBy { it }.eachCount()
 
     val targets = mutableListOf<ZipMetadataTarget>()
     var matchedCount = 0
@@ -113,7 +113,9 @@ fun buildExperimentalZipMetadataPlan(
     for (entry in entries) {
         val kind = if (entry.isVideo) MediaKind.Video else MediaKind.Image
         val key = entry.captureEpochSecond?.let { RecordKey(it, kind) }
-        val record = key?.let { consolidated[it] }
+        // The filename supplies an independent calendar date. A corrupt or shifted ZIP
+        // timestamp must not borrow a real history record from a different day.
+        val record = key?.let { consolidated[it] }?.takeIf { it.dateStr.startsWith("${entry.date} ") }
 
         if (record == null) {
             targets += buildDateOnlyTargets(entry)
@@ -121,15 +123,18 @@ fun buildExperimentalZipMetadataPlan(
         }
 
         matchedCount++
-        if (recordsByKey.getValue(key).size > 1 && record.latitude == null && record.longitude == null) {
+        // If more files than history rows share a key, at least one file has no proven
+        // matching row. Do not copy one row's GPS onto every file in that group.
+        val unpairedFile = filesByKey.getValue(key) > recordsByKey.getValue(key).size
+        if (unpairedFile || (recordsByKey.getValue(key).size > 1 && record.latitude == null)) {
             ambiguousLocationCount++
         }
 
         val target = ZipMetadataTarget(
             fileName = entry.fileName,
             dateStr = record.dateStr,
-            latitude = record.latitude,
-            longitude = record.longitude,
+            latitude = if (unpairedFile) null else record.latitude,
+            longitude = if (unpairedFile) null else record.longitude,
             hasOverlay = entry.hasOverlay,
         )
         targets += target
@@ -144,7 +149,7 @@ fun buildExperimentalZipMetadataPlan(
         matchedCount < entries.size -> warnings += "$matchedCount of ${entries.size} file(s) matched memories_history.json by exact capture timestamp; the rest fell back to ZIP date-only metadata."
     }
     if (ambiguousLocationCount > 0) {
-        warnings += "$ambiguousLocationCount file(s) shared a capture timestamp with another memory that had a conflicting location; GPS was omitted for those to avoid tagging the wrong file."
+        warnings += "$ambiguousLocationCount file(s) had an ambiguous capture timestamp or conflicting location; GPS was omitted for those to avoid tagging the wrong file."
     }
 
     return ZipMetadataPlan(targets, warnings)
@@ -154,7 +159,7 @@ fun buildExperimentalZipMetadataPlan(
 // photos taken in the same second. There's still no identifier that says which record
 // belongs to which of those files, so instead of guessing we keep the shared date
 // (safe — it's the same instant for all of them) and only keep GPS when every record in
-// the collision has a location and they all agree closely enough (<1km). If even one
+// the collision has a location and they all agree exactly. If even one
 // colliding record has no location, we can't tell whether *that* record is the one
 // matching a given file, so no file in the group gets GPS.
 private fun consolidateByLocation(group: List<ZipMemoryRecord>): ZipMemoryRecord {
@@ -164,24 +169,10 @@ private fun consolidateByLocation(group: List<ZipMemoryRecord>): ZipMemoryRecord
     val located = group.filter { it.latitude != null && it.longitude != null }
     if (located.size != group.size) return base.copy(latitude = null, longitude = null)
 
-    val anyFarApart = located.indices.any { i ->
-        (i + 1 until located.size).any { j -> kilometersBetween(located[i], located[j]) >= 1.0 }
-    }
-    return if (anyFarApart) located.first().copy(latitude = null, longitude = null) else located.first()
+    val first = located.first()
+    val disagree = located.any { it.latitude != first.latitude || it.longitude != first.longitude }
+    return if (disagree) base.copy(latitude = null, longitude = null) else first
 }
-
-private fun kilometersBetween(a: ZipMemoryRecord, b: ZipMemoryRecord): Double {
-    val earthRadiusKm = 6371.0088
-    val lat1 = a.latitude!!
-    val lon1 = a.longitude!!
-    val lat2 = b.latitude!!
-    val lon2 = b.longitude!!
-    val value = sin(degToRad(lat1)) * sin(degToRad(lat2)) +
-        cos(degToRad(lat1)) * cos(degToRad(lat2)) * cos(degToRad(lon1 - lon2))
-    return earthRadiusKm * acos(value.coerceIn(-1.0, 1.0))
-}
-
-private fun degToRad(degrees: Double): Double = degrees * kotlin.math.PI / 180.0
 
 private fun buildDateOnlyTargets(entry: HtmlMemoryEntry): List<ZipMetadataTarget> {
     val target = ZipMetadataTarget(

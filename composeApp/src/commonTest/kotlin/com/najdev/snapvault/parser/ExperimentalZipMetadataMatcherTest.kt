@@ -232,7 +232,9 @@ class ExperimentalZipMetadataMatcherTest {
     }
 
     @Test
-    fun testCollisionWithinOneKilometerKeepsLocation() {
+    fun nearbyButDifferentLocationsOmitGpsRatherThanGuessingTheFirst() {
+        // Real exports contain same-second records a few hundred metres apart. The old
+        // one-kilometre tolerance assigned the first coordinate to every matching file.
         val entries = listOf(
             HtmlMemoryEntry(
                 fileName = "2024-03-05_A-main.jpg",
@@ -264,7 +266,63 @@ class ExperimentalZipMetadataMatcherTest {
         val plan = buildExperimentalZipMetadataPlan(entries, records)
 
         assertEquals(1, plan.targets.size)
-        assertEquals(40.0000, plan.targets[0].latitude)
+        assertNull(plan.targets[0].latitude)
+        assertNull(plan.targets[0].longitude)
+        assertEquals("2024-03-05 08:15:30 UTC", plan.targets[0].dateStr)
+        assertTrue(plan.warnings.any { it.contains("conflicting location") })
+    }
+
+    @Test
+    fun oneHistoryRecordCannotGeotagTwoFilesWithTheSameSecond() {
+        // A second file can share the ZIP timestamp without having a corresponding history
+        // record. The old matcher copied the one record's GPS onto both files.
+        val entries = listOf("A", "B").map { id ->
+            HtmlMemoryEntry("2024-03-05_${id}-main.jpg", id, "2024-03-05", false, false, null, 1709626530L)
+        }
+        val record = ZipMemoryRecord("2024-03-05 08:15:30 UTC", 1709626530L, MediaKind.Image, 40.0, -83.0)
+
+        val plan = buildExperimentalZipMetadataPlan(entries, listOf(record))
+
+        assertEquals(2, plan.targets.size)
+        plan.targets.forEach {
+            assertEquals(record.dateStr, it.dateStr)
+            assertNull(it.latitude)
+            assertNull(it.longitude)
+        }
+        assertTrue(plan.warnings.any { it.contains("ambiguous") })
+    }
+
+    @Test
+    fun sameSecondFilesKeepGpsWhenAllHistoryRowsAgreeExactly() {
+        val entries = listOf("A", "B").map { id ->
+            HtmlMemoryEntry("2024-03-05_${id}-main.jpg", id, "2024-03-05", false, false, null, 1709626530L)
+        }
+        val records = listOf(
+            ZipMemoryRecord("2024-03-05 08:15:30 UTC", 1709626530L, MediaKind.Image, 40.0, -83.0),
+            ZipMemoryRecord("2024-03-05 08:15:30 UTC", 1709626530L, MediaKind.Image, 40.0, -83.0),
+        )
+
+        val plan = buildExperimentalZipMetadataPlan(entries, records)
+
+        assertEquals(2, plan.targets.size)
+        plan.targets.forEach {
+            assertEquals(40.0, it.latitude)
+            assertEquals(-83.0, it.longitude)
+        }
+        assertTrue(plan.warnings.isEmpty())
+    }
+
+    @Test
+    fun matchingSecondWithConflictingFilenameDateUsesTheFilenameDate() {
+        // A bad ZIP timestamp could happen to hit a real history record from another day.
+        // The old matcher then replaced the file's date and GPS with that unrelated row.
+        val entry = HtmlMemoryEntry("2024-03-06_A-main.jpg", "A", "2024-03-06", false, false, null, 1709626530L)
+        val record = ZipMemoryRecord("2024-03-05 08:15:30 UTC", 1709626530L, MediaKind.Image, 40.0, -83.0)
+
+        val target = buildExperimentalZipMetadataPlan(listOf(entry), listOf(record)).targets.single()
+
+        assertEquals("2024-03-06 00:00:00 UTC", target.dateStr)
+        assertNull(target.latitude)
     }
 
     @Test

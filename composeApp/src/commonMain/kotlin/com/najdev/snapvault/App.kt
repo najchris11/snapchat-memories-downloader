@@ -14,8 +14,10 @@ import com.najdev.snapvault.ui.PhoneRoot
 import com.najdev.snapvault.ui.SettingsScreen
 import com.najdev.snapvault.ui.components.AppSidebar
 import com.najdev.snapvault.ui.components.AppTopBar
+import com.najdev.snapvault.ui.components.UnsavedFavoritesDialog
 import com.najdev.snapvault.ui.theme.SnapVaultTheme
 import com.najdev.snapvault.viewmodel.DashboardViewModel
+import io.ktor.client.HttpClient
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okio.FileSystem
@@ -31,9 +33,21 @@ fun App(
     zipPipelineRunner: ZipPipelineRunner,
     fileSystem: FileSystem,
     showWindowControls: Boolean = false,
+    // Bumped by the host each time the OS asks to close the window. A counter rather than a
+    // flag, so a second request after "keep open" is still a change the effect below sees.
+    closeRequests: Int = 0,
+    // Called only once the view model is ready to exit — never directly by a close control.
     onCloseWindow: () -> Unit = {},
     onMinimizeWindow: () -> Unit = {},
     onMaximizeWindow: () -> Unit = {},
+    // Reaches the machine's preference store by default, so tests that are not about it pass
+    // OutputFolderMemory.None rather than reading and writing real settings.
+    outputFolderMemory: OutputFolderMemory = OutputFolderMemory.Platform,
+    // Same reason as outputFolderMemory above: the default reaches the real network, so a UI
+    // test that is not about downloading passes a mock engine rather than letting a run make
+    // a live request. A real request made the run's duration depend on the machine's network,
+    // which is what made ControlsDuringARunTest flaky under full-suite load.
+    httpClientFactory: () -> HttpClient = { HttpClient() },
 ) {
     var currentScreen by remember { mutableStateOf(Screen.Dashboard) }
     var themeMode by remember { mutableStateOf(loadThemeModePreference()) }
@@ -47,9 +61,30 @@ fun App(
     var hasFFmpeg by remember { mutableStateOf(false) }
 
     val dashboardViewModel = remember {
-        DashboardViewModel(zipPipelineRunner, mediaProcessor, fileSystem, pickers)
+        DashboardViewModel(
+            zipPipelineRunner, mediaProcessor, fileSystem, pickers,
+            httpClientFactory = httpClientFactory,
+            outputFolderMemory = outputFolderMemory,
+        )
     }
     DisposableEffect(Unit) { onDispose { dashboardViewModel.dispose() } }
+
+    // Every way of closing goes through the view model, which lets pending favorites land and
+    // stops any run before saying it is safe to exit. See DashboardViewModel.CloseState.
+    LaunchedEffect(closeRequests) {
+        if (closeRequests > 0) dashboardViewModel.requestClose()
+    }
+    val closeState = dashboardViewModel.closeState
+    LaunchedEffect(closeState) {
+        if (closeState == DashboardViewModel.CloseState.ReadyToExit) onCloseWindow()
+    }
+    if (closeState is DashboardViewModel.CloseState.UnsavedFavorites) {
+        UnsavedFavoritesDialog(
+            count = closeState.count,
+            onKeepOpen = dashboardViewModel::keepOpen,
+            onQuitAnyway = { dashboardViewModel.quitAnyway() },
+        )
+    }
 
     val scope = rememberCoroutineScope()
 
@@ -77,14 +112,24 @@ fun App(
             Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars)) {
                 AppTopBar(
                     showWindowControls = showWindowControls,
-                    onClose = onCloseWindow,
+                    onClose = { dashboardViewModel.requestClose() },
                     onMinimize = onMinimizeWindow,
                     onMaximize = onMaximizeWindow,
                 )
 
                 BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                    if (getActiveWindowSize(maxWidth, layoutOverride) == WindowSize.Compact) {
+                    // Medium is a real bucket, not a synonym for Expanded: it keeps the
+                    // sidebar but the screens drop their fixed-width secondary panels, since
+                    // 600–840dp cannot afford a 220dp sidebar and a 280dp inspector at once.
+                    val windowSize = getActiveWindowSize(maxWidth, layoutOverride)
+                    if (windowSize == WindowSize.Compact) {
                         PhoneRoot(
+                            // One copy of "which screen am I on", owned here. Both roots
+                            // used to hold their own, so crossing the width boundary — or
+                            // switching the Layout setting, which lives *in* Settings —
+                            // silently dropped you back on Dashboard.
+                            currentScreen = currentScreen,
+                            onNavigate = { currentScreen = it },
                             dashboardViewModel = dashboardViewModel,
                             hasExifTool = hasExifTool,
                             hasFFmpeg = hasFFmpeg,
@@ -108,18 +153,30 @@ fun App(
                                     Screen.Dashboard -> DashboardScreen(
                                         viewModel = dashboardViewModel,
                                         onNavigateToSettings = { currentScreen = Screen.Settings },
+                                        hasExifTool = hasExifTool,
+                                        hasFFmpeg = hasFFmpeg,
+                                        windowSize = windowSize,
                                     )
                                     Screen.Library -> LibraryScreen(
                                         downloadFolder = dashboardViewModel.downloadFolder,
                                         onOpenFolder = dashboardViewModel::pickOutputFolder,
+                                        folderChangeable = dashboardViewModel.outputFolderChangeable,
+                                        windowSize = windowSize,
+                                        favoriteOverrides = dashboardViewModel.favoriteOverrides,
+                                        onToggleFavorite = { item, favorited ->
+                                            dashboardViewModel.setFavorite(item.id, favorited)
+                                        },
+                                        onFavoritesScanned = dashboardViewModel::reconcileFavorites,
                                     )
                                     Screen.Settings -> SettingsScreen(
                                         hasExifTool = hasExifTool,
                                         hasFFmpeg = hasFFmpeg,
                                         onVerifyDependencies = onVerifyDependencies,
                                         downloadFolder = dashboardViewModel.downloadFolder,
-                                        onResetIndex = { dashboardViewModel.resetVaultIndex() },
+                                        onResetIndex = { scope.launch { dashboardViewModel.resetVaultIndex() } },
                                         onEditOutputPath = { dashboardViewModel.pickOutputFolder() },
+                                        outputFolderChangeable = dashboardViewModel.outputFolderChangeable,
+                                        resetOutcome = dashboardViewModel.lastIndexReset,
                                         themeMode = themeMode,
                                         onThemeModeChange = { themeMode = it; saveThemeModePreference(it) },
                                         layoutOverride = layoutOverride,

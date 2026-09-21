@@ -1,6 +1,5 @@
 package com.najdev.snapvault.downloader
 
-import com.najdev.snapvault.metadata.MediaProcessor
 import com.najdev.snapvault.parser.HtmlMemoryEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -19,9 +18,9 @@ import okio.openZip
 import okio.use
 import kotlin.random.Random
 
-class IosZipPipelineRunner(
-    private val mediaProcessor: MediaProcessor
-) : ZipPipelineRunner {
+// Takes no MediaProcessor, unlike the desktop runner: iOS does no overlay combining, so
+// the dependency was stored and never read.
+class IosZipPipelineRunner : ZipPipelineRunner {
 
     override fun listZipFiles(folderPath: String): List<String> {
         val folder = folderPath.toPath()

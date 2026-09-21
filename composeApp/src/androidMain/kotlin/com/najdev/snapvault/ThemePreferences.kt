@@ -29,3 +29,11 @@ actual fun loadLayoutOverride(): LayoutOverride {
 actual fun saveLayoutOverride(override: LayoutOverride) {
     prefs?.edit()?.putString("layoutOverride", override.name)?.apply()
 }
+
+actual fun loadLastOutputFolderPreference(): String? = prefs?.getString("lastOutputFolder", null)
+
+actual fun saveLastOutputFolderPreference(path: String?) {
+    prefs?.edit()?.apply {
+        if (path == null) remove("lastOutputFolder") else putString("lastOutputFolder", path)
+    }?.apply()
+}

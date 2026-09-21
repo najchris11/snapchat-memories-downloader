@@ -1,10 +1,6 @@
 package com.najdev.snapvault
 
 import java.io.File
-import java.io.InputStream
-import java.io.FileOutputStream
-import java.io.IOException
-import java.util.zip.ZipInputStream
 
 object BinaryExtractor {
 
@@ -39,37 +35,19 @@ object BinaryExtractor {
             ?: resolveCommand(commandName)?.also { commandCache[commandName] = it }
     }
 
+    private val installer by lazy {
+        ToolInstaller(binDir, getPlatform()) { path -> javaClass.getResourceAsStream(path) }
+    }
+
     private fun resolveCommand(commandName: String): String? {
-        // 1. Check system PATH
+        // 1. A tool on the user's PATH is theirs to choose and theirs to keep up to date.
         if (isCommandInPath(commandName)) {
             return commandName
         }
 
-        // 2. Check local bin directory
-        val exeName = if (getPlatform().startsWith("windows")) "$commandName.exe" else commandName
-        val localFile = File(binDir, exeName)
-        if (localFile.exists() && localFile.canExecute()) {
-            return localFile.absolutePath
-        }
-
-        // 3. Extract from bundled zip in JAR resources
-        val platform = getPlatform()
-        val zipResourcePath = "/bin/$platform/$commandName.zip"
-        val success = extractZipResource(zipResourcePath, binDir)
-        if (success && localFile.exists()) {
-            localFile.setExecutable(true, false)
-
-            if (!platform.startsWith("windows")) {
-                localFile.setExecutable(true, false)
-                binDir.listFiles()?.forEach { file ->
-                    if (file.isFile) file.setExecutable(true, false)
-                }
-            }
-
-            return localFile.absolutePath
-        }
-
-        return null
+        // 2. The copy bundled with this build, installed per version (D15). An executable left
+        //    in the cache by an earlier build is no longer used just because it exists.
+        return installer.install(commandName)?.absolutePath
     }
 
     private fun isCommandInPath(command: String): Boolean {
@@ -82,31 +60,6 @@ object BinaryExtractor {
             val process = ProcessBuilder(*checkCmd).start()
             process.waitFor() == 0
         } catch (e: Exception) {
-            false
-        }
-    }
-
-    private fun extractZipResource(resourcePath: String, destDir: File): Boolean {
-        val stream: InputStream = javaClass.getResourceAsStream(resourcePath) ?: return false
-        return try {
-            ZipInputStream(stream).use { zip ->
-                var entry = zip.nextEntry
-                while (entry != null) {
-                    val filePath = File(destDir, entry.name)
-                    if (entry.isDirectory) {
-                        filePath.mkdirs()
-                    } else {
-                        filePath.parentFile?.mkdirs()
-                        FileOutputStream(filePath).use { output ->
-                            zip.copyTo(output)
-                        }
-                    }
-                    zip.closeEntry()
-                    entry = zip.nextEntry
-                }
-            }
-            true
-        } catch (e: IOException) {
             false
         }
     }

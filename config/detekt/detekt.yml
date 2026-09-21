@@ -1,0 +1,106 @@
+# Detekt configuration for SnapVault.
+#
+# Layered on detekt's defaults (buildUponDefaultConfig = true), so this file records only
+# deviations. Rule sections match detekt's own default-detekt-config.yml — a rule declared
+# under the wrong section fails the run as an invalid property rather than being ignored.
+#
+# The deviations exist because several default rules fight Compose idioms rather than
+# catching defects: composable functions are PascalCase, deeply nested by nature, and built
+# almost entirely from dp/sp literals. Silencing those keeps the signal high enough that the
+# report is worth reading — a noisy linter gets ignored, which is worse than no linter.
+#
+# The rules that earn their place are the ones that caught real problems during the UI
+# audit: dead code, unused imports and parameters, and failures that vanish.
+
+complexity:
+  # Composable screens are legitimately long and deeply nested; splitting them to satisfy a
+  # metric rather than for a reason produced worse code when tried during round 1.
+  LongMethod:
+    active: false
+  LongParameterList:
+    active: false
+  CyclomaticComplexMethod:
+    active: false
+  NestedBlockDepth:
+    active: false
+  TooManyFunctions:
+    active: false
+  # DashboardViewModel is a ~1000-line pipeline orchestrator. Splitting it is a real
+  # refactor with its own risk, not a side effect of a lint run.
+  LargeClass:
+    active: false
+
+empty-blocks:
+  # An ignored failure is a real hazard here — vault_index.json parsing already hides a
+  # deserialization failure this way.
+  EmptyCatchBlock:
+    active: true
+  EmptyFunctionBlock:
+    active: true
+    ignoreOverridden: true
+
+exceptions:
+  # The pipeline deliberately catches broadly at phase boundaries so one bad file cannot
+  # abort a 10,000-item run. Those sites log and continue rather than swallow.
+  TooGenericExceptionCaught:
+    active: false
+  # Both stay on: a swallowed exception or a stack trace printed to a console nobody reads
+  # is a failure the user never learns about. The existing occurrences are baselined, so
+  # these fail on anything new.
+  SwallowedException:
+    active: true
+  PrintStackTrace:
+    active: true
+
+naming:
+  # @Composable functions are PascalCase by convention.
+  FunctionNaming:
+    active: true
+    functionPattern: '[a-zA-Z][a-zA-Z0-9]*'
+  TopLevelPropertyNaming:
+    active: true
+    constantPattern: '[A-Z][_A-Z0-9]*'
+    propertyPattern: '[A-Za-z][_A-Za-z0-9]*'
+  # One-declaration-per-file is not the convention here: LibraryScreen.kt holds LibraryItem
+  # alongside its composables, ThemePreferences.kt holds ThemeMode and ContextHolder. That
+  # grouping is deliberate.
+  MatchingDeclarationName:
+    active: false
+
+performance:
+  # ProcessBuilder(*args) is the natural call shape for the ffmpeg/exiftool invocations.
+  SpreadOperator:
+    active: false
+
+style:
+  # dp, sp and colour literals are the whole vocabulary of a UI file.
+  MagicNumber:
+    active: false
+  ReturnCount:
+    active: false
+  # Wildcard imports are used deliberately for Compose's layout and icon packages.
+  WildcardImport:
+    active: false
+  # Off deliberately. It flagged 98 lines, almost all of them log messages and ffmpeg
+  # argument lists in pipeline code. Reformatting those would produce a large diff touching
+  # files unrelated to whatever change is in flight — exactly the churn that gets a linter
+  # ignored.
+  MaxLineLength:
+    active: false
+  # The pipeline's phase boundaries legitimately have several early exits.
+  ThrowsCount:
+    active: false
+  # A parse loop with both a skip and a stop condition is clearer than the alternatives.
+  LoopWithTooManyJumpStatements:
+    active: false
+  DataClassContainsFunctions:
+    active: false
+  # These four are the point of the exercise.
+  UnusedImports:
+    active: true
+  UnusedParameter:
+    active: true
+  UnusedPrivateMember:
+    active: true
+  UnusedPrivateProperty:
+    active: true

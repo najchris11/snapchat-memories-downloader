@@ -25,10 +25,20 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
+      # The release workflow's version logic, tested here so a broken change is caught on the
+      # PR rather than when someone tries to cut a release.
+      - name: Test release scripts
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+
+      # Before the tests: a lint failure is cheap to produce and cheap to read, so there's
+      # no reason to spend a test run finding out about an unused import.
+      - name: Run Detekt
+        run: ./gradlew detekt
+
       - name: Run Desktop Tests
         run: ./gradlew :composeApp:desktopTest
 
-  # Mobile is shelved for now — see FIX_PLAN.md. This job is informational only
+  # Mobile is shelved for now; desktop is the active release target. Informational only
   # (continue-on-error) rather than a required check: current arm64 macOS runner images no
   # longer ship the Android SDK with no setup-android step here to provision one, so
   # assembleDebug is expected to fail until mobile work resumes and that gap is closed.

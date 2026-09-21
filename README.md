@@ -1,6 +1,10 @@
 # SnapVault
 
-**SnapVault** is an open-source desktop app for downloading, organizing, and processing your Snapchat memories. Works entirely offline after your export is ready — no Python, no CLI, no manual setup.
+**SnapVault** is an open-source desktop app for downloading, organizing, and processing your Snapchat memories. No Python or command line needed.
+
+**What runs where:** ZIP imports run locally. Legacy link imports require internet access. Linux requires FFmpeg and Perl.
+
+> **Not affiliated with Snap Inc.** SnapVault is an independent, unofficial tool. It is not made, endorsed, sponsored or supported by Snap Inc., and "Snapchat" is a trademark of Snap Inc. It works only on the data export Snapchat gives *you*, through Snapchat's own "Download My Data" — it does not access your account, log in for you, or bypass anything.
 
 Built with Kotlin Multiplatform + Compose Desktop. Ships as a native installer for macOS, Windows, and Linux.
 
@@ -13,10 +17,10 @@ Built with Kotlin Multiplatform + Compose Desktop. Ships as a native installer f
 
 ## Quickstart
 
-1. **Download** the latest release for your OS from the [Releases](../../releases) page
+1. **Download** the latest release for your OS from the [Releases](../../releases) page. On a Mac, choose `macos-arm64` for Apple Silicon (M-series) or `macos-x64` for Intel. `SHA256SUMS.txt` on the release lists each download's checksum.
 2. **Install** the `.dmg` (macOS), `.msi` (Windows), or `.deb` (Linux)
    > **Note:** releases are not yet code-signed. On macOS, Gatekeeper will warn that the app is from an unidentified developer — right-click the app → **Open** → **Open** (or run `xattr -d com.apple.quarantine /Applications/SnapVault.app`). On Windows, SmartScreen may show "Windows protected your PC" — click **More info** → **Run anyway**. See [docs/CODE_SIGNING.md](docs/CODE_SIGNING.md) for the signing roadmap.
-3. On Linux, install FFmpeg with your package manager (e.g. `sudo apt install ffmpeg`); on macOS/Windows both tools are bundled
+3. On Linux, install FFmpeg and Perl with your package manager (e.g. `sudo apt install ffmpeg perl`); on macOS/Windows both tools are bundled
 4. On the **Dashboard**, choose your Snapchat ZIP(s) and an output folder
 5. Configure pipeline options and click **Start Download**
 
@@ -32,9 +36,11 @@ Built with Kotlin Multiplatform + Compose Desktop. Ships as a native installer f
 | **Download Memories** | (Legacy mode) Downloads every memory from the links in your history file |
 | **Write Date Metadata** | Tags each file with its Snapchat capture date via ExifTool. In ZIP mode, precise time + GPS matching (on by default; can be turned off) also recovers time-of-day and GPS from `memories_history.json`. Legacy mode writes time-of-day and GPS where the history file provides them |
 | **Merge Video Overlays** | Combines `-main` + `-overlay` pairs (photos and videos) into a single composited output, using GPU-accelerated encoding when the hardware supports it (NVENC/VideoToolbox/QSV/VAAPI/AMF, verified by a runtime probe with automatic software fallback) |
-| **Clean Duplicate Files** | Removes byte-identical duplicates, keeping the earliest-dated copy; enable the dry-run toggle to preview deletions first |
+| **Clean Duplicate Files** | Removes byte-identical duplicates, keeping the earliest-dated copy and never removing a favorited file; enable the dry-run toggle to preview deletions first |
 
-> **How does ZIP mode recover time-of-day and GPS?** Snapchat's filenames only carry the capture date, but each file's exact capture timestamp is stored in the ZIP archive's extended-timestamp metadata. The matcher (on by default) pairs that timestamp second-for-second against `memories_history.json`, recovering full time-of-day and GPS. It never guesses: when two records share the same timestamp and their locations disagree, GPS is omitted for those files, and files without a timestamp match fall back to date-only tags. The **Experimental ZIP metadata matching** toggle on the Dashboard can be switched off to force conservative date-only tagging for every file.
+> **How does ZIP mode recover time-of-day and GPS?** Snapchat's filenames only carry the capture date, but each file's exact capture timestamp is stored in the ZIP archive's extended-timestamp metadata. The matcher (on by default) pairs that timestamp second-for-second against `memories_history.json` to add GPS. The ZIP timestamp itself supplies time-of-day when its UTC date agrees with the filename, even if the archive has no history JSON. GPS is omitted when same-second records disagree or a file cannot be paired safely. If a timestamp is missing or contradicts the filename date, the file gets a date-only tag. The **Precise time + GPS matching** toggle on the Dashboard can be switched off to force conservative date-only tagging for every file.
+
+> **Location privacy:** with precise matching on (ZIP mode) or metadata on (Legacy mode), each memory's GPS position is written into the photo or video file itself. Anyone you share those files with can read where they were taken. In ZIP mode, turn precise matching off for date-only tags; otherwise, strip location before sharing.
 
 ## System Requirements
 
@@ -67,16 +73,20 @@ It creates `demo-library/` with eight abstract, non-personal images, realistic S
 
 > **ExifTool isn't bundled in a source checkout.** The "bundled on Linux" note above is true for *release* installers — `scripts/prepare-runtime-linux.sh` packages it fresh during the release workflow, and the packaged zip is gitignored — but a plain `git clone` has nothing under `composeApp/src/desktopMain/resources/bin/linux-x64/`, so `./gradlew :composeApp:run` from source will silently have no ExifTool (date/GPS tagging becomes a no-op). Either run `bash scripts/prepare-runtime-linux.sh` once yourself, or install ExifTool with your package manager / into `~/.snapvault/bin/` (the second location the app already probes, no root needed) before running from source.
 
-The app version is set in `gradle.properties` (`app.version`). Releases are cut manually via the **Release** workflow (Actions → Release → Run workflow), which bumps the version, tags, runs the desktop test suite, and publishes installers.
+The app version is set in `gradle.properties` (`app.version`). Releases are cut manually via the **Release** workflow (Actions → Release → Run workflow). It works out the version, refusing one that is not above every existing tag; builds, tests, packages and verifies an installer on each platform; and only if every platform succeeded does it commit the version, tag it, and publish the installers with `SHA256SUMS.txt`. A dry run — the default — does everything except publish, from any branch.
 
-## Legacy Python Scripts
+## Support SnapVault
 
-The original Python-based CLI scripts are preserved in [`legacy/`](legacy/) for reference. They are not actively maintained.
+SnapVault is free to use. If it helps you, you can [leave an optional tip on Ko-fi](https://ko-fi.com/najdev) to support development and distribution.
 
 ## Credits
 
-Forked from [ManuelPuchner/snapchat-memories-downloader](https://github.com/ManuelPuchner/snapchat-memories-downloader). Thanks to Manuel and [Nick](https://github.com/nrc2358) for the original implementation.
+SnapVault began in December 2025 as a fork of [ManuelPuchner/snapchat-memories-downloader](https://github.com/ManuelPuchner/snapchat-memories-downloader), a set of Python CLI scripts — thanks to Manuel and [Nick](https://github.com/nrc2358) for that original implementation. The app you install today is a ground-up rewrite: a Kotlin Multiplatform / Compose Desktop application that shares no code with those scripts. The scripts themselves are not distributed here; that upstream repository carries no license, so it is theirs to share, not ours.
 
 ## License
 
-[GPL-3.0](LICENSE)
+Copyright © 2025–2026 Najib Coulibaly and contributors.
+
+SnapVault is free software under the [GNU General Public License v3.0 or later](LICENSE). You may use, study, share and modify it. If you distribute it — modified or not, for a fee or not — you must pass on the same freedoms, including the corresponding source, and you may not add restrictions of your own.
+
+Bundled ExifTool and FFmpeg remain under their own licenses; see [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) and `bin/manifest.json` for versions, checksums and sources.

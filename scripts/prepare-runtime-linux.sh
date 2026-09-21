@@ -4,6 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RESOURCES_DIR="$ROOT_DIR/composeApp/src/desktopMain/resources/bin"
 EXIFTOOL_VERSION="13.58"
+# Verified against upstreamSha256 in composeApp/src/desktopMain/resources/bin/manifest.json;
+# a mismatch stops the release build. ShippedToolManifestTest keeps the two in step.
+EXIFTOOL_SHA256="c84fb6b613a480a638225d44979bf44cd2f91c92b79f4d2aa43773c89fa4199e"
 
 TMP_DIR="$(mktemp -d)"
 cleanup() { rm -rf "$TMP_DIR"; }
@@ -20,6 +23,11 @@ EXIFTOOL_TARBALL="Image-ExifTool-${EXIFTOOL_VERSION}.tar.gz"
 curl -fL "https://sourceforge.net/projects/exiftool/files/${EXIFTOOL_TARBALL}/download" -o "$TMP_DIR/$EXIFTOOL_TARBALL" || \
 curl -fL "https://exiftool.org/${EXIFTOOL_TARBALL}" -o "$TMP_DIR/$EXIFTOOL_TARBALL"
 
+ACTUAL_SHA256="$(sha256sum "$TMP_DIR/$EXIFTOOL_TARBALL" | awk '{print $1}')"
+if [[ "$ACTUAL_SHA256" != "$EXIFTOOL_SHA256" ]]; then
+  echo "ERROR: $EXIFTOOL_TARBALL has SHA-256 $ACTUAL_SHA256, expected $EXIFTOOL_SHA256" >&2
+  exit 1
+fi
 tar -xzf "$TMP_DIR/$EXIFTOOL_TARBALL" -C "$TMP_DIR"
 EXIFTOOL_SRC_DIR=$(find "$TMP_DIR" -maxdepth 1 -type d -name "Image-ExifTool-*" | head -n 1)
 

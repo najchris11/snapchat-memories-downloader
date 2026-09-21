@@ -4,8 +4,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import com.najdev.snapvault.model.FileMeta
 import com.najdev.snapvault.ui.LibraryItem
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.json.Json
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import org.jetbrains.skia.Bitmap
@@ -14,7 +12,6 @@ import org.jetbrains.skia.Rect
 import org.jetbrains.skia.Image as SkiaImage
 import platform.Foundation.NSDate
 import platform.Foundation.NSDateFormatter
-import platform.Foundation.NSLocale
 
 private val mediaExtensions = setOf("jpg", "jpeg", "png", "mp4", "mov", "gif")
 private val videoExtensions = setOf("mp4", "mov")
@@ -25,9 +22,7 @@ actual fun scanMediaFiles(folderPath: String): List<LibraryItem> {
     val folder = folderPath.toPath()
     if (!fs.exists(folder)) return emptyList()
 
-    val index: Map<String, FileMeta> = runCatching {
-        Json.decodeFromString<Map<String, FileMeta>>(fs.read(folder / "vault_index.json") { readUtf8() })
-    }.getOrDefault(emptyMap())
+    val index: Map<String, FileMeta> = VaultIndex.read(fs, folderPath)
 
     return fs.list(folder)
         .filter { path ->
@@ -62,9 +57,9 @@ actual fun scanMediaFiles(folderPath: String): List<LibraryItem> {
                 date = scanned.captureDate?.let { formatCaptureDate(it) } ?: formatFileDate(scanned.lastModifiedMillis),
                 title = scanned.path.name.substringBeforeLast('.'),
                 type = if (ext in videoExtensions) "video" else "photo",
-                duration = null,
                 hasGps = meta?.hasGps ?: false,
-                hasOverlay = meta?.hasOverlay ?: false,
+                hasOverlay = meta?.combined ?: false,
+                favorited = meta?.favorited ?: false,
                 fileSizeBytes = scanned.size
             )
         }
@@ -129,10 +124,10 @@ private const val REFERENCE_DATE_OFFSET_SECONDS = 978307200.0
 private fun formatFileDate(millis: Long?): String {
     if (millis == null) return ""
     val date = NSDate(timeIntervalSinceReferenceDate = millis / 1000.0 - REFERENCE_DATE_OFFSET_SECONDS)
-    val formatter = NSDateFormatter().apply {
-        dateFormat = "MMM dd, yyyy"
-        locale = NSLocale(localeIdentifier = "en_US_POSIX")
-    }
+    // No explicit locale: NSDateFormatter defaults to the user's, which is what a displayed
+    // date wants. en_US_POSIX was pinned here, which is the right choice for a machine-read
+    // format and the wrong one for text on screen.
+    val formatter = NSDateFormatter().apply { dateFormat = DISPLAY_DATE_PATTERN }
     return formatter.stringFromDate(date).uppercase()
 }
 
@@ -153,8 +148,16 @@ private fun captureDateFromFileName(name: String): CaptureDate? {
     return CaptureDate(year, month, day)
 }
 
+private const val DISPLAY_DATE_PATTERN = "MMM dd, yyyy"
+
+// The month name comes from the locale's own abbreviations rather than a hardcoded English
+// list. Taken as a symbol rather than by formatting an NSDate on purpose: this is a plain
+// calendar date, and turning it into an instant is the UTC-midnight bug that would show
+// west-of-UTC users the previous day.
 private fun formatCaptureDate(date: CaptureDate): String {
-    val month = listOf("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC")[date.month - 1]
+    val symbols = NSDateFormatter().shortMonthSymbols
+    val month = (symbols.getOrNull(date.month - 1) as? String)?.uppercase()
+        ?: date.month.toString().padStart(2, '0')
     return "$month ${date.day.toString().padStart(2, '0')}, ${date.year}"
 }
 

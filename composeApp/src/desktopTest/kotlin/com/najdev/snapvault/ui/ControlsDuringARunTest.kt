@@ -254,6 +254,7 @@ class ControlsDuringARunTest {
                         }
                     },
                     outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
+                    onboardingMemory = com.najdev.snapvault.onboarding.OnboardingMemory.None,
                     httpClientFactory = mockHttp(),
                 )
             }

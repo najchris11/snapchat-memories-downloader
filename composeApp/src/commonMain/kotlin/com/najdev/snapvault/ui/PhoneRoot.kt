@@ -35,6 +35,7 @@ fun PhoneRoot(
     onThemeModeChange: (ThemeMode) -> Unit,
     layoutOverride: LayoutOverride,
     onLayoutOverrideChange: (LayoutOverride) -> Unit,
+    onShowOnboarding: () -> Unit = {},
 ) {
     // Resetting the index is a disk write under VaultIndex's lock, so it suspends.
     val resetScope = rememberCoroutineScope()
@@ -94,6 +95,7 @@ fun PhoneRoot(
                     onThemeModeChange = onThemeModeChange,
                     layoutOverride = layoutOverride,
                     onLayoutOverrideChange = onLayoutOverrideChange,
+                    onShowOnboarding = onShowOnboarding,
                 )
             }
         }

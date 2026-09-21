@@ -335,6 +335,7 @@ class SupportLinkTest {
                     zipPipelineRunner = NoOpZipPipelineRunner,
                     fileSystem = FakeFileSystem(),
                     outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
+                    onboardingMemory = com.najdev.snapvault.onboarding.OnboardingMemory.None,
                 )
             }
         }

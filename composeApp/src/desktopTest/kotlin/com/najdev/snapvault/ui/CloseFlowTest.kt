@@ -52,6 +52,7 @@ class CloseFlowTest {
                 closeRequests = closeRequests,
                 onCloseWindow = { exits++ },
                 outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
+                onboardingMemory = com.najdev.snapvault.onboarding.OnboardingMemory.None,
             )
         }
         waitForIdle()

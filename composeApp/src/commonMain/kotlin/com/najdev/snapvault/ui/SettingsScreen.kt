@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -48,6 +49,9 @@ fun SettingsScreen(
     supportPageUrl: String? = platformSupportPageUrl,
     onOpenSupportPage: (suspend (String) -> Unit)? = null,
     onCopySupportPage: ((String) -> Unit)? = null,
+    // Defaulted so the many call sites that are not about onboarding need no change; the
+    // row is hidden rather than dead when no host supplies it.
+    onShowOnboarding: (() -> Unit)? = null,
 ) {
     Column(
         modifier = Modifier
@@ -291,6 +295,38 @@ fun SettingsScreen(
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(stringResource(Res.string.set_output_path_edit), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
+
+        // ── Getting Started ───────────────────────────────────────────────────
+        // The first-launch flow is shown once and then never volunteers itself again, so this
+        // is the only way back to it. Above Support because it is help, not a tip jar.
+        if (onShowOnboarding != null) {
+            SettingsCard {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    SettingsSectionLabel(
+                        icon = Icons.AutoMirrored.Outlined.HelpOutline,
+                        text = stringResource(Res.string.onb_title)
+                    )
+                    SettingsRow(
+                        icon = Icons.Outlined.PlayCircleOutline,
+                        title = stringResource(Res.string.set_onboarding_label),
+                        description = stringResource(Res.string.set_onboarding_desc),
+                        descriptionMaxLines = 3,
+                    ) {
+                        TextButton(
+                            onClick = onShowOnboarding,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                stringResource(Res.string.set_onboarding_btn),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
             }

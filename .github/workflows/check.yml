@@ -1,11 +1,32 @@
 name: PR Check
 
+# Pull requests test the merge result (refs/pull/N/merge), so the push run that follows a
+# merge into develop re-tests code the PR already validated — 10 of 21 recent runs were that
+# duplicate. main keeps its push trigger as a release-branch safety net.
 on:
   pull_request:
     branches: [ main, develop ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'LICENSE'
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
+    # Repeated rather than shared: Actions does not support YAML anchors.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'LICENSE'
   workflow_dispatch:
+
+# A second push to the same ref makes the first run pointless — without this both go to
+# completion, and the macOS job alone bills at 10x. Not on main: a release-branch run is
+# worth finishing even if another push lands behind it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   # Desktop is the priority release target — this is the required check. Runs on Linux
@@ -44,11 +65,37 @@ jobs:
       - name: Run Desktop Tests
         run: ./gradlew :composeApp:desktopTest
 
-  # Mobile is shelved for now; desktop is the active release target. Informational only
-  # (continue-on-error) rather than a required check: current arm64 macOS runner images no
-  # longer ship the Android SDK with no setup-android step here to provision one, so
-  # assembleDebug is expected to fail until mobile work resumes and that gap is closed.
-  mobile-preview:
+  # Split out of the old macOS-only mobile-preview job. Assembling the Android app needs the
+  # Android SDK, not the Apple toolchain, and a Linux runner bills at 1x against macOS's 10x
+  # — this was ~70 billable-equivalent minutes per run for work Linux does in ~3.
+  android:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (JetBrains Runtime)
+        uses: actions/setup-java@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          java-version: '21.0.7'
+          distribution: 'jetbrains'
+
+      # compileSdk is 37, newer than the platforms baked into the runner image. This
+      # provisions the cmdline-tools and accepts the licences so AGP can fetch it.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Assemble Android Debug
+        run: ./gradlew :composeApp:assembleDebug -Pandroid.suppressUnsupportedCompileSdk=37.0
+
+  # The only job that genuinely needs macOS: the Kotlin/Native Apple toolchain does not
+  # cross-compile from Linux. Kept minimal for that reason.
+  ios:
     runs-on: macos-latest
     continue-on-error: true
     steps:
@@ -56,10 +103,6 @@ jobs:
 
       - name: Set up JDK 21 (JetBrains Runtime)
         uses: actions/setup-java@v4
-        # Authenticated so the JBR lookup is not subject to the runner IP's shared
-        # anonymous rate limit. release.yml has had this since 8c24306; check.yml did
-        # not, so PR runs failed with "API rate limit exceeded for <runner ip>" whenever
-        # the shared pool was busy — a red X on a PR whose code is fine.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -68,9 +111,6 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
-
-      - name: Assemble Android Debug
-        run: ./gradlew :composeApp:assembleDebug -Pandroid.suppressUnsupportedCompileSdk=37.0
 
       - name: Compile iOS Simulator Target
         run: ./gradlew :composeApp:compileKotlinIosSimulatorArm64

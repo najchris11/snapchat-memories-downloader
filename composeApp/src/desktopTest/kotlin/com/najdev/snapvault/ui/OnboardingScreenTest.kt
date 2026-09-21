@@ -2,6 +2,7 @@ package com.najdev.snapvault.ui
 
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
+
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasText
@@ -225,5 +226,56 @@ class OnboardingScreenTest {
             onNodeWithText(stringResource("onb_request_action")).performClick()
         }
         assertEquals(listOf("https://accounts.snapchat.com/v2/download-my-data"), opened)
+    }
+
+    // The walkthrough button was written to hide itself while onb_video_url was empty, and
+    // that was the only branch with coverage. The URL is set now, so the visible branch is
+    // the one that ships — and it had none.
+    @Test
+    fun theWalkthroughButtonOpensTheConfiguredVideo() {
+        val configured = stringResource("onb_video_url")
+        assertTrue(
+            configured.isNotBlank(),
+            "onb_video_url is empty — the walkthrough button silently disappears when it is",
+        )
+
+        val opened = mutableListOf<String>()
+        runComposeUiTest {
+            setContent {
+                SnapVaultTheme(darkMode = true) {
+                    OnboardingScreen(
+                        onFinish = {}, onSkip = {},
+                        dropFolderSuggestion = null,
+                        onCreateDropFolder = { DropFolderOutcome.Created },
+                        canRevealFolder = false,
+                        onOpenUrl = { opened += it },
+                        videoUrl = configured,
+                    )
+                }
+            }
+            onNodeWithText(stringResource("onb_video_action")).performClick()
+        }
+        assertEquals(listOf(configured), opened)
+    }
+
+    // The other half: an unset URL must leave no dead button behind. This is how the flow
+    // shipped before the video existed, and it is what a future re-record falls back to.
+    @Test
+    fun anUnsetVideoUrlLeavesNoDeadButton() {
+        runComposeUiTest {
+            setContent {
+                SnapVaultTheme(darkMode = true) {
+                    OnboardingScreen(
+                        onFinish = {}, onSkip = {},
+                        dropFolderSuggestion = null,
+                        onCreateDropFolder = { DropFolderOutcome.Created },
+                        canRevealFolder = false,
+                        onOpenUrl = {},
+                        videoUrl = "",
+                    )
+                }
+            }
+            onNodeWithText(stringResource("onb_video_action")).assertDoesNotExist()
+        }
     }
 }

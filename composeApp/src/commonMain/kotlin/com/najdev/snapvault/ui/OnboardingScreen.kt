@@ -96,6 +96,10 @@ fun OnboardingScreen(
     onRevealFolder: (String) -> Unit = ::revealInFileManager,
     canRevealFolder: Boolean = supportsFileManager,
     onOpenUrl: (String) -> Unit = ::openUrl,
+    // Hoisted so both branches are reachable from a test: the button hides itself when this
+    // is blank, and that used to be the only path with coverage because the resource was
+    // empty until the walkthrough was recorded.
+    videoUrl: String = stringResource(Res.string.onb_video_url),
 ) {
     var step by remember { mutableStateOf(OnboardingStep.entries.first()) }
     val compact = windowSize != WindowSize.Expanded
@@ -117,7 +121,7 @@ fun OnboardingScreen(
             ) {
                 Spacer(Modifier.height(if (compact) 8.dp else 24.dp))
                 when (step) {
-                    OnboardingStep.RequestExport -> RequestExportStep(onOpenUrl)
+                    OnboardingStep.RequestExport -> RequestExportStep(onOpenUrl, videoUrl)
                     OnboardingStep.DownloadZips -> DownloadZipsStep(
                         suggestion = dropFolderSuggestion,
                         onCreateDropFolder = onCreateDropFolder,
@@ -323,7 +327,7 @@ private fun LinkButton(
 // ── Steps ────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun RequestExportStep(onOpenUrl: (String) -> Unit) {
+private fun RequestExportStep(onOpenUrl: (String) -> Unit, videoUrl: String) {
     StepHeading(Res.string.onb_request_title)
     StepBody(Res.string.onb_request_body)
     StepNote(stringResource(Res.string.onb_request_note), Icons.Outlined.Schedule)
@@ -333,9 +337,8 @@ private fun RequestExportStep(onOpenUrl: (String) -> Unit) {
         accessibleLabel = stringResource(Res.string.onb_request_action),
         onOpenUrl = onOpenUrl,
     )
-    // Absent until a walkthrough is recorded: an empty onb_video_url hides the button rather
-    // than offering a link that goes nowhere. Same treatment as platformSupportPageUrl.
-    val videoUrl = stringResource(Res.string.onb_video_url)
+    // A blank URL hides the button rather than offering a link that goes nowhere — the same
+    // treatment platformSupportPageUrl gets. It shipped blank until the walkthrough existed.
     if (videoUrl.isNotBlank()) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             LinkButton(

@@ -92,7 +92,7 @@ fun buildExperimentalZipMetadataPlan(
     if (records.isEmpty()) {
         return ZipMetadataPlan(
             entries.flatMap { buildDateOnlyTargets(it) },
-            listOf("No memories_history.json metadata was found; falling back to ZIP date-only metadata.")
+            listOf("No usable memories_history.json records were found; using verified ZIP capture times where available, with no GPS.")
         )
     }
 
@@ -145,8 +145,8 @@ fun buildExperimentalZipMetadataPlan(
 
     val warnings = mutableListOf<String>()
     when {
-        matchedCount == 0 -> warnings += "No files could be matched to memories_history.json by exact capture timestamp; falling back to ZIP date-only metadata for all files."
-        matchedCount < entries.size -> warnings += "$matchedCount of ${entries.size} file(s) matched memories_history.json by exact capture timestamp; the rest fell back to ZIP date-only metadata."
+        matchedCount == 0 -> warnings += "No files could be matched to memories_history.json by exact capture timestamp; using verified ZIP capture times where available, with no GPS."
+        matchedCount < entries.size -> warnings += "$matchedCount of ${entries.size} file(s) matched memories_history.json by exact capture timestamp; the rest used verified ZIP capture times where available, with no GPS."
     }
     if (ambiguousLocationCount > 0) {
         warnings += "$ambiguousLocationCount file(s) had an ambiguous capture timestamp or conflicting location; GPS was omitted for those to avoid tagging the wrong file."
@@ -177,7 +177,7 @@ private fun consolidateByLocation(group: List<ZipMemoryRecord>): ZipMemoryRecord
 private fun buildDateOnlyTargets(entry: HtmlMemoryEntry): List<ZipMetadataTarget> {
     val target = ZipMetadataTarget(
         fileName = entry.fileName,
-        dateStr = fallbackDateString(entry.date),
+        dateStr = fallbackDateString(entry),
         hasOverlay = entry.hasOverlay,
     )
     return if (entry.hasOverlay && entry.overlayFileName != null) {
@@ -190,7 +190,19 @@ private fun buildDateOnlyTargets(entry: HtmlMemoryEntry): List<ZipMetadataTarget
     }
 }
 
-private fun fallbackDateString(dateKey: String): String = "$dateKey 00:00:00 UTC"
+private fun fallbackDateString(entry: HtmlMemoryEntry): String {
+    val dateOnly = "${entry.date} 00:00:00 UTC"
+    val midnight = parseEpochSecondUtc(dateOnly) ?: return dateOnly
+    val secondOfDay = entry.captureEpochSecond?.minus(midnight) ?: return dateOnly
+    // The filename gives an independent calendar date. A ZIP timestamp on another day is
+    // suspect, so keep only the safe filename date instead of shifting the memory.
+    if (secondOfDay !in 0L until 86_400L) return dateOnly
+    val hours = secondOfDay / 3_600
+    val minutes = (secondOfDay % 3_600) / 60
+    val seconds = secondOfDay % 60
+    fun Long.twoDigits() = toString().padStart(2, '0')
+    return "${entry.date} ${hours.twoDigits()}:${minutes.twoDigits()}:${seconds.twoDigits()} UTC"
+}
 
 private fun parseEpochSecondUtc(dateStr: String): Long? {
     val m = fullDateTimeRegex.find(dateStr) ?: return null

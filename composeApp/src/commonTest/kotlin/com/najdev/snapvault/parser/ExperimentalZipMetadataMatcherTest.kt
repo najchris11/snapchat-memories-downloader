@@ -75,7 +75,9 @@ class ExperimentalZipMetadataMatcherTest {
     }
 
     @Test
-    fun testNoMatchingTimestampFallsBackToDateOnly() {
+    fun unmatchedHistoryRecordKeepsVerifiedZipCaptureTime() {
+        // A numbered archive may be imported without the base ZIP carrying JSON. The old
+        // fallback discarded its exact ZIP timestamp and wrote midnight to every file.
         val entries = listOf(
             HtmlMemoryEntry(
                 fileName = "2024-01-01_A-main.jpg",
@@ -100,7 +102,7 @@ class ExperimentalZipMetadataMatcherTest {
         val plan = buildExperimentalZipMetadataPlan(entries, records)
 
         assertEquals(1, plan.targets.size)
-        assertEquals("2024-01-01 00:00:00 UTC", plan.targets[0].dateStr)
+        assertEquals("2024-01-01 12:00:00 UTC", plan.targets[0].dateStr)
         assertNull(plan.targets[0].latitude)
         assertTrue(plan.warnings.any { it.contains("No files could be matched") })
     }
@@ -133,6 +135,19 @@ class ExperimentalZipMetadataMatcherTest {
         assertEquals(1, plan.targets.size)
         assertEquals("2024-01-01 00:00:00 UTC", plan.targets[0].dateStr)
         assertNull(plan.targets[0].latitude)
+    }
+
+    @Test
+    fun noHistoryUsesZipCaptureTimeOnlyWhenItAgreesWithFilenameDate() {
+        val sameDay = HtmlMemoryEntry("2024-01-01_A-main.jpg", "A", "2024-01-01", false, false, null, 1704110400L)
+        val wrongDay = HtmlMemoryEntry("2024-01-02_B-main.jpg", "B", "2024-01-02", false, false, null, 1704110400L)
+
+        val plan = buildExperimentalZipMetadataPlan(listOf(sameDay, wrongDay), emptyList())
+
+        assertEquals("2024-01-01 12:00:00 UTC", plan.targets[0].dateStr)
+        assertEquals("2024-01-02 00:00:00 UTC", plan.targets[1].dateStr)
+        assertNull(plan.targets[0].latitude)
+        assertNull(plan.targets[1].latitude)
     }
 
     @Test

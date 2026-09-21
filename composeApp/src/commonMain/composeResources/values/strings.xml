@@ -235,4 +235,72 @@
     <string name="support_copy_link">Copy link</string>
     <string name="support_copied">Link copied.</string>
     <string name="support_copy_failed">Could not copy the link. Select the address above and copy it manually.</string>
+
+    <!-- Getting Started (onboarding)
+
+         Shown once on first launch and replayable from Settings. The copy carries the whole
+         path from "I installed this" to "I have a dated library", because the user this exists
+         for is the one who found the app without the walkthrough video. -->
+    <string name="onb_title">Getting Started</string>
+    <string name="onb_skip">Skip</string>
+    <string name="onb_back">Back</string>
+    <string name="onb_next">Next</string>
+    <string name="onb_finish">Finish</string>
+    <string name="onb_progress">Step %1$d of %2$d</string>
+    <string name="onb_step_state">Step %1$d of %2$d, %3$s</string>
+    <string name="onb_step_state_done">done</string>
+    <string name="onb_step_state_current">current</string>
+    <string name="onb_step_state_upcoming">upcoming</string>
+    <string name="onb_video_action">Watch the walkthrough</string>
+    <string name="onb_video_hint">About five minutes · Opens your browser</string>
+    <string name="onb_video_accessible_label">Watch the SnapVault walkthrough video. Opens in your browser.</string>
+    <string name="onb_video_url">https://www.youtube.com/watch?v=6v-aR5Lgc1k</string>
+
+    <!-- Step 1 -->
+    <string name="onb_request_title">Request your export from Snapchat</string>
+    <string name="onb_request_body">Snapchat does not hand over your memories directly — you have to ask for them, and they reply by email. The button below opens the request page: sign in, then choose Export your Memories → Request Only Memories → All Time.</string>
+    <string name="onb_request_note">The email usually arrives within a few hours, but it can take up to a day. Nothing below can happen until it does, so start this first.</string>
+    <string name="onb_request_action">Open Snapchat’s Download My Data page</string>
+    <string name="onb_request_url">https://accounts.snapchat.com/v2/download-my-data</string>
+
+    <!-- Step 2 -->
+    <string name="onb_download_title">Download the ZIP files</string>
+    <string name="onb_download_body">The email links to one or more ZIP files. Download all of them, and leave them zipped — SnapVault reads the archives directly, and unzipping them first loses the data it needs to date your photos.</string>
+    <string name="onb_download_folder_intro">Keeping them together in one folder makes the next step a single click. SnapVault can make one for you:</string>
+    <string name="onb_download_folder_create">Create this folder</string>
+    <string name="onb_download_folder_reveal">Show it in my file manager</string>
+    <string name="onb_download_folder_own">Or choose your own folder at the next step — nothing here is required.</string>
+    <string name="onb_download_folder_created">Created. Drop your ZIP files in there as they download.</string>
+    <string name="onb_download_folder_existed">Already there. Drop your ZIP files in there as they download.</string>
+    <string name="onb_download_folder_failed">Could not create it: %1$s. You can still choose any folder yourself at the next step.</string>
+    <string name="onb_download_folder_mobile">On this device, pick the ZIP files with the file picker on the Dashboard when you are ready.</string>
+
+    <!-- Step 3 -->
+    <string name="onb_folders_title">Point SnapVault at the ZIPs</string>
+    <string name="onb_folders_body">On the Dashboard you choose two things: the source, which is the folder holding your ZIP files, and the output folder, where the finished library is written.</string>
+    <string name="onb_folders_space">Give the output folder a few gigabytes of headroom — the media is written out alongside the archives before anything is cleaned up. SnapVault checks before it starts and offers a way through if the disk is tight.</string>
+    <string name="onb_folders_resume">You can stop a run and start it again later. Finished files are recorded, so a second run picks up where the first left off rather than downloading everything again.</string>
+
+    <!-- Step 4 -->
+    <string name="onb_pipeline_title">What the phases do</string>
+    <string name="onb_pipeline_body">A run is four phases. Each one is a switch on the Dashboard, so you can run only the parts you want.</string>
+    <string name="onb_pipeline_download_title">Download</string>
+    <string name="onb_pipeline_download_body">Reads the archives and pulls out every photo and video, skipping anything a previous run already finished.</string>
+    <string name="onb_pipeline_metadata_title">Write date and GPS metadata</string>
+    <string name="onb_pipeline_metadata_body">Snapchat exports arrive undated, so everything looks like it was taken today. This writes the real capture time and location back into each file, which is what makes Photos and Google Photos sort them correctly.</string>
+    <string name="onb_pipeline_combine_title">Merge video overlays</string>
+    <string name="onb_pipeline_combine_body">Captions, stickers and timestamps are exported as a separate layer. This burns them back onto the photo or video, then replaces the original with the merged version.</string>
+    <string name="onb_pipeline_dedupe_title">Clean duplicate files</string>
+    <string name="onb_pipeline_dedupe_body">Finds files that are byte-for-byte identical and removes the copies. This one deletes, so it starts in preview mode: leave the preview on for the first run and read the log before letting it act.</string>
+
+    <!-- Step 5 -->
+    <string name="onb_run_title">Run it, then open your Library</string>
+    <string name="onb_run_body">Press Start on the Dashboard. The log panel names each file as it goes, and the stepper tracks the phases. A large export takes a while — it is safe to leave it running.</string>
+    <string name="onb_run_review">When it finishes, open the Library tab. Click into a photo to see the date and location that were recovered, and mark the ones you want to keep as favorites.</string>
+    <string name="onb_run_replay">You can reopen this guide any time from Settings.</string>
+
+    <!-- Settings entry -->
+    <string name="set_onboarding_label">Getting Started guide</string>
+    <string name="set_onboarding_desc">Walk through requesting your Snapchat export, setting up folders, and what each phase does.</string>
+    <string name="set_onboarding_btn">Show guide</string>
 </resources>

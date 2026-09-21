@@ -8,7 +8,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import com.najdev.snapvault.downloader.ZipPipelineRunner
 import com.najdev.snapvault.metadata.MediaProcessor
+import com.najdev.snapvault.onboarding.OnboardingMemory
+import com.najdev.snapvault.onboarding.shouldShowOnboarding
 import com.najdev.snapvault.ui.DashboardScreen
+import com.najdev.snapvault.ui.OnboardingScreen
 import com.najdev.snapvault.ui.LibraryScreen
 import com.najdev.snapvault.ui.PhoneRoot
 import com.najdev.snapvault.ui.SettingsScreen
@@ -48,8 +51,16 @@ fun App(
     // a live request. A real request made the run's duration depend on the machine's network,
     // which is what made ControlsDuringARunTest flaky under full-suite load.
     httpClientFactory: () -> HttpClient = { HttpClient() },
+    // Same reason as outputFolderMemory: the default reads and writes this machine's real
+    // preference store, so a UI test that is not about onboarding would both inherit
+    // whatever this machine holds and then write to it. OnboardingMemory.None behaves like
+    // a user who has already been through the flow, which is what those tests want.
+    onboardingMemory: OnboardingMemory = OnboardingMemory.Platform,
 ) {
     var currentScreen by remember { mutableStateOf(Screen.Dashboard) }
+    // Read once, at composition. The flow is a takeover rather than a destination, so it
+    // is a flag over the whole root rather than a Screen entry — see OnboardingScreen.
+    var showOnboarding by remember { mutableStateOf(shouldShowOnboarding(onboardingMemory)) }
     var themeMode by remember { mutableStateOf(loadThemeModePreference()) }
     var layoutOverride by remember { mutableStateOf(loadLayoutOverride()) }
     val isDarkMode = when (themeMode) {
@@ -122,7 +133,18 @@ fun App(
                     // sidebar but the screens drop their fixed-width secondary panels, since
                     // 600–840dp cannot afford a 220dp sidebar and a 280dp inspector at once.
                     val windowSize = getActiveWindowSize(maxWidth, layoutOverride)
-                    if (windowSize == WindowSize.Compact) {
+                    if (showOnboarding) {
+                        // Inside BoxWithConstraints rather than over the whole window, so the
+                        // top bar's close and minimize controls stay reachable — a takeover
+                        // that covers them leaves a desktop user unable to quit (D-close).
+                        OnboardingScreen(
+                            // Finishing and skipping both persist: someone who dismissed it
+                            // deliberately must not meet it again on the next launch.
+                            onFinish = { onboardingMemory.markCompleted(); showOnboarding = false },
+                            onSkip = { onboardingMemory.markCompleted(); showOnboarding = false },
+                            windowSize = windowSize,
+                        )
+                    } else if (windowSize == WindowSize.Compact) {
                         PhoneRoot(
                             // One copy of "which screen am I on", owned here. Both roots
                             // used to hold their own, so crossing the width boundary — or
@@ -138,6 +160,7 @@ fun App(
                             onThemeModeChange = { themeMode = it; saveThemeModePreference(it) },
                             layoutOverride = layoutOverride,
                             onLayoutOverrideChange = { layoutOverride = it; saveLayoutOverride(it) },
+                            onShowOnboarding = { showOnboarding = true },
                         )
                     } else {
                         Row(modifier = Modifier.fillMaxSize()) {
@@ -181,6 +204,9 @@ fun App(
                                         onThemeModeChange = { themeMode = it; saveThemeModePreference(it) },
                                         layoutOverride = layoutOverride,
                                         onLayoutOverrideChange = { layoutOverride = it; saveLayoutOverride(it) },
+                                        // Replaying never clears the completed flag, so it is
+                                        // a one-off view rather than a re-arm of first launch.
+                                        onShowOnboarding = { showOnboarding = true },
                                     )
                                 }
                             }

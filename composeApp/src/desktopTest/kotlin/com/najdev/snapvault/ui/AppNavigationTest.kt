@@ -68,6 +68,7 @@ class AppNavigationTest {
                     zipPipelineRunner = NoOpZipPipelineRunner,
                     fileSystem = FileSystem.SYSTEM,
                     outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
+                    onboardingMemory = com.najdev.snapvault.onboarding.OnboardingMemory.None,
                 )
             }
         }

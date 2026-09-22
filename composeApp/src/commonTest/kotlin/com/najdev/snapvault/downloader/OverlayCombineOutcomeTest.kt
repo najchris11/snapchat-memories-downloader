@@ -33,6 +33,42 @@ class OverlayCombineOutcomeTest {
             mayDeleteOriginals(OverlayCombineStatus.SkippedVideo, deleteRequested = true),
             "a skipped video was never combined — its original is the only copy",
         )
+        assertFalse(
+            mayDeleteOriginals(OverlayCombineStatus.SkippedAnimated, deleteRequested = true),
+            "a skipped animation was never combined — deleting it loses every frame",
+        )
+    }
+
+    // The worst case this enum exists to prevent. A .gif combine used to report success:
+    // the decoder handed back frame one, the encoder wrote it as JPEG into a file still
+    // named .gif, and the status came back Combined — which cleared the animated original
+    // for deletion. Frames two onward existed nowhere else.
+    @Test
+    fun anAnimatedOriginalIsNeverClearedForDeletion() {
+        val gif = pair.copy(
+            mainName = "g-main.gif",
+            overlayName = "g-overlay.png",
+            outputName = "g.gif",
+            isAnimatedImage = true,
+        )
+        val result = overlayCombineResult(
+            gif,
+            mainPath = "/out/g-main.gif",
+            overlayPath = "/out/g-overlay.png",
+            outputPath = "/out/g.gif",
+            status = OverlayCombineStatus.SkippedAnimated,
+            warnings = emptyList(),
+        )
+        assertTrue(result.status.startsWith("skipped"), "was '${'$'}{result.status}'")
+        assertEquals(
+            "/out/g-main.gif",
+            result.outputPath,
+            "nothing new was written, so the result must point at the untouched original",
+        )
+        assertFalse(
+            mayDeleteOriginals(OverlayCombineStatus.SkippedAnimated, deleteRequested = true),
+            "the animated original is the only copy of every frame after the first",
+        )
     }
 
     @Test

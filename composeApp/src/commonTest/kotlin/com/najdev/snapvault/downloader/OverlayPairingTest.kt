@@ -90,6 +90,42 @@ class OverlayPairingTest {
         assertEquals(emptyList(), findOverlayPairNames(listOf("-main.jpg", "-overlay.png")))
     }
 
+    // A .gif main is readable by every image decoder here, writable by none of them without
+    // flattening: BitmapFactory, ImageIO and CGImageSource all hand back frame one only, and
+    // the encoders on the combine path write a single frame back. Combining one therefore
+    // destroyed the animation *and* wrote JPEG bytes into a file still named .gif — and
+    // because that reported success, mayDeleteOriginals then deleted the animated original.
+    // IosMediaProcessor already refuses GIFs on the metadata path for exactly this reason
+    // (singleFrameUnsafeExtensions); the combine path never got the same treatment.
+    @Test
+    fun anAnimatedGifPairIsFlaggedRatherThanFlattenedToOneFrame() {
+        val pairs = findOverlayPairNames(listOf("g-main.gif", "g-overlay.png"))
+        assertEquals(1, pairs.size)
+        assertTrue(
+            pairs[0].isAnimatedImage,
+            "a .gif main must be flagged: compositing it keeps frame one and discards the rest",
+        )
+    }
+
+    @Test
+    fun stillImageFormatsAreNotFlaggedAsAnimated() {
+        for (ext in listOf("jpg", "jpeg", "png", "heic", "heif", "webp", "tiff", "tif")) {
+            val pairs = findOverlayPairNames(listOf("i-main.$ext", "i-overlay.png"))
+            assertTrue(
+                !pairs[0].isAnimatedImage,
+                ".$ext is a single-frame format and must still be composited",
+            )
+        }
+    }
+
+    // Distinct from isVideo: a GIF is not video (the Library treats it as an image, and
+    // SupportedMediaExtensions.IMAGE lists it), it just cannot survive a re-encode.
+    @Test
+    fun anAnimatedImageIsNotAlsoClassifiedAsVideo() {
+        val pairs = findOverlayPairNames(listOf("g-main.gif", "g-overlay.png"))
+        assertTrue(!pairs[0].isVideo, "a .gif is an image; classifying it as video mislabels it")
+    }
+
     @Test
     fun unrelatedFilesAreLeftAlone() {
         val pairs = findOverlayPairNames(

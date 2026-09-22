@@ -16,12 +16,26 @@ data class OverlayPairNames(
     /** What the combined file should be called, extension included. */
     val outputName: String,
     val isVideo: Boolean,
+    /**
+     * A multi-frame image format. Not video — the Library shows these as images — but it
+     * cannot be composited, because every decoder here returns frame one and every encoder
+     * writes one frame back. See [ANIMATION_UNSAFE_FORMATS].
+     */
+    val isAnimatedImage: Boolean = false,
 )
 
 // Formats the image encoders on both platforms can read but not write back. The overlay
 // combine falls back to JPEG for these, so the output name has to say so upfront or the
 // file lands with an extension that lies about its contents.
 private val READ_ONLY_IMAGE_FORMATS = setOf("heic", "heif", "webp")
+
+// Image formats that can hold more than one frame. BitmapFactory, ImageIO and
+// CGImageSource all decode frame one and stop, and the encoders on the combine path write a
+// single frame back, so compositing one silently replaces an animation with a still — and
+// reports success, which then cleared the original for deletion. IosMediaProcessor already
+// refuses these on the metadata path (singleFrameUnsafeExtensions); this is the same rule
+// for the combine path, kept here so all three platforms read it from one place (BUG-18).
+private val ANIMATION_UNSAFE_FORMATS = setOf("gif")
 
 private const val MAIN_MARKER = "-main."
 private const val OVERLAY_MARKER = "-overlay."
@@ -61,13 +75,18 @@ fun findOverlayPairNames(fileNames: List<String>): List<OverlayPairNames> {
             val extension = mainName.extensionOrEmpty()
             val extLc = extension.lowercase()
             val isVideo = extLc in SupportedMediaExtensions.VIDEO
-            val outputExt = if (!isVideo && extLc in READ_ONLY_IMAGE_FORMATS) "jpg" else extension
+            val isAnimatedImage = !isVideo && extLc in ANIMATION_UNSAFE_FORMATS
+            // An animated main keeps its own extension: nothing is re-encoded, so renaming it
+            // to .jpg would describe a file that was never written.
+            val renameToJpg = !isVideo && !isAnimatedImage && extLc in READ_ONLY_IMAGE_FORMATS
+            val outputExt = if (renameToJpg) "jpg" else extension
             OverlayPairNames(
                 stem = stem,
                 mainName = mainName,
                 overlayName = overlayName,
                 outputName = "$stem.$outputExt",
                 isVideo = isVideo,
+                isAnimatedImage = isAnimatedImage,
             )
         }
 }

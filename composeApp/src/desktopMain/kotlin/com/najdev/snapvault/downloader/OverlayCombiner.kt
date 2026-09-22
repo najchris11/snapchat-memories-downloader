@@ -2,7 +2,6 @@ package com.najdev.snapvault.downloader
 
 import com.najdev.snapvault.BinaryExtractor
 import com.najdev.snapvault.metadata.MediaProcessor
-import com.najdev.snapvault.metadata.SupportedMediaExtensions
 import com.najdev.snapvault.runCommand
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -60,39 +59,20 @@ class OverlayCombiner(
 
         val allFiles = dir.listFiles() ?: return emptyList()
 
-        // Stem-based matching: "2017-07-13_UUID" is the stem shared by the main and overlay
-        // files for the same memory.  No UUID parsing is required — this is a physical
-        // file-matching operation that naturally handles duplicate UUIDs (different date
-        // prefixes produce different stems) and any future filename format changes.
-        val overlayByStem = allFiles
-            .filter { "-overlay." in it.name }
-            .mapNotNull { f ->
-                val stem = f.name.substringBefore("-overlay.").takeIf { it != f.name && it.isNotEmpty() }
-                stem?.let { it to f }
-            }
-            .toMap()
-
-        return allFiles
-            .filter { "-main." in it.name }
-            .mapNotNull { mainFile ->
-                val stem = mainFile.name.substringBefore("-main.")
-                    .takeIf { it != mainFile.name && it.isNotEmpty() } ?: return@mapNotNull null
-                val overlayFile = overlayByStem[stem] ?: return@mapNotNull null
-                val extLc = mainFile.extension.lowercase()
-                // Shared with DesktopMediaProcessor/MediaScanner (BUG-18) — this used to be
-                // its own hand-maintained list missing "m4v", so an .m4v pair would be
-                // misclassified as an image combine attempt instead of a video one.
-                val isVideo = extLc in SupportedMediaExtensions.VIDEO
-                // HEIC/WebP cannot be written by Java ImageIO; the FFmpeg fallback outputs JPEG.
-                // Set the output extension to .jpg upfront so the output path is always correct.
-                val outputExt = if (!isVideo && extLc in setOf("heic", "heif", "webp")) "jpg" else mainFile.extension
-                OverlayPair(
-                    mainFile = mainFile,
-                    overlayFile = overlayFile,
-                    outputFile = File(outputDir, "$stem.$outputExt"),
-                    isVideo = isVideo
-                )
-            }
+        // Name matching lives in common code (findOverlayPairNames) so Android shares this
+        // exact logic rather than the second, drifted copy it used to carry. This resolves
+        // the names it returns against the real directory.
+        val byName = allFiles.associateBy { it.name }
+        return findOverlayPairNames(allFiles.map { it.name }).mapNotNull { names ->
+            val mainFile = byName[names.mainName] ?: return@mapNotNull null
+            val overlayFile = byName[names.overlayName] ?: return@mapNotNull null
+            OverlayPair(
+                mainFile = mainFile,
+                overlayFile = overlayFile,
+                outputFile = File(outputDir, names.outputName),
+                isVideo = names.isVideo,
+            )
+        }
     }
 
     suspend fun combineAll(

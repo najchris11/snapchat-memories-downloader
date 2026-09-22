@@ -13,7 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import com.najdev.snapvault.downloader.NoOpZipPipelineRunner
+import com.najdev.snapvault.downloader.AndroidZipPipelineRunner
 import com.najdev.snapvault.metadata.AndroidMediaProcessor
 import java.io.File
 import java.io.FileOutputStream
@@ -26,10 +26,14 @@ class MainActivity : ComponentActivity() {
         setContent {
             val pickers = rememberAndroidPickers()
             val mediaProcessor = remember { AndroidMediaProcessor() }
+            // Was NoOpZipPipelineRunner: the app could pick an export and then silently do
+            // nothing with it. The runner shares desktop's extraction and composites
+            // overlays with android.graphics.
+            val zipPipelineRunner = remember(mediaProcessor) { AndroidZipPipelineRunner(mediaProcessor) }
             App(
                 pickers = pickers,
                 mediaProcessor = mediaProcessor,
-                zipPipelineRunner = NoOpZipPipelineRunner,
+                zipPipelineRunner = zipPipelineRunner,
                 fileSystem = FileSystem.SYSTEM
             )
         }

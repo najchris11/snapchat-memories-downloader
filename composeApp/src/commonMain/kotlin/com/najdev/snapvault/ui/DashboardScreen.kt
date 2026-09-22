@@ -38,10 +38,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.ImportMode
+import com.najdev.snapvault.CapabilityLevel
+import com.najdev.snapvault.CapabilityStatus
+import com.najdev.snapvault.MediaCapabilities
+import com.najdev.snapvault.MediaCapability
 import com.najdev.snapvault.WindowSize
 import com.najdev.snapvault.ZipSourceMode
 import com.najdev.snapvault.binaryInstallHint
-import com.najdev.snapvault.isAndroidBuild
+import com.najdev.snapvault.capabilityBannerState
+import com.najdev.snapvault.platformMediaCapabilities
 import com.najdev.snapvault.ui.theme.LogColors
 import com.najdev.snapvault.ui.theme.SnapVaultColors
 import com.najdev.snapvault.ui.components.LowSpaceOfferDialog
@@ -67,6 +72,7 @@ fun DashboardScreen(
     hasExifTool: Boolean = true,
     hasFFmpeg: Boolean = true,
     windowSize: WindowSize = WindowSize.Expanded,
+    mediaCapabilities: MediaCapabilities = platformMediaCapabilities,
 ) {
     // Owned by the view model, not remembered here: this composable leaves composition every
     // time the user visits another screen or crosses a layout boundary, and remembered state
@@ -95,7 +101,14 @@ fun DashboardScreen(
                 modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                DashboardControls(viewModel, options, onNavigateToSettings, hasExifTool, hasFFmpeg)
+                DashboardControls(
+                    viewModel,
+                    options,
+                    onNavigateToSettings,
+                    hasExifTool,
+                    hasFFmpeg,
+                    mediaCapabilities,
+                )
                 DashboardStatus(viewModel, compact = true)
             }
             Spacer(Modifier.height(16.dp))
@@ -113,7 +126,14 @@ fun DashboardScreen(
                     modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    DashboardControls(viewModel, options, onNavigateToSettings, hasExifTool, hasFFmpeg)
+                    DashboardControls(
+                        viewModel,
+                        options,
+                        onNavigateToSettings,
+                        hasExifTool,
+                        hasFFmpeg,
+                        mediaCapabilities,
+                    )
                 }
                 Spacer(Modifier.height(16.dp))
                 DashboardActions(viewModel)
@@ -136,14 +156,18 @@ private fun DashboardControls(
     onNavigateToSettings: () -> Unit,
     hasExifTool: Boolean,
     hasFFmpeg: Boolean,
+    mediaCapabilities: MediaCapabilities,
 ) {
-    // Android preview banner
-    if (isAndroidBuild) {
+    capabilityBannerState(mediaCapabilities)?.let { state ->
+        val messages = mutableListOf<String>()
+        for (capability in state.capabilities) {
+            messages += capabilityMessage(capability)
+        }
         InlineBanner(
             icon = Icons.Outlined.Info,
             accent = SnapVaultColors.warning,
-            title = stringResource(Res.string.banner_android_preview_title),
-            body = stringResource(Res.string.banner_android_preview_body),
+            title = stringResource(Res.string.banner_capabilities_title),
+            body = messages.joinToString(" "),
         )
     }
 
@@ -402,6 +426,37 @@ private fun DashboardControls(
         }
     }
 }
+
+@Composable
+private fun capabilityMessage(capability: CapabilityStatus): String = stringResource(
+    when (capability.capability to capability.level) {
+        MediaCapability.ImageMetadata to CapabilityLevel.Full ->
+            Res.string.banner_capability_image_metadata_full
+        MediaCapability.ImageMetadata to CapabilityLevel.Partial ->
+            Res.string.banner_capability_image_metadata_partial
+        MediaCapability.ImageMetadata to CapabilityLevel.Unavailable ->
+            Res.string.banner_capability_image_metadata_unavailable
+        MediaCapability.VideoMetadata to CapabilityLevel.Full ->
+            Res.string.banner_capability_video_metadata_full
+        MediaCapability.VideoMetadata to CapabilityLevel.Partial ->
+            Res.string.banner_capability_video_metadata_partial
+        MediaCapability.VideoMetadata to CapabilityLevel.Unavailable ->
+            Res.string.banner_capability_video_metadata_unavailable
+        MediaCapability.ImageOverlayCombine to CapabilityLevel.Full ->
+            Res.string.banner_capability_image_overlay_full
+        MediaCapability.ImageOverlayCombine to CapabilityLevel.Partial ->
+            Res.string.banner_capability_image_overlay_partial
+        MediaCapability.ImageOverlayCombine to CapabilityLevel.Unavailable ->
+            Res.string.banner_capability_image_overlay_unavailable
+        MediaCapability.VideoOverlayCombine to CapabilityLevel.Full ->
+            Res.string.banner_capability_video_overlay_full
+        MediaCapability.VideoOverlayCombine to CapabilityLevel.Partial ->
+            Res.string.banner_capability_video_overlay_partial
+        MediaCapability.VideoOverlayCombine to CapabilityLevel.Unavailable ->
+            Res.string.banner_capability_video_overlay_unavailable
+        else -> error("Unhandled media capability level")
+    }
+)
 
 // ── Action row ───────────────────────────────────────────────────────────────
 

@@ -71,8 +71,19 @@
     <string name="status_copied">Copied!</string>
 
     <!-- Dashboard banners -->
-    <string name="banner_android_preview_title">Android Preview</string>
-    <string name="banner_android_preview_body">Video overlay combining is not yet implemented on Android. ZIP extraction and date/GPS tagging for images work.</string>
+    <string name="banner_capabilities_title">Limited media support</string>
+    <string name="banner_capability_image_metadata_full">Date and GPS metadata are written to photos.</string>
+    <string name="banner_capability_image_metadata_partial">Some image metadata cannot be written on this build.</string>
+    <string name="banner_capability_image_metadata_unavailable">Image date and GPS metadata cannot be written on this build.</string>
+    <string name="banner_capability_video_metadata_full">Date and GPS metadata are written to videos.</string>
+    <string name="banner_capability_video_metadata_partial">Videos receive a file date, but embedded date and GPS metadata are unavailable.</string>
+    <string name="banner_capability_video_metadata_unavailable">Video date and GPS metadata cannot be written on this build.</string>
+    <string name="banner_capability_image_overlay_full">Photo overlays are combined on this build.</string>
+    <string name="banner_capability_image_overlay_partial">Some photo overlays cannot be combined on this build.</string>
+    <string name="banner_capability_image_overlay_unavailable">Photo overlays are not combined on this build.</string>
+    <string name="banner_capability_video_overlay_full">Video overlays are combined on this build.</string>
+    <string name="banner_capability_video_overlay_partial">Some video overlays cannot be combined on this build.</string>
+    <string name="banner_capability_video_overlay_unavailable">Video overlays are not combined on this build.</string>
     <plurals name="warn_run_failures_title">
         <item quantity="one">%1$d step failed</item>
         <item quantity="other">%1$d steps failed</item>
@@ -198,6 +209,8 @@
     <string name="set_layout_auto">Auto</string>
     <string name="set_layout_compact">Compact</string>
     <string name="set_layout_expanded">Expanded</string>
+    <string name="set_dep_exiftool_name">ExifTool</string>
+    <string name="set_dep_ffmpeg_name">FFmpeg</string>
     <string name="set_dep_exiftool_description">GPS metadata injection</string>
     <string name="set_dep_ffmpeg_description">Video overlay processing</string>
     <string name="set_output_path_label">Output Path</string>
@@ -208,6 +221,18 @@
     <string name="set_deps_refresh">Refresh Check</string>
     <string name="set_dep_detected">Detected</string>
     <string name="set_dep_missing">Not Found</string>
+    <string name="set_capabilities_title">Media capabilities</string>
+    <string name="set_capability_image_metadata">Image metadata</string>
+    <string name="set_capability_image_metadata_description">Date and GPS tags in photos</string>
+    <string name="set_capability_video_metadata">Video metadata</string>
+    <string name="set_capability_video_metadata_description">Date and GPS tags in videos</string>
+    <string name="set_capability_image_overlay">Photo overlay combining</string>
+    <string name="set_capability_image_overlay_description">Burns overlays into photos</string>
+    <string name="set_capability_video_overlay">Video overlay combining</string>
+    <string name="set_capability_video_overlay_description">Burns overlays into videos</string>
+    <string name="set_capability_full">Available</string>
+    <string name="set_capability_partial">Limited</string>
+    <string name="set_capability_unavailable">Unavailable</string>
     <string name="set_general_title">General Settings</string>
     <string name="set_theme_label">Application Theme</string>
     <string name="set_advanced_title">Advanced Tools</string>

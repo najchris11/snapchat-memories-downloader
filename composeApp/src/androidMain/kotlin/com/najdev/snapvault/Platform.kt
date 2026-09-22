@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 
 actual val isAndroidBuild: Boolean = true
+actual val isIosBuild: Boolean = false
 actual val platformSupportPageUrl: String? = null
 actual fun binaryInstallHint(): String = ""
 

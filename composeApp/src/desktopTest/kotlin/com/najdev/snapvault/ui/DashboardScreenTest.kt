@@ -150,7 +150,7 @@ class DashboardScreenTest {
         onAllNodes(hasClickAction()).assertCountEquals(1)
     }
 
-    // The Android and dependency banners use InlineBanner without an action; it must not
+    // The capability and dependency banners use InlineBanner without an action; it must not
     // render a phantom button there — that was the N2 problem in the top bar.
     @Test
     fun bannerWithoutAnActionRendersNoButton() = runComposeUiTest {
@@ -159,13 +159,13 @@ class DashboardScreenTest {
                 InlineBanner(
                     icon = Icons.Outlined.Info,
                     accent = SnapVaultColors.warning,
-                    title = "Android Preview",
-                    body = "Video overlay combining is not yet implemented on Android.",
+                    title = "Limited media support",
+                    body = "Video overlays are not combined on this build.",
                 )
             }
         }
 
-        onNodeWithText("Android Preview").assertIsDisplayed()
+        onNodeWithText("Limited media support").assertIsDisplayed()
         onAllNodes(hasClickAction()).assertCountEquals(0)
     }
 

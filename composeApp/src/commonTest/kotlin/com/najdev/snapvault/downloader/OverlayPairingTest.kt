@@ -126,6 +126,29 @@ class OverlayPairingTest {
         assertTrue(!pairs[0].isVideo, "a .gif is an image; classifying it as video mislabels it")
     }
 
+    // The platform encoders are selected by the OUTPUT extension, not the source's detected
+    // type — IosMediaProcessor.imageDestinationUti maps exactly jpg/jpeg/png/tif/tiff and
+    // refuses anything else, and the desktop combiner picks PNG-or-JPEG the same way. That
+    // only holds because pair discovery narrows every still-image pair to this set. Adding a
+    // format to SupportedMediaExtensions.IMAGE without deciding what writes it back would
+    // land bytes in a file whose extension lies; this is the test that catches it.
+    @Test
+    fun everyStillImagePairResolvesToAnExtensionAnEncoderCanWrite() {
+        val writable = setOf("jpg", "jpeg", "png", "tif", "tiff")
+        val stillImages = com.najdev.snapvault.metadata.SupportedMediaExtensions.IMAGE
+        for (ext in stillImages) {
+            val pairs = findOverlayPairNames(listOf("i-main.$ext", "i-overlay.png"))
+            assertEquals(1, pairs.size, "no pair found for .$ext")
+            val pair = pairs[0]
+            // Animated formats never reach an encoder at all, so they are exempt.
+            if (pair.isAnimatedImage) continue
+            assertTrue(
+                pair.outputName.substringAfterLast('.').lowercase() in writable,
+                ".$ext produced output '${'$'}{pair.outputName}', which no image encoder here writes",
+            )
+        }
+    }
+
     @Test
     fun unrelatedFilesAreLeftAlone() {
         val pairs = findOverlayPairNames(

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Compose Multiplatform refuses to start without this: PlistSanityCheck throws an
+	     IllegalStateException on launch, so the app SIGABRTs ~1.5s in and never draws a
+	     frame. Without it iOS caps the app at 60Hz on ProMotion displays.
+
+	     It lives in a partial plist rather than an INFOPLIST_KEY_* build setting because
+	     Xcode only maps that prefix onto a fixed list of keys it knows, and this is not
+	     one of them — setting it there builds cleanly and silently produces nothing.
+	     GENERATE_INFOPLIST_FILE stays YES: Xcode merges the keys it generates (bundle id,
+	     name, scene manifest, launch screen, orientations) into this file. -->
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+</dict>
+</plist>

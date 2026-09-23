@@ -58,6 +58,11 @@ class IosUrlOpeningTest {
             "openUrl calls the deprecated one-argument openURL:, which compiles and then " +
                 "opens nothing on a current iOS. Use openURL:options:completionHandler:.\n$body",
         )
+        assertTrue(
+            "completionHandler = onResult" in body,
+            "openUrl discards UIKit's asynchronous success result, so the UI cannot expose " +
+                "its manual-copy fallback when iOS rejects a URL.\n$body",
+        )
     }
 
     /**

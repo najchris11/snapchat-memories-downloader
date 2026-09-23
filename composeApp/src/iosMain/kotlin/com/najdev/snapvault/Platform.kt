@@ -17,12 +17,16 @@ actual fun binaryInstallHint(): String = ""
 // and the Help button in the top bar) was a button that reported nothing and did nothing when
 // tapped. openURL:options:completionHandler: is the replacement the header names; an empty
 // options map is documented as giving the old behaviour, asynchronously.
-actual fun openUrl(url: String) {
-    val nsUrl = NSURL.URLWithString(url) ?: return
+actual fun openUrl(url: String, onResult: (Boolean) -> Unit) {
+    val nsUrl = NSURL.URLWithString(url)
+    if (nsUrl == null) {
+        onResult(false)
+        return
+    }
     UIApplication.sharedApplication.openURL(
         nsUrl,
         options = emptyMap<Any?, Any>(),
-        completionHandler = null,
+        completionHandler = onResult,
     )
 }
 

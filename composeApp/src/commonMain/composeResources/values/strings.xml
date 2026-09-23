@@ -198,7 +198,9 @@
     <string name="set_layout_auto">Auto</string>
     <string name="set_layout_compact">Compact</string>
     <string name="set_layout_expanded">Expanded</string>
+    <string name="set_dep_exiftool_name">ExifTool</string>
     <string name="set_dep_exiftool_description">GPS metadata injection</string>
+    <string name="set_dep_ffmpeg_name">FFmpeg</string>
     <string name="set_dep_ffmpeg_description">Video overlay processing</string>
     <string name="set_output_path_label">Output Path</string>
     <string name="set_output_path_unset">Not set</string>

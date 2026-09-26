@@ -61,13 +61,14 @@ Key structural facts (unchanged and still true):
 
 ### Test reality
 
-`androidTest`, `iosTest` and `jvmSharedTest` have **no files**. All 465 tests run in
+`androidTest`, `iosTest` and `jvmSharedTest` have **no files**. All 469 Kotlin tests run in
 `commonTest` (13 files) or `desktopTest` (59). Mobile behaviour is covered only
 through common seams (`findOverlayPairNames`, `mayDeleteOriginals`,
 `showsDependencySection`) or by tests that read platform source as text
-(`IosUrlOpeningTest`, `StringResourceHygieneTest`). No mobile code is executed by
-CI, and CI's Android and iOS jobs both carry `continue-on-error`, so neither can
-fail a PR.
+(`IosUrlOpeningTest`, `StringResourceHygieneTest`). Mobile code is not executed by
+the test suites. Android APK assembly and iOS framework linking plus the complete
+unsigned simulator app build are required PR checks, alongside desktop. CI also
+verifies the generated iOS launch plist; it does not launch the app on a device.
 
 ## 2. Code review findings (correctness)
 
@@ -404,7 +405,7 @@ existed — the mechanism is the part that stops it recurring.
 
 ### 2026-09-25 — `feat/ios-overlay-combine` (PR #47)
 
-Landed. All five gates green; desktop, Android and iOS all run the build.
+Included in PR #47. Desktop, Android and iOS builds are required before merge.
 
 | Change | Note |
 |---|---|
@@ -414,7 +415,9 @@ Landed. All five gates green; desktop, Android and iOS all run the build.
 | iOS external links | Every link was dead — see below |
 | Refused URLs now visible | `openUrl` reports its outcome on all three platforms |
 | Dependency card dropped on mobile | Reported detection of binaries that cannot exist there, and squashed two tiles into a 360dp row |
-| CI links iOS instead of compiling | See below |
+| Required platform CI checks | Android assembles the APK; iOS links the framework and builds the unsigned simulator app, then checks the generated launch plist. Desktop, Android and iOS are required on `main` and `develop`; docs-only PRs report skipped build jobs instead of omitting the workflow |
+| Existing combined files preserved on mobile | Re-imports now skip an occupied output name and retain both originals. iOS also refuses to replace a destination during its final move |
+| GIF regression exercises the real combiner | A verified two-frame fixture catches the deletion and flattening bug; classification-only tests could not detect a missing guard |
 
 **Three traps worth remembering, because none were visible from the code:**
 
@@ -432,7 +435,8 @@ Landed. All five gates green; desktop, Android and iOS all run the build.
    at CommandLineTools, `linkDebugFrameworkIosSimulatorArm64` failed with *"An
    error occurred during an xcrun execution"* while the compile task stayed
    green — so both the local gates and CI were structurally blind to it. CI now
-   links. Note it still carries `continue-on-error`.
+   links and builds the complete simulator app. Mobile failures now block PRs instead of
+   being tolerated with `continue-on-error`.
 
 3. **A deprecated UIKit selector compiles without a Kotlin warning.**
    `openUrl` called the one-argument `UIApplication.openURL:`, deprecated
@@ -459,9 +463,9 @@ convincing false negative. Apple's `strings` has no `-e` flag.
   report `SkippedVideo` and leave originals untouched, so this is a missing
   feature, not a correctness bug. Media3 `Transformer` (Android) and
   `AVMutableVideoComposition` (iOS) are the routes.
-- **No mobile test execution anywhere**, and both mobile CI jobs are
-  non-blocking. Dropping `continue-on-error` from the iOS job is a one-liner and
-  would at least make a broken iOS link fail a PR.
+- **No mobile test execution anywhere.** All platform builds now block PRs,
+  including the complete iOS simulator app and its generated launch plist, but
+  device or simulator runtime tests remain a separate gap.
 - **App icons** are still the platform defaults on both mobile targets.
 - `feat/platform-capability-honesty` (unmerged) surfaces the ❌ column above to
   users. Its Dashboard banner is still wanted; its Settings half now conflicts

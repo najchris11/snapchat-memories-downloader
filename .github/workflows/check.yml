@@ -6,20 +6,19 @@ name: PR Check
 on:
   pull_request:
     branches: [ main, develop ]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.gitignore'
-      - 'LICENSE'
+    # Required checks must be created even for docs-only PRs. Skip the build jobs below
+    # instead of skipping the entire workflow, which leaves branch protection Pending.
   push:
     branches: [ main ]
-    # Repeated rather than shared: Actions does not support YAML anchors.
     paths-ignore:
       - '**.md'
       - 'docs/**'
       - '.gitignore'
       - 'LICENSE'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 # A second push to the same ref makes the first run pointless — without this both go to
 # completion, and the macOS job alone bills at 10x. Not on main: a release-branch run is
@@ -29,12 +28,43 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  # Desktop is the priority release target — this is the required check. Runs on Linux
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.filter.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether builds are needed
+        id: filter
+        shell: bash
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            git diff --no-renames --name-only -z "$PR_BASE_SHA...$PR_HEAD_SHA" | python3 scripts/ci_changes.py >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # All three platform checks are required on main and develop. Runs on Linux
   # because it's plain JVM/Compose Desktop work and doesn't need the macOS toolchain,
   # which is both faster and cheaper than the shared macOS runner pool.
   desktop:
+    needs: changes
+    # A failed detector must fail the required jobs, rather than letting skipped jobs
+    # satisfy branch protection. Only a successful, explicit docs-only decision skips.
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.build != 'false') }}
     runs-on: ubuntu-latest
     steps:
+      - name: Check change detection
+        if: ${{ needs.changes.result != 'success' }}
+        run: exit 1
+
       - uses: actions/checkout@v4
 
       - name: Set up JDK 21 (JetBrains Runtime)
@@ -54,7 +84,7 @@ jobs:
 
       # The release workflow's version logic, tested here so a broken change is caught on the
       # PR rather than when someone tries to cut a release.
-      - name: Test release scripts
+      - name: Test CI and release scripts
         run: python3 -m unittest discover -s scripts -p 'test_*.py'
 
       # Before the tests: a lint failure is cheap to produce and cheap to read, so there's
@@ -75,9 +105,14 @@ jobs:
   # for the obsolete 'tools' package, which no longer exists in the SDK repository, so
   # sdkmanager exits 1 before Gradle runs at all.
   android:
+    needs: changes
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.build != 'false') }}
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
+      - name: Check change detection
+        if: ${{ needs.changes.result != 'success' }}
+        run: exit 1
+
       - uses: actions/checkout@v4
 
       - name: Set up JDK 21 (JetBrains Runtime)
@@ -95,11 +130,17 @@ jobs:
         run: ./gradlew :composeApp:assembleDebug -Pandroid.suppressUnsupportedCompileSdk=37.0
 
   # The only job that genuinely needs macOS: the Kotlin/Native Apple toolchain does not
-  # cross-compile from Linux. Kept minimal for that reason.
+  # link from Linux. Build the complete simulator app as well as the Kotlin framework
+  # so Swift, the Xcode build phase and the generated launch plist are checked too.
   ios:
+    needs: changes
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.build != 'false') }}
     runs-on: macos-latest
-    continue-on-error: true
     steps:
+      - name: Check change detection
+        if: ${{ needs.changes.result != 'success' }}
+        run: exit 1
+
       - uses: actions/checkout@v4
 
       - name: Set up JDK 21 (JetBrains Runtime)
@@ -120,3 +161,18 @@ jobs:
       # and every local iOS build silently reused the last framework that had linked.
       - name: Link iOS Simulator Framework
         run: ./gradlew :composeApp:linkDebugFrameworkIosSimulatorArm64
+
+      - name: Build unsigned iOS simulator app
+        run: |
+          xcodebuild build \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/ios-ci \
+            ARCHS=arm64 \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Verify built iOS app launch configuration
+        run: python3 scripts/verify_ios_app.py build/ios-ci/Build/Products/Debug-iphonesimulator/iosApp.app

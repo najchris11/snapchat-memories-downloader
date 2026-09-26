@@ -195,8 +195,15 @@ class IosMediaProcessor : MediaProcessor {
                 return false
             }
 
-            fileManager.removeItemAtPath(outputPath, error = null)
-            fileManager.moveItemAtPath(tmpPath, toPath = outputPath, error = null)
+            // No remove first: moveItemAtPath refuses an existing destination, and that
+            // refusal is the point. Whatever is at outputPath — a previous run's result, or a
+            // combined file the user has since edited — is not ours to replace, and removing
+            // it here used to report success, which then cleared both originals for deletion.
+            val moved = fileManager.moveItemAtPath(tmpPath, toPath = outputPath, error = null)
+            if (!moved) {
+                onWarning?.invoke("output already exists, left alone: ${outputPath.substringAfterLast('/')}")
+            }
+            moved
         } catch (e: Exception) {
             onWarning?.invoke("overlay combine failed: ${e.message}")
             false

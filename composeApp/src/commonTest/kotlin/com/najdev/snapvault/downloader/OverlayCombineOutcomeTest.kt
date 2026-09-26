@@ -71,6 +71,64 @@ class OverlayCombineOutcomeTest {
         )
     }
 
+    // Regression: the mobile runners handed the final path straight to their encoders.
+    // Android wrote to it directly and iOS removed whatever was there before moving its
+    // output into place, so re-importing an export replaced a combined image the user had
+    // edited, came back Combined, and then deleted both originals — no copy of anything
+    // survived. Desktop has refused an existing output since D02; this is the same rule.
+    @Test
+    fun anExistingOutputIsNeverReplacedOrClearedForDeletion() {
+        val status = overlayCombineSkipStatus(pair, outputExists = true)
+        assertEquals(OverlayCombineStatus.SkippedExistingOutput, status)
+        assertFalse(
+            mayDeleteOriginals(status!!, deleteRequested = true),
+            "a conflict wrote nothing — the originals are still the only copies of this pair",
+        )
+
+        val result = overlayCombineResult(
+            pair,
+            mainPath = "/out/2017-07-13_abc-main.jpg",
+            overlayPath = "/out/2017-07-13_abc-overlay.png",
+            outputPath = "/out/2017-07-13_abc.jpg",
+            status = status,
+            warnings = emptyList(),
+        )
+        assertEquals("skipped: output already exists", result.status)
+        assertEquals(
+            "/out/2017-07-13_abc-main.jpg",
+            result.outputPath,
+            "the file already at the output path is not something this run produced",
+        )
+    }
+
+    // The conflict is checked before the kind of media: an existing output is reported as
+    // such whatever the pair is, rather than as a video or animation skip that hides it.
+    @Test
+    fun anExistingOutputTakesPrecedenceOverEveryOtherSkip() {
+        val video = pair.copy(mainName = "v-main.mp4", outputName = "v.mp4", isVideo = true)
+        val gif = pair.copy(mainName = "g-main.gif", outputName = "g.gif", isAnimatedImage = true)
+        for (p in listOf(pair, video, gif)) {
+            assertEquals(
+                OverlayCombineStatus.SkippedExistingOutput,
+                overlayCombineSkipStatus(p, outputExists = true),
+                p.mainName,
+            )
+        }
+    }
+
+    @Test
+    fun aPairWithNoConflictIsSkippedOnlyForWhatItIs() {
+        assertEquals(null, overlayCombineSkipStatus(pair, outputExists = false), "a still image is attempted")
+        assertEquals(
+            OverlayCombineStatus.SkippedVideo,
+            overlayCombineSkipStatus(pair.copy(isVideo = true), outputExists = false),
+        )
+        assertEquals(
+            OverlayCombineStatus.SkippedAnimated,
+            overlayCombineSkipStatus(pair.copy(isAnimatedImage = true), outputExists = false),
+        )
+    }
+
     @Test
     fun deletingIsStillOptOutWhenTheCallerDidNotAskForIt() {
         for (status in OverlayCombineStatus.entries) {

@@ -297,23 +297,19 @@ class IosZipPipelineRunner(
         val outputPath = dir / names.outputName
         val warnings = mutableListOf<String>()
 
-        val status = when {
-            // Needs an AVAssetExportSession re-encode; never attempted, and never reported
-            // as combined, which would badge an untouched file as having its overlay burned in.
-            names.isVideo -> OverlayCombineStatus.SkippedVideo
-            // CGImageSourceCreateImageAtIndex(source, 0) is frame one of an animation and
-            // the destination writes a single frame back, so combining would silently
-            // replace the animation with a still.
-            names.isAnimatedImage -> OverlayCombineStatus.SkippedAnimated
-            withContext(Dispatchers.IO) {
+        // Existing output, video, then animation: see overlayCombineSkipStatus, which is
+        // where the order and each reason are tested. The output check has to happen here —
+        // the processor is handed the final path and would replace whatever is there.
+        val status = overlayCombineSkipStatus(names, outputExists = fileSystem.exists(outputPath)) ?: run {
+            val combined = withContext(Dispatchers.IO) {
                 mediaProcessor.combineImageWithOverlay(
                     mainPath.toString(),
                     overlayPath.toString(),
                     outputPath.toString(),
                     onWarning = { warnings += it },
                 )
-            } -> OverlayCombineStatus.Combined
-            else -> OverlayCombineStatus.Failed
+            }
+            if (combined) OverlayCombineStatus.Combined else OverlayCombineStatus.Failed
         }
 
         // Only a confirmed combine has produced a second copy of the pixels; see

@@ -124,24 +124,19 @@ class AndroidZipPipelineRunner(
         val outputFile = File(dir, names.outputName)
         val warnings = mutableListOf<String>()
 
-        // Video compositing needs an encoder Android does not ship, so it is never attempted
-        // — and never reported as combined, which would badge an untouched file in the
-        // Library as having its overlay burned in.
-        val status = when {
-            names.isVideo -> OverlayCombineStatus.SkippedVideo
-            // BitmapFactory decodes frame one of a GIF and stops, and compress() writes a
-            // single JPEG frame back — into a file still named .gif. That reported success,
-            // which cleared the animated original for deletion below.
-            names.isAnimatedImage -> OverlayCombineStatus.SkippedAnimated
-            withContext(Dispatchers.IO) {
+        // Existing output, video, then animation: see overlayCombineSkipStatus, which is
+        // where the order and each reason are tested. The output check has to happen here —
+        // the processor is handed the final path and would replace whatever is there.
+        val status = overlayCombineSkipStatus(names, outputExists = outputFile.exists()) ?: run {
+            val combined = withContext(Dispatchers.IO) {
                 mediaProcessor.combineImageWithOverlay(
                     mainFile.absolutePath,
                     overlayFile.absolutePath,
                     outputFile.absolutePath,
                     onWarning = { warnings += it },
                 )
-            } -> OverlayCombineStatus.Combined
-            else -> OverlayCombineStatus.Failed
+            }
+            if (combined) OverlayCombineStatus.Combined else OverlayCombineStatus.Failed
         }
 
         // Only a confirmed combine has produced a second copy of the pixels; see

@@ -1,11 +1,13 @@
 package com.najdev.snapvault.downloader
 
+import com.najdev.snapvault.metadata.MediaProcessor
 import com.najdev.snapvault.parser.HtmlMemoryEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -18,9 +20,9 @@ import okio.openZip
 import okio.use
 import kotlin.random.Random
 
-// Takes no MediaProcessor, unlike the desktop runner: iOS does no overlay combining, so
-// the dependency was stored and never read.
-class IosZipPipelineRunner : ZipPipelineRunner {
+class IosZipPipelineRunner(
+    private val mediaProcessor: MediaProcessor,
+) : ZipPipelineRunner {
 
     override fun listZipFiles(folderPath: String): List<String> {
         val folder = folderPath.toPath()
@@ -226,6 +228,18 @@ class IosZipPipelineRunner : ZipPipelineRunner {
         }
     }
 
+    /**
+     * Burns each memory's overlay into its main image.
+     *
+     * Deliberately the same shape as AndroidZipPipelineRunner: pair discovery, the delete
+     * rule and the result shape are all shared common code (findOverlayPairNames,
+     * mayDeleteOriginals, overlayCombineResult), so the two platforms cannot drift the way
+     * the two copies of pair discovery did before they were extracted (BUG-18). Only the
+     * compositing call itself is platform code.
+     *
+     * Unlike desktop there is no separate metadata pass: IosMediaProcessor carries the
+     * source's properties through the same encode, so onMetaStart reports no work.
+     */
     override suspend fun combineAll(
         outputDir: String,
         deleteOriginals: Boolean,
@@ -234,8 +248,90 @@ class IosZipPipelineRunner : ZipPipelineRunner {
         onMetaStart: (total: Int) -> Unit,
         onMetaError: ((String) -> Unit)?,
         onProgress: (CombineResult) -> Unit
-    ) {
-        onStart(0)
-        onMetaError?.invoke("Image and video overlay combining on iOS will be implemented in Phase 3.5.")
+    ) = coroutineScope {
+        val fileSystem = FileSystem.SYSTEM
+        val dir = outputDir.toPath()
+        if (!fileSystem.exists(dir)) {
+            onStart(0)
+            return@coroutineScope
+        }
+
+        val byName = fileSystem.list(dir).associateBy { it.name }
+        val pairs = findOverlayPairNames(byName.keys.toList())
+        onStart(pairs.size)
+        onMetaStart(0)
+        if (pairs.isEmpty()) return@coroutineScope
+
+        // Results reach the caller on one coroutine, so onProgress never sees two threads.
+        val channel = Channel<CombineResult>(Channel.UNLIMITED)
+        val consumer = launch { for (result in channel) onProgress(result) }
+
+        // Serialised, and workerCount is ignored as a result — the same call the Android
+        // runner makes for the same reason: compositing holds the main image, the overlay
+        // and the output at full resolution simultaneously, and iOS kills an app that runs
+        // over its memory limit rather than letting it swap.
+        val oneAtATime = Semaphore(1)
+
+        for (names in pairs) {
+            val mainPath = byName[names.mainName] ?: continue
+            val overlayPath = byName[names.overlayName] ?: continue
+            oneAtATime.withPermit {
+                channel.send(
+                    combineOne(fileSystem, dir, names, mainPath, overlayPath, deleteOriginals)
+                )
+            }
+        }
+
+        channel.close()
+        consumer.join()
+    }
+
+    private suspend fun combineOne(
+        fileSystem: FileSystem,
+        dir: Path,
+        names: OverlayPairNames,
+        mainPath: Path,
+        overlayPath: Path,
+        deleteOriginals: Boolean,
+    ): CombineResult {
+        val outputPath = dir / names.outputName
+        val warnings = mutableListOf<String>()
+
+        val status = when {
+            // Needs an AVAssetExportSession re-encode; never attempted, and never reported
+            // as combined, which would badge an untouched file as having its overlay burned in.
+            names.isVideo -> OverlayCombineStatus.SkippedVideo
+            // CGImageSourceCreateImageAtIndex(source, 0) is frame one of an animation and
+            // the destination writes a single frame back, so combining would silently
+            // replace the animation with a still.
+            names.isAnimatedImage -> OverlayCombineStatus.SkippedAnimated
+            withContext(Dispatchers.IO) {
+                mediaProcessor.combineImageWithOverlay(
+                    mainPath.toString(),
+                    overlayPath.toString(),
+                    outputPath.toString(),
+                    onWarning = { warnings += it },
+                )
+            } -> OverlayCombineStatus.Combined
+            else -> OverlayCombineStatus.Failed
+        }
+
+        // Only a confirmed combine has produced a second copy of the pixels; see
+        // mayDeleteOriginals, which is where that rule is tested.
+        if (mayDeleteOriginals(status, deleteOriginals)) {
+            runCatching { fileSystem.delete(mainPath) }
+                .onFailure { warnings += "could not delete original: ${names.mainName}" }
+            runCatching { fileSystem.delete(overlayPath) }
+                .onFailure { warnings += "could not delete overlay: ${names.overlayName}" }
+        }
+
+        return overlayCombineResult(
+            pair = names,
+            mainPath = mainPath.toString(),
+            overlayPath = overlayPath.toString(),
+            outputPath = outputPath.toString(),
+            status = status,
+            warnings = warnings,
+        )
     }
 }

@@ -6,42 +6,68 @@ honest UI/UX review of the responsive layout, and ordered implementation steps.
 
 Status legend: ✅ works · 🟡 partial / has issues · ❌ stub or missing
 
+§1 and §8 are kept current. §2–§7 are the original pre-Phase-2 plan and are
+**not** re-audited on every change — treat a finding there as open only if §1 or
+§8 does not contradict it.
+
 ---
 
 ## 1. Current state audit
 
+Last verified against the tree on 2026-09-25 (branch `feat/ios-overlay-combine`).
+
 | Subsystem | Desktop | Android | iOS |
 |---|---|---|---|
 | App shell / navigation | ✅ sidebar | ✅ bottom nav (`PhoneRoot`) | ✅ bottom nav |
-| Theme + layout persistence | ✅ | ✅ (PR #18) | ✅ (PR #18) |
-| File/folder pickers | ✅ | 🟡 wired in `MainActivity`, but see F1–F3 | ❌ all callbacks return null |
-| ZIP reading (`listZipEntries` / `readZipEntryText` / `listZipEntryTimestamps`) | ✅ | ❌ stubs | ❌ stubs |
-| ZIP pipeline runner (extract / combine) | ✅ | ❌ `NoOpZipPipelineRunner` | ❌ `NoOpZipPipelineRunner` |
-| GPS metadata write | ✅ exiftool | 🟡 `ExifInterface` (images only, untested) | ❌ stub |
-| Date metadata write | ✅ exiftool | ❌ `writeDateMetadata` returns false | ❌ stub |
-| Video + overlay combine | ✅ ffmpeg | ❌ stub | ❌ stub |
-| Library scan + thumbnails | ✅ | ❌ stubs → Library always empty | ❌ stubs |
-| Video playback | ✅ | 🟡 `VideoView` (bug F6) | 🟡 AVPlayer (untested) |
-| App icon | ✅ | ❌ default green Android head | ❌ default blank |
+| Theme + layout persistence | ✅ | ✅ | ✅ |
+| File/folder pickers | ✅ | ✅ `AndroidPickers` | ✅ `IosPickers` |
+| ZIP entry reading (`listZipEntries` / `readZipEntryText` / `listZipEntryTimestamps`) | ✅ `java.util.zip` | ❌ **still stubs** — return empty | ✅ okio `openZip` |
+| ZIP extraction | ✅ `ZipExtractEngine` (jvmShared) | ✅ same engine | ✅ own okio path |
+| ZIP pipeline runner | ✅ | ✅ `AndroidZipPipelineRunner` | ✅ `IosZipPipelineRunner` |
+| GPS metadata write | ✅ exiftool | ✅ `ExifInterface` | ✅ ImageIO |
+| Date metadata write | ✅ exiftool | ✅ `ExifInterface` | ✅ ImageIO |
+| Image overlay combine | ✅ ImageIO (`OverlayCombiner`) | ✅ `android.graphics` | ✅ CoreGraphics |
+| Video overlay combine | ✅ ffmpeg | ❌ returns false, reported as skipped | ❌ returns false, reported as skipped |
+| Animated GIF handling | ✅ skipped, original kept | ✅ skipped | ✅ skipped |
+| Library scan + thumbnails | ✅ | ❌ **still stubs** → Library always empty | ✅ `MediaScanner` (180 lines) |
+| Video playback | ✅ | 🟡 `VideoView` (F6) | 🟡 AVPlayer rebuilt per recomposition |
+| App icon | ✅ | ❌ default | ❌ default |
 
-Key structural facts:
+### The two real gaps, both on Android
 
-- The precise time + GPS matcher (`ExperimentalZipMetadataMatcher`, `ZipImportParser`)
-  is **already common code**. It only needs the three `ZipReader` expect functions to
-  have real actuals on a platform to light up. On Android those can be the desktop
-  implementations verbatim (`java.util.zip` exists on Android) — this is the single
-  highest-leverage move in Phase 2.
-- `jvmSharedMain` (created in PR #18) is the landing spot: anything in
-  `desktopMain` that only uses `java.util.zip` / `java.io` can move there and serve
-  desktop + Android from one file. Candidates: `ZipReader.kt`,
-  `downloader/ZipExtractEngine.kt`, most of `DesktopZipPipelineRunner.kt`.
-  Non-candidates: `OverlayCombiner.kt` (spawns ffmpeg/exiftool processes),
-  `BinaryExtractor.kt`, `ProcessUtil.kt`.
-- `DashboardViewModel` is fully common and platform-agnostic already. Nothing in it
-  blocks mobile; once a platform provides a real runner + processor, the whole
-  pipeline (progress, ETA, resume index, dedupe) comes for free.
+Android is now **behind iOS** on exactly two subsystems, which is the opposite of
+the order this plan assumed:
 
----
+- **`ZipReader` is three one-line stubs** returning `emptyList`/`null`/`emptyMap`.
+  This breaks the ZIP-import mode outright: `ZipImportParser` (the precise
+  time + GPS matcher) sees no entries, and `DashboardViewModel`'s
+  `memories_history.json` read returns null. Extraction itself is fine — it goes
+  through `ZipExtractEngine`, not these.
+- **`MediaScanner` is three one-line stubs**, so `LibraryScreen` always renders an
+  empty Library on Android.
+
+Both are cheap to close: iOS implements all six with okio, and **okio is available
+on Android**, so the iOS file is very nearly a drop-in. One caveat before copying
+it — see §8's note on timestamp precision.
+
+Key structural facts (unchanged and still true):
+
+- The precise time + GPS matcher (`ExperimentalZipMetadataMatcher`,
+  `ZipImportParser`) is common code and lights up as soon as a platform has real
+  `ZipReader` actuals. This is still the highest-leverage move left for Android.
+- `jvmSharedMain` serves desktop + Android from one file; `ZipExtractEngine` lives
+  there and is how Android extraction already works.
+- `DashboardViewModel` is fully common. Nothing in it blocks either mobile target.
+
+### Test reality
+
+`androidTest`, `iosTest` and `jvmSharedTest` have **no files**. All 465 tests run in
+`commonTest` (13 files) or `desktopTest` (59). Mobile behaviour is covered only
+through common seams (`findOverlayPairNames`, `mayDeleteOriginals`,
+`showsDependencySection`) or by tests that read platform source as text
+(`IosUrlOpeningTest`, `StringResourceHygieneTest`). No mobile code is executed by
+CI, and CI's Android and iOS jobs both carry `continue-on-error`, so neither can
+fail a PR.
 
 ## 2. Code review findings (correctness)
 
@@ -368,3 +394,75 @@ Same shape, different actuals; the common pipeline and the §3 UI work carry ove
 Open decisions to settle before PR C: **D1** (app-private + MediaStore export
 vs SAF) and **D2** (stream from URI vs stable-name copy). Recommendations are
 marked; both recommended paths keep the common pipeline untouched.
+
+---
+
+## 8. Progress log
+
+Newest first. Each entry records what landed and, where it matters, *why* the bug
+existed — the mechanism is the part that stops it recurring.
+
+### 2026-09-25 — `feat/ios-overlay-combine` (PR #47)
+
+Landed. All five gates green; desktop, Android and iOS all run the build.
+
+| Change | Note |
+|---|---|
+| iOS image overlay combine | CoreGraphics; iOS reached parity with Android on images |
+| Animated GIF no longer destroyed | **Data loss.** All three platforms composited `.gif` pairs, kept frame one, wrote JPEG bytes into a `.gif`-named file, reported `Combined` — so `mayDeleteOriginals` deleted the only copy holding the other frames. Now `SkippedAnimated` in the shared seam |
+| iOS launched at all | `PlistSanityCheck` threw on a missing `CADisableMinimumFrameDurationOnPhone`; SIGABRT ~1.5s in, every launch |
+| iOS external links | Every link was dead — see below |
+| Refused URLs now visible | `openUrl` reports its outcome on all three platforms |
+| Dependency card dropped on mobile | Reported detection of binaries that cannot exist there, and squashed two tiles into a 360dp row |
+| CI links iOS instead of compiling | See below |
+
+**Three traps worth remembering, because none were visible from the code:**
+
+1. **Xcode silently skipped the Kotlin build.** The `Run Kotlin/Native Build`
+   phase declared an `outputPath` and no `inputPaths`. Xcode's dependency
+   analysis cannot see Kotlin sources, so it judged the phase up to date and
+   skipped it entirely — confirmed by grepping a build log for
+   `PhaseScriptExecution` and finding zero. For a full day, edits under
+   `composeApp/src` had no effect on the running app while `xcodebuild` reported
+   BUILD SUCCEEDED. Fixed with `alwaysOutOfDate = 1`; Gradle, which *can* see
+   Kotlin inputs, is now the up-to-date authority.
+
+2. **Compiling iOS proves almost nothing.** `compileKotlinIosSimulatorArm64`
+   produces a klib and never shells out to `xcrun`. When `xcode-select` pointed
+   at CommandLineTools, `linkDebugFrameworkIosSimulatorArm64` failed with *"An
+   error occurred during an xcrun execution"* while the compile task stayed
+   green — so both the local gates and CI were structurally blind to it. CI now
+   links. Note it still carries `continue-on-error`.
+
+3. **A deprecated UIKit selector compiles without a Kotlin warning.**
+   `openUrl` called the one-argument `UIApplication.openURL:`, deprecated
+   `ios(2.0, 10.0)`. It is still in the Kotlin/Native bindings and raises no
+   Kotlin deprecation warning, so it compiled and failed silently at runtime.
+   Separately, `LinkButton`'s fallback was wired only to a thrown exception, and
+   UIKit does not throw for this — it completes with `false` — so a refused link
+   was indistinguishable from a dead button.
+
+**Verification note.** Searching a Kotlin/Native binary for a string literal
+needs **UTF-16**; an ASCII `strings` search finds none of them and returns a
+convincing false negative. Apple's `strings` has no `-e` flag.
+
+### Open, carried forward
+
+- **Android `ZipReader` + `MediaScanner` stubs** (§1). The two largest functional
+  gaps on either platform now.
+  *Caveat before porting the iOS file:* desktop reads the Info-ZIP `0x5455`
+  extended timestamp (UTC, 1s precision); okio's `lastModifiedAtMillis` reads the
+  DOS timestamp (local time, 2s, no zone). iOS therefore already feeds the
+  precise-time matcher slightly different values than desktop does. Worth
+  settling deliberately rather than inheriting by accident.
+- **Video overlay combine on mobile.** Neither platform ships an encoder. Both
+  report `SkippedVideo` and leave originals untouched, so this is a missing
+  feature, not a correctness bug. Media3 `Transformer` (Android) and
+  `AVMutableVideoComposition` (iOS) are the routes.
+- **No mobile test execution anywhere**, and both mobile CI jobs are
+  non-blocking. Dropping `continue-on-error` from the iOS job is a one-liner and
+  would at least make a broken iOS link fail a PR.
+- **App icons** are still the platform defaults on both mobile targets.
+- `feat/platform-capability-honesty` (unmerged) surfaces the ❌ column above to
+  users. Its Dashboard banner is still wanted; its Settings half now conflicts
+  with the dependency card removal above.

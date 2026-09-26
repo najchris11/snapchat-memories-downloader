@@ -113,5 +113,10 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Compile iOS Simulator Target
-        run: ./gradlew :composeApp:compileKotlinIosSimulatorArm64
+      # Link, not just compile. Compiling produces a klib and never shells out to xcrun,
+      # so it passes even when the Apple toolchain is unusable; linking the framework is
+      # the step that actually needs xcrun, and it is the step the iOS app consumes. A
+      # broken toolchain once left linking failing for a day while this job stayed green
+      # and every local iOS build silently reused the last framework that had linked.
+      - name: Link iOS Simulator Framework
+        run: ./gradlew :composeApp:linkDebugFrameworkIosSimulatorArm64

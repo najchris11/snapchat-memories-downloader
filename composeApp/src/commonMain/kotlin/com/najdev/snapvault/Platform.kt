@@ -3,6 +3,7 @@ package com.najdev.snapvault
 import kotlinx.coroutines.CoroutineDispatcher
 
 expect val isAndroidBuild: Boolean
+expect val isIosBuild: Boolean
 
 // Dispatchers.IO is JVM/Native-specific and not visible from common code; this is the
 // platform's blocking-I/O dispatcher for file and process work.
@@ -17,9 +18,10 @@ expect class SyncLock() {
 // Empty on platforms where neither tool applies (Android, iOS).
 expect fun binaryInstallHint(): String
 
-// Opens a URL in the user's browser. Silently does nothing if the platform can't service
-// the request — a failed Help click should not take the window down.
-expect fun openUrl(url: String)
+// Opens a URL in the user's browser and reports whether the platform accepted the request.
+// The result can arrive asynchronously (UIKit's URL-opening API works that way), so callers
+// that need to expose a fallback provide [onResult].
+expect fun openUrl(url: String, onResult: (Boolean) -> Unit = {})
 
 // Optional external tipping page for direct desktop distribution. Mobile builds omit it.
 expect val platformSupportPageUrl: String?

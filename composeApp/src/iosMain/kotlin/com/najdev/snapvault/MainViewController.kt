@@ -9,7 +9,7 @@ import platform.UIKit.UIViewController
 
 fun MainViewController(): UIViewController = ComposeUIViewController {
     val mediaProcessor = remember { IosMediaProcessor() }
-    val zipPipelineRunner = remember { IosZipPipelineRunner() }
+    val zipPipelineRunner = remember(mediaProcessor) { IosZipPipelineRunner(mediaProcessor) }
     val pickers = rememberPlatformPickers()
     App(
         pickers = pickers,

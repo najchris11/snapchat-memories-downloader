@@ -8,12 +8,27 @@ import platform.Foundation.NSURL
 import platform.UIKit.UIApplication
 
 actual val isAndroidBuild: Boolean = false
+actual val isIosBuild: Boolean = true
 actual val platformSupportPageUrl: String? = null
 actual fun binaryInstallHint(): String = ""
 
-actual fun openUrl(url: String) {
-    val nsUrl = NSURL.URLWithString(url) ?: return
-    UIApplication.sharedApplication.openURL(nsUrl)
+// openURL: alone -- the one-argument form -- is deprecated ios(2.0, 10.0) and no longer
+// opens anything on a current iOS. It is still in the UIKit bindings and still compiles, so
+// every link in the app (the onboarding walkthrough's "request your data" and video buttons,
+// and the Help button in the top bar) was a button that reported nothing and did nothing when
+// tapped. openURL:options:completionHandler: is the replacement the header names; an empty
+// options map is documented as giving the old behaviour, asynchronously.
+actual fun openUrl(url: String, onResult: (Boolean) -> Unit) {
+    val nsUrl = NSURL.URLWithString(url)
+    if (nsUrl == null) {
+        onResult(false)
+        return
+    }
+    UIApplication.sharedApplication.openURL(
+        nsUrl,
+        options = emptyMap<Any?, Any>(),
+        completionHandler = onResult,
+    )
 }
 
 // Kotlin/Native has no thread interruption; cancellation is handled at suspension points.

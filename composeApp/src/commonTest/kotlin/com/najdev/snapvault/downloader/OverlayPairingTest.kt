@@ -90,6 +90,65 @@ class OverlayPairingTest {
         assertEquals(emptyList(), findOverlayPairNames(listOf("-main.jpg", "-overlay.png")))
     }
 
+    // A .gif main is readable by every image decoder here, writable by none of them without
+    // flattening: BitmapFactory, ImageIO and CGImageSource all hand back frame one only, and
+    // the encoders on the combine path write a single frame back. Combining one therefore
+    // destroyed the animation *and* wrote JPEG bytes into a file still named .gif — and
+    // because that reported success, mayDeleteOriginals then deleted the animated original.
+    // IosMediaProcessor already refuses GIFs on the metadata path for exactly this reason
+    // (singleFrameUnsafeExtensions); the combine path never got the same treatment.
+    @Test
+    fun anAnimatedGifPairIsFlaggedRatherThanFlattenedToOneFrame() {
+        val pairs = findOverlayPairNames(listOf("g-main.gif", "g-overlay.png"))
+        assertEquals(1, pairs.size)
+        assertTrue(
+            pairs[0].isAnimatedImage,
+            "a .gif main must be flagged: compositing it keeps frame one and discards the rest",
+        )
+    }
+
+    @Test
+    fun stillImageFormatsAreNotFlaggedAsAnimated() {
+        for (ext in listOf("jpg", "jpeg", "png", "heic", "heif", "webp", "tiff", "tif")) {
+            val pairs = findOverlayPairNames(listOf("i-main.$ext", "i-overlay.png"))
+            assertTrue(
+                !pairs[0].isAnimatedImage,
+                ".$ext is a single-frame format and must still be composited",
+            )
+        }
+    }
+
+    // Distinct from isVideo: a GIF is not video (the Library treats it as an image, and
+    // SupportedMediaExtensions.IMAGE lists it), it just cannot survive a re-encode.
+    @Test
+    fun anAnimatedImageIsNotAlsoClassifiedAsVideo() {
+        val pairs = findOverlayPairNames(listOf("g-main.gif", "g-overlay.png"))
+        assertTrue(!pairs[0].isVideo, "a .gif is an image; classifying it as video mislabels it")
+    }
+
+    // The platform encoders are selected by the OUTPUT extension, not the source's detected
+    // type — IosMediaProcessor.imageDestinationUti maps exactly jpg/jpeg/png/tif/tiff and
+    // refuses anything else, and the desktop combiner picks PNG-or-JPEG the same way. That
+    // only holds because pair discovery narrows every still-image pair to this set. Adding a
+    // format to SupportedMediaExtensions.IMAGE without deciding what writes it back would
+    // land bytes in a file whose extension lies; this is the test that catches it.
+    @Test
+    fun everyStillImagePairResolvesToAnExtensionAnEncoderCanWrite() {
+        val writable = setOf("jpg", "jpeg", "png", "tif", "tiff")
+        val stillImages = com.najdev.snapvault.metadata.SupportedMediaExtensions.IMAGE
+        for (ext in stillImages) {
+            val pairs = findOverlayPairNames(listOf("i-main.$ext", "i-overlay.png"))
+            assertEquals(1, pairs.size, "no pair found for .$ext")
+            val pair = pairs[0]
+            // Animated formats never reach an encoder at all, so they are exempt.
+            if (pair.isAnimatedImage) continue
+            assertTrue(
+                pair.outputName.substringAfterLast('.').lowercase() in writable,
+                ".$ext produced output '${'$'}{pair.outputName}', which no image encoder here writes",
+            )
+        }
+    }
+
     @Test
     fun unrelatedFilesAreLeftAlone() {
         val pairs = findOverlayPairNames(

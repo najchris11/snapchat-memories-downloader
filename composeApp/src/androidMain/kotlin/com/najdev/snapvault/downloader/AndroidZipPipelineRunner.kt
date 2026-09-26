@@ -129,6 +129,10 @@ class AndroidZipPipelineRunner(
         // Library as having its overlay burned in.
         val status = when {
             names.isVideo -> OverlayCombineStatus.SkippedVideo
+            // BitmapFactory decodes frame one of a GIF and stops, and compress() writes a
+            // single JPEG frame back — into a file still named .gif. That reported success,
+            // which cleared the animated original for deletion below.
+            names.isAnimatedImage -> OverlayCombineStatus.SkippedAnimated
             withContext(Dispatchers.IO) {
                 mediaProcessor.combineImageWithOverlay(
                     mainFile.absolutePath,

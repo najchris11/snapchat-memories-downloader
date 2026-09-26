@@ -95,7 +95,7 @@ fun OnboardingScreen(
     },
     onRevealFolder: (String) -> Unit = ::revealInFileManager,
     canRevealFolder: Boolean = supportsFileManager,
-    onOpenUrl: (String) -> Unit = ::openUrl,
+    onOpenUrl: (String, (Boolean) -> Unit) -> Unit = ::openUrl,
     // Hoisted so both branches are reachable from a test: the button hides itself when this
     // is blank, and that used to be the only path with coverage because the resource was
     // empty until the walkthrough was recorded.
@@ -291,7 +291,7 @@ private fun LinkButton(
     label: String,
     url: String,
     accessibleLabel: String,
-    onOpenUrl: (String) -> Unit,
+    onOpenUrl: (String, (Boolean) -> Unit) -> Unit,
     icon: ImageVector = Icons.AutoMirrored.Outlined.OpenInNew,
 ) {
     var failed by remember(url) { mutableStateOf(false) }
@@ -300,7 +300,7 @@ private fun LinkButton(
             onClick = {
                 failed = false
                 try {
-                    onOpenUrl(url)
+                    onOpenUrl(url) { opened -> failed = !opened }
                 } catch (_: Exception) {
                     failed = true
                 }
@@ -327,7 +327,10 @@ private fun LinkButton(
 // ── Steps ────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun RequestExportStep(onOpenUrl: (String) -> Unit, videoUrl: String) {
+private fun RequestExportStep(
+    onOpenUrl: (String, (Boolean) -> Unit) -> Unit,
+    videoUrl: String,
+) {
     StepHeading(Res.string.onb_request_title)
     StepBody(Res.string.onb_request_body)
     StepNote(stringResource(Res.string.onb_request_note), Icons.Outlined.Schedule)

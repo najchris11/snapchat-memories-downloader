@@ -5,6 +5,13 @@ enum class OverlayCombineStatus {
     /** Never attempted: the platform cannot composite this kind of media. */
     SkippedVideo,
 
+    /**
+     * Never attempted: the main file holds more than one frame, and compositing it would
+     * keep only the first. Refusing costs the user a burned-in overlay on one GIF; the
+     * alternative cost them every frame after the first, permanently.
+     */
+    SkippedAnimated,
+
     /** Attempted and did not produce a usable output. */
     Failed,
 
@@ -54,6 +61,17 @@ fun overlayCombineResult(
             outputPath = mainPath,
             status = "skipped: video overlays are not combined on this platform yet",
             warnings = warnings + "${pair.mainName}: video overlay combining is not available on this platform yet",
+            sourcePaths = sources,
+        )
+
+        OverlayCombineStatus.SkippedAnimated -> CombineResult(
+            uuid = uuid,
+            // Points at the original: nothing new was written, and the original is the only
+            // thing holding frames two onward.
+            outputPath = mainPath,
+            status = "skipped: animated images are not combined",
+            warnings = warnings +
+                "${pair.mainName}: combining would keep only the first frame, so the animation was left as it is",
             sourcePaths = sources,
         )
 

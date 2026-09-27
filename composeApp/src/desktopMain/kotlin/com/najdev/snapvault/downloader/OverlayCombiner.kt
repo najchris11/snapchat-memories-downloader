@@ -50,7 +50,8 @@ class OverlayCombiner(
         val mainFile: File,
         val overlayFile: File,
         val outputFile: File,
-        val isVideo: Boolean
+        val isVideo: Boolean,
+        val isAnimatedImage: Boolean = false,
     )
 
     fun findPairs(outputDir: String): List<OverlayPair> {
@@ -71,6 +72,7 @@ class OverlayCombiner(
                 overlayFile = overlayFile,
                 outputFile = File(outputDir, names.outputName),
                 isVideo = names.isVideo,
+                isAnimatedImage = names.isAnimatedImage,
             )
         }
     }
@@ -176,6 +178,18 @@ class OverlayCombiner(
         if (pair.outputFile.exists()) {
             onWarning("output already exists, pair left alone: ${pair.outputFile.name}")
             return "skipped: output already exists"
+        }
+
+        // ImageIO.read returns frame one of a GIF and combineImages then writes JPEG bytes
+        // into a file still named .gif. It reported success, so the animation was replaced by
+        // a still that also lied about its format. Refusing costs one burned-in overlay;
+        // proceeding cost every frame after the first. See ANIMATION_UNSAFE_FORMATS.
+        if (pair.isAnimatedImage) {
+            onWarning(
+                "combining would keep only the first frame, so the animation was left as it is: " +
+                    pair.mainFile.name
+            )
+            return "skipped: animated images are not combined"
         }
 
         // Everything is built in our staging directory and committed only once it is

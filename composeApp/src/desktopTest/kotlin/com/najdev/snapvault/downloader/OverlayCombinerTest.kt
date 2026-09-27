@@ -6,6 +6,7 @@ import com.najdev.snapvault.metadata.MediaProcessor
 import kotlinx.coroutines.runBlocking
 import java.awt.image.BufferedImage
 import java.io.File
+import javax.imageio.IIOImage
 import javax.imageio.ImageIO
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -42,6 +43,31 @@ class OverlayCombinerTest {
     private fun writePng(name: String, w: Int = 4, h: Int = 4): File {
         val f = File(dir, name)
         ImageIO.write(BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB), "PNG", f)
+        return f
+    }
+
+    private fun writeTwoFrameGif(name: String): File {
+        val f = File(dir, name)
+        val writer = ImageIO.getImageWritersByFormatName("gif").next()
+        ImageIO.createImageOutputStream(f).use { out ->
+            writer.output = out
+            writer.prepareWriteSequence(null)
+            for (rgb in listOf(0xFF0000, 0x0000FF)) {
+                val frame = BufferedImage(8, 8, BufferedImage.TYPE_INT_RGB)
+                frame.graphics.apply { color = java.awt.Color(rgb); fillRect(0, 0, 8, 8); dispose() }
+                writer.writeToSequence(IIOImage(frame, null, null), null)
+            }
+            writer.endWriteSequence()
+        }
+        writer.dispose()
+        // Guards the fixture itself: a one-frame "animation" would let the test pass for the
+        // wrong reason.
+        ImageIO.createImageInputStream(f).use { input ->
+            val reader = ImageIO.getImageReadersByFormatName("gif").next()
+            reader.input = input
+            check(reader.getNumImages(true) == 2) { "fixture GIF is not animated" }
+            reader.dispose()
+        }
         return f
     }
 
@@ -178,6 +204,26 @@ class OverlayCombinerTest {
             results.single().status.let { it.startsWith("skipped") || it.startsWith("error") },
             "a conflict must be reported, not counted as a clean combine: ${results.single().status}",
         )
+    }
+
+    // Regression (BUG-18): ImageIO.read hands back frame one of a GIF and combineImages wrote
+    // it as JPEG into a file still named .gif. That reported "combined", so with deletion on
+    // the animated original went too — every frame after the first, gone. The existing GIF
+    // tests only covered pair classification and a hand-supplied SkippedAnimated status, so
+    // removing the guard in processPair left the whole suite green. This goes through the
+    // real combiner with a real animation.
+    @Test
+    fun anAnimatedGifIsNeitherFlattenedNorDeleted() {
+        val main = writeTwoFrameGif("2023-10-12_GGG-main.gif")
+        val overlay = writePng("2023-10-12_GGG-overlay.png", 8, 8)
+        val before = main.readBytes()
+
+        val results = combineAll(FakeProcessor(), deleteOriginals = true)
+
+        assertEquals(listOf("skipped: animated images are not combined"), results.map { it.status })
+        assertTrue(main.exists() && overlay.exists(), "a skipped animation must keep both originals")
+        assertEquals(before.toList(), main.readBytes().toList(), "the animation must be left byte-for-byte")
+        assertTrue(!File(dir, "2023-10-12_GGG.gif").exists(), "no flattened still may be written")
     }
 
     // Regression (D02): the combiner handed the processor the final output path, so a

@@ -8,7 +8,8 @@ Status legend: ✅ works · 🟡 partial / has issues · ❌ stub or missing
 
 §1 and §8 are kept current. §2–§7 are the original pre-Phase-2 plan and are
 **not** re-audited on every change — treat a finding there as open only if §1 or
-§8 does not contradict it.
+§8 does not contradict it. §9 records distribution decisions deferred until the
+mobile apps are close to shippable.
 
 ---
 
@@ -470,3 +471,46 @@ convincing false negative. Apple's `strings` has no `-e` flag.
 - `feat/platform-capability-honesty` (unmerged) surfaces the ❌ column above to
   users. Its Dashboard banner is still wanted; its Settings half now conflicts
   with the dependency card removal above.
+
+---
+
+## 9. Distribution & signing (deferred)
+
+Parked on purpose: none of this is worth doing until the apps are worth installing.
+Revisit when the §8 "Open, carried forward" list is close to empty.
+`docs/CODE_SIGNING.md` covers desktop only; this is its mobile counterpart.
+
+**Where things stand (2026-09-27).** `release.yml` ships desktop only — two macOS
+DMGs, a Windows MSI and a Linux DEB. The iOS simulator app and the Android APK that
+`check.yml` builds are CI checks, not deliverables, and nothing uploads them.
+
+**iOS.** An unsigned build cannot be installed on an ordinary iPhone, so there is no
+useful unsigned release to attach. Distribution means an Apple Developer account,
+signing, and TestFlight then the App Store — see 3.5 in §6.
+
+**Android.** The maintainer has a Google Play developer account.
+
+- A signed APK attached to a GitHub release needs only a keystore we generate
+  ourselves; the account is not required for that.
+- The account matters for the Play Store (an AAB, with Play App Signing) and for
+  Google's developer verification of sideloaded apps, announced to begin around
+  September 2026 in some countries and widen later. Registering
+  `com.najdev.snapvault` there may be required even for GitHub downloads — check
+  the current rules at the time rather than trusting this note.
+
+**Decide the channels before the first signed release.** Android installs an update
+only when it is signed with the same key as the installed app. A self-signed GitHub
+APK and a Play-signed build therefore cannot update one another: a user who switches
+has to uninstall first. If both channels are wanted, settle Play App Signing first
+and decide which key the GitHub build carries. Whichever key ships, back it up —
+losing it means no update can ever reach that install base again.
+
+**Order of work.**
+
+1. Close the Android `ZipReader` and `MediaScanner` stubs (§1). A signed APK
+   before then installs cleanly and shows an empty Library.
+2. A Gradle `signingConfig` that reads the keystore and passwords from environment
+   variables. The keystore lives in GitHub secrets (base64), never in the repo.
+3. An Android job in `release.yml` that builds the release APK, verifies it with
+   `apksigner verify`, and joins the existing checksum-and-publish step so one
+   platform cannot publish while another fails.

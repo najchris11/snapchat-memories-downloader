@@ -266,7 +266,7 @@ class OverlayCombiner(
                     // exists nowhere else. Losing it was D02.
                     onWarning("originals kept: metadata is not on ${pair.outputFile.name}")
                 } else {
-                    if (!pair.mainFile.delete()) onWarning("could not delete main: ${pair.mainFile.name}")
+                    if (!pair.mainFile.delete()) onWarning("could not delete original: ${pair.mainFile.name}")
                     if (!pair.overlayFile.delete()) onWarning("could not delete overlay: ${pair.overlayFile.name}")
                 }
             }

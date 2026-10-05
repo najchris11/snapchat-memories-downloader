@@ -916,13 +916,13 @@ private fun InspectorGlobalStats(items: List<LibraryItem>) {
                 icon = Icons.Outlined.GpsFixed,
                 iconTint = MaterialTheme.colorScheme.primary,
                 title = stringResource(Res.string.lib_gps_verified),
-                subtitle = if (items.isEmpty()) EMPTY_STAT else pluralStringResource(Res.plurals.lib_tagged_count, gpsCount, gpsCount)
+                subtitle = if (items.isEmpty()) EMPTY_STAT else pluralStringResource(Res.plurals.lib_file_count, gpsCount, gpsCount)
             )
             MetadataRow(
                 icon = Icons.Outlined.Layers,
                 iconTint = SnapVaultColors.info,
                 title = stringResource(Res.string.lib_overlay_detected),
-                subtitle = if (items.isEmpty()) EMPTY_STAT else pluralStringResource(Res.plurals.lib_asset_count, overlayCount, overlayCount)
+                subtitle = if (items.isEmpty()) EMPTY_STAT else pluralStringResource(Res.plurals.lib_file_count, overlayCount, overlayCount)
             )
         }
 

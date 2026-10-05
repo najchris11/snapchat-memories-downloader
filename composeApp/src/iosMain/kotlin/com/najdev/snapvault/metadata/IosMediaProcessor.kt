@@ -201,7 +201,7 @@ class IosMediaProcessor : MediaProcessor {
             // it here used to report success, which then cleared both originals for deletion.
             val moved = fileManager.moveItemAtPath(tmpPath, toPath = outputPath, error = null)
             if (!moved) {
-                onWarning?.invoke("output already exists, left alone: ${outputPath.substringAfterLast('/')}")
+                onWarning?.invoke("output already exists, pair left alone: ${outputPath.substringAfterLast('/')}")
             }
             moved
         } catch (e: Exception) {

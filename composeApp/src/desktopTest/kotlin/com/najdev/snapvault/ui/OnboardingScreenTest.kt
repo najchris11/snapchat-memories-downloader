@@ -198,6 +198,20 @@ class OnboardingScreenTest {
         )
     }
 
+    // The space advice promised SnapVault "offers a way through if the disk is tight". That
+    // offer — deleting each ZIP as it is imported — is gated off for release, so a user who
+    // trusted the promise met a plain refusal. The copy may only promise it while it ships.
+    @Test
+    fun theSpaceAdviceOnlyPromisesTheLowSpaceOfferWhenItShips() {
+        val advice = stringResource("onb_folders_space").lowercase()
+        if (!com.najdev.snapvault.viewmodel.LOW_SPACE_DELETE_ENABLED) {
+            assertTrue(
+                "way through" !in advice && "offer" !in advice,
+                "the low-space offer is disabled, so onboarding cannot promise it: '$advice'",
+            )
+        }
+    }
+
     // The one link in the flow that strands every new user if it is wrong: the bare host
     // lands on a generic account page with no visible route to the export request, so it has
     // to be the deep link. Pinned because a well-meaning tidy-up to the shorter URL reads as

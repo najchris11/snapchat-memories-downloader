@@ -27,7 +27,7 @@ class SettingsDependencySectionTest {
     fun mobileSettingsDoNotComposeDesktopDependencies() = runComposeUiTest {
         setContent { settingsScreen(showDependencySection = false) }
 
-        onAllNodesWithText("System Dependencies").assertCountEquals(0)
+        onAllNodesWithText("Helper tools").assertCountEquals(0)
         onAllNodesWithText("ExifTool").assertCountEquals(0)
         onAllNodesWithText("FFmpeg").assertCountEquals(0)
     }
@@ -36,7 +36,7 @@ class SettingsDependencySectionTest {
     fun desktopSettingsStillComposeExternalDependencies() = runComposeUiTest {
         setContent { settingsScreen(showDependencySection = true) }
 
-        onNodeWithText("System Dependencies").assertIsDisplayed()
+        onNodeWithText("Helper tools").assertIsDisplayed()
         onNodeWithText("ExifTool").assertIsDisplayed()
         onNodeWithText("FFmpeg").assertIsDisplayed()
     }
@@ -45,7 +45,7 @@ class SettingsDependencySectionTest {
     fun desktopDefaultUsesTheRealPlatformValue() = runComposeUiTest {
         setContent { settingsScreen() }
 
-        onNodeWithText("System Dependencies").assertIsDisplayed()
+        onNodeWithText("Helper tools").assertIsDisplayed()
     }
 
     // The old fixed Row squeezed both tiles into roughly half of a phone-width settings card,

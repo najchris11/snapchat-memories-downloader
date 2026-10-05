@@ -223,9 +223,94 @@ class DashboardViewModelTest {
         assertEquals("Completed with warnings", viewModel.progressText)
         assertEquals(4, viewModel.currentStep)
         assertTrue(
-            viewModel.logs.last().startsWith("[WARN] Sync complete"),
+            viewModel.logs.last().startsWith("[WARN] Run complete"),
             "expected terminal log to flag the failure, was: ${viewModel.logs.last()}",
         )
+    }
+
+    // A failed pair was logged as "Overlay combine deadbeef: error: boom" — a truncated UUID
+    // nothing on disk is named by. The user needs the file.
+    @Test
+    fun aFailedCombineNamesTheFileNotTheUuid() {
+        val viewModel = newViewModel(
+            combineResults = listOf(
+                CombineResult(
+                    uuid = "deadbeef-0001",
+                    outputPath = "/out/2023-10-12_deadbeef-0001.jpg",
+                    status = "error: boom",
+                    sourcePaths = listOf("/out/2023-10-12_deadbeef-0001-main.jpg", "/out/2023-10-12_deadbeef-0001-overlay.png"),
+                ),
+            ),
+        )
+
+        viewModel.runCombineOnly()
+
+        assertTrue(
+            viewModel.logs.any { it == "[ERROR] Could not combine 2023-10-12_deadbeef-0001-main.jpg: boom" },
+            "expected the failure to name the main file, log was: ${viewModel.logs}",
+        )
+    }
+
+    // The combine summary said "N skipped (unsupported format)" for every skip, including an
+    // output that already existed and an animated GIF. It now points at the warnings, so every
+    // skip has to bring one — a skip with no warning of its own (FFmpeg missing) gets one here.
+    @Test
+    fun aSkipWithNoWarningOfItsOwnIsExplainedInTheLog() {
+        val viewModel = newViewModel(
+            combineResults = listOf(
+                CombineResult(
+                    uuid = "AAA",
+                    outputPath = "/out/2023-10-12_AAA.jpg",
+                    status = "skipped: install FFmpeg to combine JPG overlays",
+                    sourcePaths = listOf("/out/2023-10-12_AAA-main.jpg", "/out/2023-10-12_AAA-overlay.png"),
+                ),
+            ),
+        )
+
+        viewModel.runCombineOnly()
+
+        assertTrue(
+            viewModel.logs.any { it == "[WARN] 2023-10-12_AAA-main.jpg: install FFmpeg to combine JPG overlays" },
+            "expected the skip's reason in the log, log was: ${viewModel.logs}",
+        )
+        assertTrue(viewModel.logs.none { "unsupported format" in it }, "the summary must not guess at a reason")
+        assertEquals(1, viewModel.warningCount)
+    }
+
+    // Companion: a skip that already carries its own warning is not reported twice.
+    @Test
+    fun aSkipThatBroughtItsOwnWarningIsNotReportedTwice() {
+        val viewModel = newViewModel(
+            combineResults = listOf(
+                CombineResult(
+                    uuid = "AAA",
+                    outputPath = "/out/2023-10-12_AAA.jpg",
+                    status = "skipped: output already exists",
+                    warnings = listOf("[combine] output already exists, pair left alone: 2023-10-12_AAA.jpg"),
+                    sourcePaths = listOf("/out/2023-10-12_AAA-main.jpg", "/out/2023-10-12_AAA-overlay.png"),
+                ),
+            ),
+        )
+
+        viewModel.runCombineOnly()
+
+        assertEquals(1, viewModel.logs.count { it.startsWith("[WARN]") && "AAA" in it })
+        assertEquals(1, viewModel.warningCount)
+    }
+
+    // The WebP-named-.png skip was called "harmless, they're consumed by the combine phase"
+    // even with combining off, when those overlays stay in the library untagged.
+    @Test
+    fun theWebpSkipOnlyCallsItselfHarmlessWhenCombiningWillConsumeThem() {
+        val withCombine = runBlocking { riffSkipLogLine(2, listOf("a-overlay.png"), combineRuns = true) }
+        val withoutCombine = runBlocking { riffSkipLogLine(2, listOf("a-overlay.png"), combineRuns = false) }
+
+        assertTrue("harmless" in withCombine, withCombine)
+        assertFalse("harmless" in withoutCombine, withoutCombine)
+        assertTrue("stay untagged" in withoutCombine, withoutCombine)
+        assertTrue("2 overlays stored as WebP" in withCombine, withCombine)
+        val single = runBlocking { riffSkipLogLine(1, listOf("a-overlay.png"), combineRuns = true) }
+        assertTrue("1 overlay stored as WebP" in single, single)
     }
 
     // Companion case: a genuinely clean run must still report unqualified success —
@@ -250,9 +335,9 @@ class DashboardViewModelTest {
 
         assertFalse(viewModel.hasWarnings)
         assertEquals(0, viewModel.failureCount)
-        assertEquals("Pipeline Complete", viewModel.progressText)
+        assertEquals("Run complete", viewModel.progressText)
         assertEquals(4, viewModel.currentStep)
-        assertEquals("[SUCCESS] Sync complete!", viewModel.logs.last())
+        assertEquals("[SUCCESS] Run complete!", viewModel.logs.last())
     }
 
     // Regression for BUG-04: the post-combine date-fallback sub-phase has no per-file
@@ -1119,7 +1204,7 @@ class DashboardViewModelTest {
             viewModel.startSync(false, true, true, false, false, true)
             awaitCompletion(viewModel)
 
-            assertEquals("Pipeline Complete", viewModel.progressText)
+            assertEquals("Run complete", viewModel.progressText)
             assertEquals(listOf("2025-06-15 14:32:10 UTC"), dates)
             assertTrue(
                 viewModel.logs.any { it.startsWith("[INFO] Precise time + GPS matching") &&
@@ -1281,7 +1366,7 @@ class DashboardViewModelTest {
 
         viewModel.runWith()
 
-        assertEquals("Pipeline Complete", viewModel.progressText)
+        assertEquals("Run complete", viewModel.progressText)
         assertEquals(0, viewModel.warningCount)
         assertEquals(0, viewModel.failureCount)
     }

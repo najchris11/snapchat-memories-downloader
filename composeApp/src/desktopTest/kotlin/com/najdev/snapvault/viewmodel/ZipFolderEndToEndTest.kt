@@ -5,6 +5,9 @@ import com.najdev.snapvault.PlatformPickers
 import com.najdev.snapvault.UnenforcedOutputDirectoryLocker
 import com.najdev.snapvault.VaultIndex
 import com.najdev.snapvault.downloader.DesktopZipPipelineRunner
+import com.najdev.snapvault.downloader.ExtractResult
+import com.najdev.snapvault.downloader.ZipPipelineRunner
+import com.najdev.snapvault.parser.HtmlMemoryEntry
 import com.najdev.snapvault.metadata.MediaProcessor
 import com.najdev.snapvault.scanMediaFiles
 import kotlinx.coroutines.delay
@@ -58,6 +61,8 @@ class ZipFolderEndToEndTest {
     private class RecordingMetadata : MediaProcessor {
         val gps = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
         val dates = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
+        // Metadata progress is overwritten by the next phase, so it is read as each file is tagged.
+        var probe: () -> Unit = {}
 
         override fun checkExifTool() = true
         override fun checkFFmpeg() = false
@@ -68,26 +73,50 @@ class ZipFolderEndToEndTest {
             longitude: Double,
             dateStr: String?,
         ): Boolean {
+            probe()
             if (!File(filePath).isFile || latitude != 40.012688 || longitude != -83.066986) return false
             gps += File(filePath).name to (dateStr ?: "")
             return true
         }
 
         override fun writeDateMetadata(filePath: String, dateTimeUtc: String): Boolean {
+            probe()
             if (!File(filePath).isFile) return false
             dates += File(filePath).name to dateTimeUtc
             return true
         }
     }
 
+    private val progressSamples = Collections.synchronizedList(mutableListOf<String>())
+
+    // Extraction progress is overwritten by the next phase, so it is read as each file lands.
+    private inner class SamplingRunner(
+        private val real: ZipPipelineRunner,
+        private val record: (String) -> Unit,
+    ) : ZipPipelineRunner by real {
+        override suspend fun extractAll(
+            itemsByZip: Map<String, List<HtmlMemoryEntry>>,
+            outputDir: String,
+            workerCount: Int,
+            onProgress: (ExtractResult) -> Unit,
+        ) = real.extractAll(itemsByZip, outputDir, workerCount) { result ->
+            onProgress(result)
+            record(lateViewModel.progressText)
+        }
+    }
+
+    private lateinit var lateViewModel: DashboardViewModel
+
     private fun viewModel(metadata: RecordingMetadata): DashboardViewModel = DashboardViewModel(
-        zipPipelineRunner = DesktopZipPipelineRunner(metadata),
+        zipPipelineRunner = SamplingRunner(DesktopZipPipelineRunner(metadata)) { progressSamples += it },
         mediaProcessor = metadata,
         fileSystem = FileSystem.SYSTEM,
         pickers = Pickers(zipFolder.path, library.path),
         outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
         outputFolderMemory = OutputFolderMemory.None,
     ).apply {
+        lateViewModel = this
+        metadata.probe = { progressSamples += progressText }
         pickZipFolder()
         pickOutputFolder()
     }
@@ -155,9 +184,12 @@ class ZipFolderEndToEndTest {
         try {
             viewModel.importFolder()
 
-            assertEquals("Pipeline Complete", viewModel.progressText, viewModel.logs.joinToString("\n"))
+            assertEquals("Run complete", viewModel.progressText, viewModel.logs.joinToString("\n"))
+            // The first run extracts both files; the count template is "Extracting: done / total".
+            assertTrue("Extracting: 2 / 2" in progressSamples, progressSamples.toString())
+            assertTrue(progressSamples.any { it.startsWith("Metadata: 0 / ") }, progressSamples.toString())
             assertFalse(viewModel.hasWarnings, viewModel.logs.joinToString("\n"))
-            assertTrue(viewModel.logs.any { "Found 2 zip file(s)" in it })
+            assertTrue(viewModel.logs.any { "Found 2 ZIP files." in it })
             val firstLog = viewModel.logs.indexOfFirst { "memories-2.zip:" in it }
             val secondLog = viewModel.logs.indexOfFirst { "memories-10.zip:" in it }
             assertTrue(firstLog >= 0 && secondLog > firstLog, "numbered archives must be read in numeric order")
@@ -173,7 +205,7 @@ class ZipFolderEndToEndTest {
             assertTrue(firstZip.isFile && secondZip.isFile, "ordinary imports must keep source archives")
 
             viewModel.importFolder()
-            assertEquals("Pipeline Complete", viewModel.progressText, viewModel.logs.joinToString("\n"))
+            assertEquals("Run complete", viewModel.progressText, viewModel.logs.joinToString("\n"))
             assertTrue(viewModel.logs.any { "Extracted 0 new, 2 already existed" in it })
             assertContentEquals(firstBytes, File(library, firstName).readBytes())
             assertContentEquals(secondBytes, File(library, secondName).readBytes())

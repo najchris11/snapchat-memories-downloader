@@ -52,6 +52,35 @@ class AndroidOverlayCombineTest {
     private fun combine(processor: MediaProcessor, deleteOriginals: Boolean = true) =
         combineAndroidOverlayPair(dir, pair, main, overlay, deleteOriginals, processor)
 
+    // Regression (#56): Android treated a successful pixel encode as permission to delete
+    // both originals even when EXIF copying warned that their metadata had not survived.
+    @Test
+    fun failedMetadataCopyKeepsOriginals() {
+        val result = combine(FakeProcessor { output, warn ->
+            File(output).writeText("composite")
+            warn?.invoke("Combined image but could not carry its metadata: failed")
+            true
+        })
+
+        assertTrue(main.exists() && overlay.exists())
+        assertTrue(File(dir, pair.outputName).exists())
+        assertEquals("combined", result.status)
+        assertFalse(result.metadataCarried)
+    }
+
+    @Test
+    fun successfulMetadataCopyPermitsDeletion() {
+        val result = combine(FakeProcessor { output, _ ->
+            File(output).writeText("composite")
+            true
+        })
+
+        assertFalse(main.exists())
+        assertFalse(overlay.exists())
+        assertTrue(File(dir, pair.outputName).exists())
+        assertTrue(result.metadataCarried)
+    }
+
     // Regression (#57): a processor that died after opening the final path left partial
     // bytes there. The next import then skipped the pair as an existing output.
     @Test

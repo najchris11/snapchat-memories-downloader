@@ -41,7 +41,7 @@ internal fun combineAndroidOverlayPair(
         }
     }
 
-    if (mayDeleteOriginals(status, deleteOriginals)) {
+    if (mayDeleteOriginalsWithMetadata(status, deleteOriginals, warnings)) {
         if (!mainFile.delete()) warnings += "could not delete original: ${mainFile.name}"
         if (!overlayFile.delete()) warnings += "could not delete overlay: ${overlayFile.name}"
     }

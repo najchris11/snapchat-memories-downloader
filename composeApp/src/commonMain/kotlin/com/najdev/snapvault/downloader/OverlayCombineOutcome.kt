@@ -41,6 +41,16 @@ internal const val METADATA_NOT_CARRIED_MARKER = "could not carry its metadata"
 fun mayDeleteOriginals(status: OverlayCombineStatus, deleteRequested: Boolean): Boolean =
     deleteRequested && status == OverlayCombineStatus.Combined
 
+private fun metadataCarriedFromWarnings(warnings: List<String>): Boolean =
+    warnings.none { METADATA_NOT_CARRIED_MARKER in it }
+
+/** A combined file must keep its sources when their metadata did not carry across. */
+fun mayDeleteOriginalsWithMetadata(
+    status: OverlayCombineStatus,
+    deleteRequested: Boolean,
+    warnings: List<String>,
+): Boolean = mayDeleteOriginals(status, deleteRequested) && metadataCarriedFromWarnings(warnings)
+
 /**
  * Why a pair will not be attempted, or null if it should be combined.
  *
@@ -123,7 +133,7 @@ fun overlayCombineResult(
             status = "combined",
             warnings = warnings,
             sourcePaths = sources,
-            metadataCarried = warnings.none { METADATA_NOT_CARRIED_MARKER in it },
+            metadataCarried = metadataCarriedFromWarnings(warnings),
         )
     }
 }

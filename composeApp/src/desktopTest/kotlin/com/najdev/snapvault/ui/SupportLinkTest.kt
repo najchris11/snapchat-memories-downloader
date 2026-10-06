@@ -275,7 +275,7 @@ class SupportLinkTest {
             assertTrue(viewModel.isRunning)
             assertEquals("/out", viewModel.downloadFolder)
             assertEquals(listOf(url), opened)
-            onNode(hasText("Edit") and androidx.compose.ui.test.hasClickAction()).assertIsNotEnabled()
+            onNode(hasText("Change") and androidx.compose.ui.test.hasClickAction()).assertIsNotEnabled()
         } finally {
             viewModel.dispose()
         }

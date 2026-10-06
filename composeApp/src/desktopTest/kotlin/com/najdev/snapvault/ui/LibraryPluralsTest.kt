@@ -5,11 +5,10 @@ import androidx.compose.ui.test.v2.runComposeUiTest
 import com.najdev.snapvault.ui.theme.SnapVaultTheme
 import org.jetbrains.compose.resources.pluralStringResource
 import snapchat_memories_downloader.composeapp.generated.resources.Res
-import snapchat_memories_downloader.composeapp.generated.resources.lib_asset_count
 import snapchat_memories_downloader.composeapp.generated.resources.lib_file_count
 import snapchat_memories_downloader.composeapp.generated.resources.lib_photo_count
-import snapchat_memories_downloader.composeapp.generated.resources.lib_tagged_count
 import snapchat_memories_downloader.composeapp.generated.resources.lib_video_count
+import snapchat_memories_downloader.composeapp.generated.resources.zip_files_selected
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -21,6 +20,9 @@ import kotlin.test.assertEquals
  * These pin counts of 1 and 2 for every one of them. That does assert the default locale's
  * copy, deliberately: "1 files" is the exact defect hand-rolled pluralisation produces, and
  * only the rendered text shows it.
+ *
+ * The inspector's "items tagged" and "assets combined" counts now reuse lib_file_count; the
+ * ZIP picker's "N ZIP files selected" was a literal until the verbiage audit.
  */
 @OptIn(ExperimentalTestApi::class)
 class LibraryPluralsTest {
@@ -34,8 +36,7 @@ class LibraryPluralsTest {
                     "file" to Res.plurals.lib_file_count,
                     "photo" to Res.plurals.lib_photo_count,
                     "video" to Res.plurals.lib_video_count,
-                    "tagged" to Res.plurals.lib_tagged_count,
-                    "asset" to Res.plurals.lib_asset_count,
+                    "zip" to Res.plurals.zip_files_selected,
                 ).forEach { (name, resource) ->
                     rendered["$name-1"] = pluralStringResource(resource, 1, 1)
                     rendered["$name-2"] = pluralStringResource(resource, 2, 2)
@@ -49,9 +50,7 @@ class LibraryPluralsTest {
         assertEquals("2 photos", rendered["photo-2"])
         assertEquals("1 video", rendered["video-1"])
         assertEquals("2 videos", rendered["video-2"])
-        assertEquals("1 item tagged", rendered["tagged-1"])
-        assertEquals("2 items tagged", rendered["tagged-2"])
-        assertEquals("1 asset combined", rendered["asset-1"])
-        assertEquals("2 assets combined", rendered["asset-2"])
+        assertEquals("1 ZIP file selected", rendered["zip-1"])
+        assertEquals("2 ZIP files selected", rendered["zip-2"])
     }
 }

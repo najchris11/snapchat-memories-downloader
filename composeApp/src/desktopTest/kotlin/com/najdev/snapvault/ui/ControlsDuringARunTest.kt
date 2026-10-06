@@ -127,7 +127,7 @@ class ControlsDuringARunTest {
         setContent {
             SnapVaultTheme(darkMode = true) { DashboardScreen(viewModel = viewModel, onNavigateToSettings = {}) }
         }
-        val labels = arrayOf("Write Metadata (GPS + Date)", "Combine photo and video overlays", "Clean Duplicate Files")
+        val labels = arrayOf("Write date and location metadata", "Combine photo and video overlays", "Clean duplicate files")
 
         switches(*labels).forEach { it.assertIsEnabled() }
 
@@ -211,7 +211,7 @@ class ControlsDuringARunTest {
             }
         }
 
-        onNode(hasText("Edit") and androidx.compose.ui.test.hasClickAction()).assertIsNotEnabled()
+        onNode(hasText("Change") and androidx.compose.ui.test.hasClickAction()).assertIsNotEnabled()
     }
 
     @Test
@@ -260,15 +260,15 @@ class ControlsDuringARunTest {
             }
         }
         onNodeWithText("Legacy (HTML/JSON)").performClick()
-        onNodeWithText("memories_history.json").performScrollTo().performClick()
-        onNodeWithText("Select destination folder").performScrollTo().performClick()
-        onNode(hasText("Download Memories") and isToggleable()).performScrollTo().performClick()
-        onNodeWithText("Start Download").performClick()
+        onNodeWithText("memories_history.json or .html").performScrollTo().performClick()
+        onNodeWithText("Choose an output folder").performScrollTo().performClick()
+        onNode(hasText("Download memories") and isToggleable()).performScrollTo().performClick()
+        onNodeWithText("Start run").performClick()
         waitUntil(timeoutMillis = 10_000) { started.isCompleted }
 
         onNode(hasRole(Role.Tab) and hasText("Settings")).performClick()
         waitForIdle()
-        onNode(hasText("Edit") and hasClickAction()).assertIsNotEnabled()
+        onNode(hasText("Change") and hasClickAction()).assertIsNotEnabled()
         // "/out" exists only in the fake filesystem, so the Library scan finds nothing and
         // shows its empty state — which is where it offers to change the folder.
         onNode(hasRole(Role.Tab) and hasText("Library")).performClick()
@@ -281,7 +281,7 @@ class ControlsDuringARunTest {
         onNode(hasText("Change output folder")).assertIsNotEnabled()
         onNode(hasRole(Role.Tab) and hasText("Settings")).performClick()
         waitForIdle()
-        onNode(hasText("Edit") and hasClickAction()).assertIsNotEnabled()
+        onNode(hasText("Change") and hasClickAction()).assertIsNotEnabled()
         // No Stop: it is not on this screen, and disposing the composition disposes the view
         // model, which cancels the hanging run.
     }

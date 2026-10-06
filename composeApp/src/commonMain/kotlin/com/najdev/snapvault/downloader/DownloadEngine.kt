@@ -380,7 +380,7 @@ class DownloadEngine(
                 val refused = DownloadResult(
                     items[index].copy(isDownloaded = false),
                     "error: another export entry already claims ${plan.destination}, " +
-                        "and this row's link is different — it was not downloaded",
+                        "and this entry's download link is different — it was not downloaded",
                 )
                 results[index] = refused
                 channel.send(refused)

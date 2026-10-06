@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,12 +25,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.AppBuildConfig
 import com.najdev.snapvault.binaryInstallHint
+import com.najdev.snapvault.isAndroidBuild
+import com.najdev.snapvault.isIosBuild
 import com.najdev.snapvault.platformSupportPageUrl
 import com.najdev.snapvault.ui.theme.SnapVaultColors
 import com.najdev.snapvault.LayoutOverride
 import com.najdev.snapvault.ThemeMode
 import org.jetbrains.compose.resources.stringResource
 import snapchat_memories_downloader.composeapp.generated.resources.*
+
+internal fun showsDependencySection(isAndroid: Boolean, isIos: Boolean): Boolean =
+    !isAndroid && !isIos
 
 @Composable
 fun SettingsScreen(
@@ -48,6 +54,10 @@ fun SettingsScreen(
     supportPageUrl: String? = platformSupportPageUrl,
     onOpenSupportPage: (suspend (String) -> Unit)? = null,
     onCopySupportPage: ((String) -> Unit)? = null,
+    // Defaulted so the many call sites that are not about onboarding need no change; the
+    // row is hidden rather than dead when no host supplies it.
+    onShowOnboarding: (() -> Unit)? = null,
+    showDependencySection: Boolean = showsDependencySection(isAndroidBuild, isIosBuild),
 ) {
     Column(
         modifier = Modifier
@@ -161,37 +171,38 @@ fun SettingsScreen(
         }
 
         // ── System Dependencies ───────────────────────────────────────────────
-        SettingsCard {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                SettingsSectionLabel(
-                    icon = Icons.Outlined.Terminal,
-                    text = stringResource(Res.string.set_deps_title)
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    DependencyItem(
-                        name = "ExifTool",
-                        description = stringResource(Res.string.set_dep_exiftool_description),
-                        status = if (hasExifTool) DependencyStatus.READY else DependencyStatus.MISSING,
-                        icon = Icons.Outlined.GpsFixed,
-                        modifier = Modifier.weight(1f)
+        if (showDependencySection) {
+            SettingsCard {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    SettingsSectionLabel(
+                        icon = Icons.Outlined.Terminal,
+                        text = stringResource(Res.string.set_deps_title)
                     )
-                    DependencyItem(
-                        name = "FFmpeg",
-                        description = stringResource(Res.string.set_dep_ffmpeg_description),
-                        status = if (hasFFmpeg) DependencyStatus.READY else DependencyStatus.MISSING,
-                        icon = Icons.Outlined.Videocam,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            maxItemsInEachRow = if (maxWidth < 600.dp) 1 else 2,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                        ) {
+                            DependencyItem(
+                                name = stringResource(Res.string.set_dep_exiftool_name),
+                                description = stringResource(Res.string.set_dep_exiftool_description),
+                                status = if (hasExifTool) DependencyStatus.READY else DependencyStatus.MISSING,
+                                icon = Icons.Outlined.GpsFixed,
+                                modifier = Modifier.weight(1f),
+                            )
+                            DependencyItem(
+                                name = stringResource(Res.string.set_dep_ffmpeg_name),
+                                description = stringResource(Res.string.set_dep_ffmpeg_description),
+                                status = if (hasFFmpeg) DependencyStatus.READY else DependencyStatus.MISSING,
+                                icon = Icons.Outlined.Videocam,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+
                     TextButton(onClick = onVerifyDependencies) {
                         Text(
                             text = stringResource(Res.string.set_deps_refresh),
@@ -200,15 +211,15 @@ fun SettingsScreen(
                             fontWeight = FontWeight.SemiBold,
                         )
                     }
-                }
-                val hint = binaryInstallHint()
-                if ((!hasExifTool || !hasFFmpeg) && hint.isNotEmpty()) {
-                    Text(
-                        hint,
-                        style = MaterialTheme.typography.labelSmall,
-                        lineHeight = 16.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    val hint = binaryInstallHint()
+                    if ((!hasExifTool || !hasFFmpeg) && hint.isNotEmpty()) {
+                        Text(
+                            hint,
+                            style = MaterialTheme.typography.labelSmall,
+                            lineHeight = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
@@ -291,6 +302,38 @@ fun SettingsScreen(
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(stringResource(Res.string.set_output_path_edit), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
+
+        // ── Getting Started ───────────────────────────────────────────────────
+        // The first-launch flow is shown once and then never volunteers itself again, so this
+        // is the only way back to it. Above Support because it is help, not a tip jar.
+        if (onShowOnboarding != null) {
+            SettingsCard {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    SettingsSectionLabel(
+                        icon = Icons.AutoMirrored.Outlined.HelpOutline,
+                        text = stringResource(Res.string.onb_title)
+                    )
+                    SettingsRow(
+                        icon = Icons.Outlined.PlayCircleOutline,
+                        title = stringResource(Res.string.set_onboarding_label),
+                        description = stringResource(Res.string.set_onboarding_desc),
+                        descriptionMaxLines = 3,
+                    ) {
+                        TextButton(
+                            onClick = onShowOnboarding,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                stringResource(Res.string.set_onboarding_btn),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
             }

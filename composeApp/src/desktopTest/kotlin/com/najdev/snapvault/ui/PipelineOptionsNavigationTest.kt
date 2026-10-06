@@ -116,7 +116,7 @@ class PipelineOptionsNavigationTest {
         var width by mutableStateOf(1280.dp)
         setContent {
             Box(Modifier.width(width).height(900.dp)) {
-                App(pickers = Pickers(), mediaProcessor = Tools(), zipPipelineRunner = runner, fileSystem = disk, outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None)
+                App(pickers = Pickers(), mediaProcessor = Tools(), zipPipelineRunner = runner, fileSystem = disk, outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None, onboardingMemory = com.najdev.snapvault.onboarding.OnboardingMemory.None)
             }
         }
 
@@ -145,7 +145,7 @@ class PipelineOptionsNavigationTest {
         onNodeWithText(START).performClick()
         waitUntil(timeoutMillis = 15_000) { runner.extracted }
         waitUntil(timeoutMillis = 15_000) {
-            onAllNodes(hasText("Pipeline Complete") or hasText("Completed with warnings") or hasText("Failed"))
+            onAllNodes(hasText("Run complete") or hasText("Completed with warnings") or hasText("Failed"))
                 .fetchSemanticsNodes().isNotEmpty()
         }
 
@@ -157,7 +157,7 @@ class PipelineOptionsNavigationTest {
     fun aFreshStartStillOffersTheDefaults() = runComposeUiTest {
         setContent {
             Box(Modifier.width(1280.dp).height(900.dp)) {
-                App(pickers = Pickers(), mediaProcessor = Tools(), zipPipelineRunner = RecordingRunner(), fileSystem = FakeFileSystem(), outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None)
+                App(pickers = Pickers(), mediaProcessor = Tools(), zipPipelineRunner = RecordingRunner(), fileSystem = FakeFileSystem(), outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None, onboardingMemory = com.najdev.snapvault.onboarding.OnboardingMemory.None)
             }
         }
         onNodeWithText(LEGACY).performClick()
@@ -171,13 +171,13 @@ class PipelineOptionsNavigationTest {
 
     private companion object {
         const val LEGACY = "Legacy (HTML/JSON)"
-        const val HISTORY_PLACEHOLDER = "memories_history.json"
-        const val OUTPUT_PLACEHOLDER = "Select destination folder"
-        const val DOWNLOAD = "Download Memories"
-        const val METADATA = "Write Metadata (GPS + Date)"
+        const val HISTORY_PLACEHOLDER = "memories_history.json or .html"
+        const val OUTPUT_PLACEHOLDER = "Choose an output folder"
+        const val DOWNLOAD = "Download memories"
+        const val METADATA = "Write date and location metadata"
         const val COMBINE = "Combine photo and video overlays"
-        const val DEDUPE = "Clean Duplicate Files"
+        const val DEDUPE = "Clean duplicate files"
         const val DRY_RUN = "Preview duplicate removal"
-        const val START = "Start Download"
+        const val START = "Start run"
     }
 }

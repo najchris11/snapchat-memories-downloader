@@ -1,0 +1,47 @@
+#!/bin/sh
+# Reject AI attribution in commit messages.
+#
+# The repo's own rule (CLAUDE.md: "No Claude-Session: trailer") and a standing preference
+# that nothing credits an AI in published text. Session-level tooling has repeatedly tried
+# to add a Co-Authored-By trailer anyway, so this refuses it at the point of commit rather
+# than relying on it being noticed in review.
+#
+# Patterns are anchored to the start of a line, and to the attribution forms specifically,
+# so ordinary prose about the files is unaffected: a message discussing CLAUDE.md or
+# AGENTS.md is fine, and two commits in this history legitimately do.
+#
+# Bypass with `git commit --no-verify` if you ever actually want one.
+
+msg_file="$1"
+
+# Strip the comment lines git appends to the template; they are not part of the message.
+body=$(grep -v '^#' "$msg_file")
+
+found=""
+
+if printf '%s' "$body" | grep -qiE '^[[:space:]]*co-authored-by:.*(claude|anthropic|noreply@anthropic)'; then
+    found="${found}  Co-Authored-By trailer crediting Claude/Anthropic\n"
+fi
+
+if printf '%s' "$body" | grep -qiE '^[[:space:]]*claude-session:'; then
+    found="${found}  Claude-Session: trailer\n"
+fi
+
+if printf '%s' "$body" | grep -qiE 'generated with .*(claude|claude code)'; then
+    found="${found}  \"Generated with Claude Code\" footer\n"
+fi
+
+if printf '%s' "$body" | grep -q '🤖'; then
+    found="${found}  robot emoji (🤖), used by AI attribution footers\n"
+fi
+
+if [ -n "$found" ]; then
+    printf '\n\033[31mCommit rejected: AI attribution in the commit message.\033[0m\n\n'
+    printf 'Found:\n'
+    printf "$found"
+    printf '\nThis repo does not credit AI in commits or PRs. Remove the line(s) and commit again.\n'
+    printf 'To override deliberately: git commit --no-verify\n\n'
+    exit 1
+fi
+
+exit 0

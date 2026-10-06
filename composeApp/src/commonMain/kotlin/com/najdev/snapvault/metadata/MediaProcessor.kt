@@ -11,6 +11,20 @@ interface MediaProcessor {
     fun writeDateMetadata(filePath: String, dateTimeUtc: String): Boolean //META writes date to a single file; used by default batch fallback
     fun combineVideoWithOverlay(videoPath: String, overlayPath: String, outputPath: String): Boolean
 
+    // Burns an overlay PNG onto a still image. Defaults to false — "this platform did not
+    // combine it" — rather than throwing, so a platform that cannot composite images leaves
+    // the main file untouched instead of failing the run. Desktop composites through
+    // OverlayCombiner's ImageIO/FFmpeg path and does not implement this; Android does it
+    // natively with android.graphics, where there is no ImageIO and no bundled FFmpeg.
+    // onWarning carries non-fatal problems (e.g. EXIF could not be copied) to the caller,
+    // which is the only thread that reports them.
+    fun combineImageWithOverlay(
+        mainPath: String,
+        overlayPath: String,
+        outputPath: String,
+        onWarning: ((String) -> Unit)? = null,
+    ): Boolean = false
+
     // Name of the hardware encoder that passed the runtime probe (e.g. "h264_vaapi"),
     // or null when videos will be software-encoded. First call triggers detection.
     fun activeVideoEncoder(): String? = null

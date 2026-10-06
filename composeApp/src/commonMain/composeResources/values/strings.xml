@@ -16,20 +16,22 @@
     <string name="help_url">https://github.com/najchris11/snapchat-memories-downloader#readme</string>
 
     <!-- Dashboard Screen -->
-    <string name="dash_source_title">Source &amp; Destination</string>
-    <string name="dash_history_label">History File</string>
-    <string name="dash_history_placeholder">memories_history.json</string>
-    <string name="dash_output_label">Output Folder</string>
-    <string name="dash_output_placeholder">Select destination folder</string>
+    <string name="dash_source_title">Source &amp; destination</string>
+    <string name="dash_history_label">History file</string>
+    <string name="dash_history_placeholder">memories_history.json or .html</string>
+    <string name="dash_output_label">Output folder</string>
+    <string name="dash_output_placeholder">Choose an output folder</string>
     <string name="browse_btn">Browse</string>
-    <string name="opt_mode_zip">ZIP Import</string>
+    <string name="opt_mode_zip">ZIP import</string>
     <string name="opt_mode_legacy">Legacy (HTML/JSON)</string>
-    <string name="dash_pipeline_title">Pipeline Options</string>
-    <string name="opt_download_memories">Download Memories</string>
-    <string name="opt_inject_gps">Write Metadata (GPS + Date)</string>
-    <string name="opt_write_date_metadata">Write Date Metadata</string>
+    <string name="dash_pipeline_title">Run options</string>
+    <string name="opt_download_memories">Download memories</string>
+    <!-- Two labels because the ZIP switch writes a location only while precise matching is on.
+         It used to say "Write Date Metadata" while writing GPS by default. -->
+    <string name="opt_write_location_metadata">Write date and location metadata</string>
+    <string name="opt_write_date_metadata">Write date metadata</string>
     <string name="opt_precise_matching">Precise time + GPS matching</string>
-    <string name="zip_precise_matching_log">[INFO] Precise time + GPS matching is on (default). Verified ZIP capture times provide time of day. GPS is applied only when the exact timestamp matches a history record with an unambiguous location; other files keep verified ZIP capture times without GPS. Turn the toggle off on the Dashboard to force date-only tags.</string>
+    <string name="zip_precise_matching_log">[INFO] Precise time + GPS matching is on (default). Verified ZIP capture times provide time of day. GPS is applied only when the exact timestamp matches a history record with an unambiguous location; other files keep verified ZIP capture times without GPS. Turn off Precise time + GPS matching on the Dashboard to write dates only.</string>
     <!-- Shown wherever the chosen options write a GPS position into the files (D18). -->
     <string name="opt_gps_disclosure">Where a location is known, it is saved inside each photo and video. Anyone you share those files with can see where they were taken.</string>
     <!-- Offered when an import will not fit, but would if each ZIP were deleted as its
@@ -44,12 +46,14 @@
     <string name="lowspace_confirm">Import and delete each ZIP</string>
     <string name="lowspace_cancel">Not now</string>
     <string name="opt_combine_overlays">Combine photo and video overlays</string>
-    <string name="opt_combine_cleanup_helper">After a successful merge and metadata copy, the original photo or video and its overlay are permanently deleted.</string>
-    <string name="opt_clean_duplicates">Clean Duplicate Files</string>
+    <string name="opt_combine_cleanup_helper">Once an overlay is combined and the metadata copied, the original photo or video and its overlay are permanently deleted.</string>
+    <string name="opt_clean_duplicates">Clean duplicate files</string>
     <string name="opt_dedupe_dry_run">Preview duplicate removal</string>
     <string name="opt_dedupe_dry_run_helper">Imports and metadata processing still run. No duplicate files will be removed.</string>
     <string name="dash_step_setup">Setup</string>
-    <string name="dash_step_syncing">Downloading</string>
+    <!-- Step two is extraction in ZIP mode and downloading only in Legacy mode. -->
+    <string name="dash_step_extracting">Extracting</string>
+    <string name="dash_step_downloading">Downloading</string>
     <string name="dash_step_processing">Processing</string>
     <string name="dash_step_complete">Complete</string>
     <string name="dash_step_progress">Step %1$d of %2$d · %3$s</string>
@@ -62,20 +66,22 @@
     <string name="dash_step_state_complete">complete</string>
     <string name="dash_step_state_warnings">complete with warnings</string>
     <string name="dash_progress_ring">Overall progress</string>
-    <string name="btn_start_sync">Start Download</string>
+    <string name="btn_start_sync">Start run</string>
     <string name="btn_stop">Stop</string>
-    <string name="status_idle">Ready to download</string>
+    <string name="status_idle">Ready to start</string>
     <string name="btn_view_log">View log</string>
     <string name="btn_clear">Clear</string>
-    <string name="btn_copy_logs">Copy logs</string>
+    <string name="btn_copy_logs">Copy log</string>
     <string name="status_copied">Copied!</string>
 
     <!-- Dashboard banners -->
-    <string name="banner_android_preview_title">Android Preview</string>
-    <string name="banner_android_preview_body">Video overlay combining is not yet implemented on Android. ZIP extraction and date/GPS tagging for images work.</string>
+    <string name="banner_android_preview_title">Android preview</string>
+    <string name="banner_android_preview_body">SnapVault on Android is an early preview. Importing does not work yet, so nothing will appear in your Library.</string>
+    <!-- The count is of failed files and writes, not of the four steps: it once read
+         "47 steps failed" for a four-step run. -->
     <plurals name="warn_run_failures_title">
-        <item quantity="one">%1$d step failed</item>
-        <item quantity="other">%1$d steps failed</item>
+        <item quantity="one">Finished with %1$d failure</item>
+        <item quantity="other">Finished with %1$d failures</item>
     </plurals>
     <string name="warn_run_failures_body">Some files were not processed. The log lists what failed and why.</string>
     <plurals name="warn_run_warnings_title">
@@ -83,7 +89,7 @@
         <item quantity="other">Finished with %1$d warnings</item>
     </plurals>
     <string name="warn_run_warnings_body">Nothing failed, but some files need a look. The log explains each one.</string>
-    <string name="banner_deps_title">Missing dependencies</string>
+    <string name="banner_deps_title">Missing helper tools</string>
     <string name="banner_deps_exiftool">ExifTool was not found, so date and GPS tags will not be written.</string>
     <string name="banner_deps_ffmpeg">FFmpeg was not found, so video overlays will not be combined.</string>
     <string name="btn_open_settings">Settings</string>
@@ -96,8 +102,8 @@
     <string name="lib_search_placeholder">Search library…</string>
     <!-- Three distinct empty states. They shared one message, which meant a library full of
          photos filtered to Videos reported "No memories found" — of a full library. -->
-    <string name="lib_empty_no_folder">No output folder set yet. Choosing one sets where the pipeline writes, and what the Library shows.</string>
-    <string name="lib_empty_no_media">No memories found. Start a download from the Dashboard to populate your library.</string>
+    <string name="lib_empty_no_folder">No output folder set yet. Choose one to set where runs save your media, and what the Library shows.</string>
+    <string name="lib_empty_no_media">No memories found. Start a run from the Dashboard to fill your library.</string>
     <string name="lib_empty_filtered">No memories match the current filter or search.</string>
     <string name="lib_change_folder">Change output folder</string>
     <string name="lib_favorite_add">Add to favorites</string>
@@ -113,18 +119,19 @@
     <string name="lib_sort_name">Name</string>
     <string name="lib_refresh_action">Refresh</string>
     <string name="lib_refresh">Refresh library</string>
-    <string name="lib_open_preview">Open Preview</string>
-    <string name="lib_play_video">Play Video</string>
+    <string name="lib_open_preview">Open preview</string>
+    <string name="lib_play_video">Play video</string>
     <string name="lib_inspector_title">Inspector</string>
-    <string name="lib_storage_label">Storage Usage</string>
-    <string name="lib_metadata_label">Metadata Extraction</string>
-    <string name="lib_gps_verified">GPS Data Verified</string>
-    <string name="lib_overlay_detected">Overlay Detected</string>
+    <string name="lib_storage_label">Storage</string>
+    <string name="lib_metadata_label">Metadata</string>
+    <string name="lib_gps_verified">Location saved</string>
+    <string name="lib_overlay_detected">Overlays combined</string>
 
     <!-- Counts in the Library inspector. Real plurals rather than an appended "s": most
          languages do not form plurals that way, and several have more than the two forms
          English needs. lib_gps_items and lib_overlay_items were written for this job, went
-         unused, and are folded in here. -->
+         unused, and are folded in here. The location and overlay rows reuse lib_file_count:
+         their own "items tagged" / "assets combined" repeated the row title in other words. -->
     <plurals name="lib_file_count">
         <item quantity="one">%1$d file</item>
         <item quantity="other">%1$d files</item>
@@ -137,24 +144,31 @@
         <item quantity="one">%1$d video</item>
         <item quantity="other">%1$d videos</item>
     </plurals>
-    <plurals name="lib_tagged_count">
-        <item quantity="one">%1$d item tagged</item>
-        <item quantity="other">%1$d items tagged</item>
-    </plurals>
-    <plurals name="lib_asset_count">
-        <item quantity="one">%1$d asset combined</item>
-        <item quantity="other">%1$d assets combined</item>
-    </plurals>
 
     <!-- ZIP import -->
-    <string name="zip_source_folder">ZIP Folder</string>
-    <string name="zip_source_files">Pick Files</string>
-    <string name="zip_folder_label">ZIP Export Folder</string>
-    <string name="zip_folder_placeholder">Select folder containing mydata~*.zip files</string>
-    <string name="zip_files_label">ZIP Files</string>
+    <string name="zip_source_folder">ZIP folder</string>
+    <string name="zip_source_files">ZIP files</string>
+    <string name="zip_folder_label">Folder with your ZIPs</string>
+    <string name="zip_folder_placeholder">Choose the folder that holds your Snapchat ZIPs</string>
+    <string name="zip_files_label">Your ZIP files</string>
+    <string name="zip_files_placeholder">Choose your Snapchat ZIP files…</string>
+    <plurals name="zip_files_selected">
+        <item quantity="one">%1$d ZIP file selected</item>
+        <item quantity="other">%1$d ZIP files selected</item>
+    </plurals>
+    <plurals name="zip_files_more">
+        <item quantity="one">+ %1$d more</item>
+        <item quantity="other">+ %1$d more</item>
+    </plurals>
+
+    <!-- Desktop file dialog titles -->
+    <string name="picker_history_title">Choose memories_history.json or .html</string>
+    <string name="picker_output_title">Choose an output folder</string>
+    <string name="picker_zip_folder_title">Choose the folder that holds your Snapchat ZIPs</string>
+    <string name="picker_zip_files_title">Choose your Snapchat ZIP files</string>
 
     <!-- Log panel -->
-    <string name="log_view_logs">View Logs</string>
+    <string name="log_view_logs">View log</string>
 
     <!-- Library stat chips and inspector -->
     <plurals name="lib_memory_count">
@@ -162,24 +176,24 @@
         <item quantity="other">%1$d Memories</item>
     </plurals>
     <plurals name="lib_gps_chip_count">
-        <item quantity="one">%1$d with GPS</item>
-        <item quantity="other">%1$d with GPS</item>
+        <item quantity="one">%1$d with location</item>
+        <item quantity="other">%1$d with location</item>
     </plurals>
     <string name="lib_select_folder">Set output folder</string>
     <string name="lib_clear_selection">Clear selection</string>
     <string name="lib_close_preview">Close preview</string>
     <string name="lib_overlay_badge">Overlay</string>
     <string name="lib_detail_size">SIZE</string>
-    <string name="lib_detail_gps">GPS</string>
+    <string name="lib_detail_gps">LOCATION</string>
     <string name="lib_detail_overlay">OVERLAY</string>
-    <string name="lib_gps_tagged">Tagged</string>
-    <string name="lib_gps_none">No data</string>
+    <string name="lib_gps_tagged">Saved</string>
+    <string name="lib_gps_none">None</string>
     <!-- Desktop hands videos to the system player rather than playing them in the app. -->
     <string name="video_open_in_player">Open in your video player</string>
     <string name="video_opening">Opening…</string>
     <string name="video_open_failed">Could not open this video: %1$s</string>
     <string name="video_preview_cd">Video preview</string>
-    <string name="lib_preview_unavailable">Preview unavailable — open the original</string>
+    <string name="lib_preview_unavailable">Preview unavailable — open the file</string>
     <string name="lib_overlay_combined">Combined</string>
     <string name="lib_overlay_none">None</string>
 
@@ -188,40 +202,42 @@
 
     <!-- Settings / Environment Screen -->
     <string name="settings_title">Settings</string>
-    <string name="set_subtitle">Manage system dependencies and utility preferences.</string>
+    <string name="set_subtitle">Appearance, helper tools and your library.</string>
     <string name="set_theme_description">Choose between light, dark, or system default theme.</string>
     <string name="set_theme_system">System</string>
     <string name="set_theme_light">Light</string>
     <string name="set_theme_dark">Dark</string>
     <string name="set_layout_label">Layout</string>
-    <string name="set_layout_description">Auto switches by window width; Compact forces the phone layout.</string>
+    <string name="set_layout_description">Auto follows the window width. Compact and Expanded force the phone or desktop layout.</string>
     <string name="set_layout_auto">Auto</string>
     <string name="set_layout_compact">Compact</string>
     <string name="set_layout_expanded">Expanded</string>
-    <string name="set_dep_exiftool_description">GPS metadata injection</string>
-    <string name="set_dep_ffmpeg_description">Video overlay processing</string>
-    <string name="set_output_path_label">Output Path</string>
+    <string name="set_dep_exiftool_name">ExifTool</string>
+    <string name="set_dep_exiftool_description">Writes dates and locations into your files</string>
+    <string name="set_dep_ffmpeg_name">FFmpeg</string>
+    <string name="set_dep_ffmpeg_description">Combines overlays onto videos</string>
+    <string name="set_output_path_label">Output folder</string>
     <string name="set_output_path_unset">Not set</string>
-    <string name="set_output_path_edit">Edit</string>
+    <string name="set_output_path_edit">Change</string>
     <string name="set_licence_footer">SnapVault %1$s — GPL-3.0 License</string>
-    <string name="set_deps_title">System Dependencies</string>
-    <string name="set_deps_refresh">Refresh Check</string>
-    <string name="set_dep_detected">Detected</string>
-    <string name="set_dep_missing">Not Found</string>
-    <string name="set_general_title">General Settings</string>
-    <string name="set_theme_label">Application Theme</string>
-    <string name="set_advanced_title">Advanced Tools</string>
-    <string name="set_reset_index_label">Clear Library Badges</string>
-    <string name="set_reset_index_desc">Forgets the GPS and Combined badges recorded for this folder, until a sync records them again. Favorites are kept. No files are changed, downloaded or processed.</string>
-    <string name="set_reset_index_btn">Clear Badges</string>
+    <string name="set_deps_title">Helper tools</string>
+    <string name="set_deps_refresh">Check again</string>
+    <string name="set_dep_detected">Found</string>
+    <string name="set_dep_missing">Not found</string>
+    <string name="set_general_title">General</string>
+    <string name="set_theme_label">Theme</string>
+    <string name="set_advanced_title">Advanced</string>
+    <string name="set_reset_index_label">Clear library badges</string>
+    <string name="set_reset_index_desc">Forgets the location and overlay badges saved for this folder, until the next run saves them again. Favorites are kept. No files are changed, downloaded or processed.</string>
+    <string name="set_reset_index_btn">Clear badges</string>
     <string name="set_reset_result_cleared">Badges cleared. Favorites were kept.</string>
-    <string name="set_reset_result_running">Not cleared: a sync is running. Try again when it finishes.</string>
+    <string name="set_reset_result_running">Not cleared: a run is in progress. Try again when it finishes.</string>
     <string name="set_reset_result_no_folder">Not cleared: choose an output folder first.</string>
-    <string name="set_reset_result_failed">Not cleared: the index could not be changed. The Dashboard log has the reason.</string>
+    <string name="set_reset_result_failed">Not cleared: the Library’s saved badges could not be changed. The Dashboard log has the reason.</string>
     <string name="close_unsaved_title">Favorites still saving</string>
     <plurals name="close_unsaved_body">
-        <item quantity="one">%1$d favorite has not been saved yet. It exists nowhere else — quitting now will lose it.</item>
-        <item quantity="other">%1$d favorites have not been saved yet. They exist nowhere else — quitting now will lose them.</item>
+        <item quantity="one">%1$d favorite has not been saved yet. Quitting now will unmark it. The photo or video itself is not affected.</item>
+        <item quantity="other">%1$d favorites have not been saved yet. Quitting now will unmark them. The photos and videos themselves are not affected.</item>
     </plurals>
     <string name="close_keep_open">Keep SnapVault open</string>
     <string name="close_quit_anyway">Quit anyway</string>
@@ -235,4 +251,134 @@
     <string name="support_copy_link">Copy link</string>
     <string name="support_copied">Link copied.</string>
     <string name="support_copy_failed">Could not copy the link. Select the address above and copy it manually.</string>
+
+    <!-- Getting Started (onboarding)
+
+         Shown once on first launch and replayable from Settings. The copy carries the whole
+         path from "I installed this" to "I have a dated library", because the user this exists
+         for is the one who found the app without the walkthrough video. -->
+    <string name="onb_title">Getting Started</string>
+    <string name="onb_skip">Skip</string>
+    <string name="onb_back">Back</string>
+    <string name="onb_next">Next</string>
+    <string name="onb_finish">Finish</string>
+    <string name="onb_progress">Step %1$d of %2$d</string>
+    <string name="onb_step_state">Step %1$d of %2$d, %3$s</string>
+    <string name="onb_step_state_done">done</string>
+    <string name="onb_step_state_current">current</string>
+    <string name="onb_step_state_upcoming">upcoming</string>
+    <string name="onb_video_action">Watch the walkthrough</string>
+    <string name="onb_video_hint">About five minutes · Opens your browser</string>
+    <string name="onb_video_accessible_label">Watch the SnapVault walkthrough video. Opens in your browser.</string>
+    <string name="onb_video_url">https://www.youtube.com/watch?v=6v-aR5Lgc1k</string>
+
+    <!-- Step 1 -->
+    <string name="onb_request_title">Request your export from Snapchat</string>
+    <string name="onb_request_body">Snapchat does not hand over your memories directly — you have to ask for them, and they reply by email. The button below opens the request page: sign in, then choose Export your Memories → Request Only Memories → All Time.</string>
+    <string name="onb_request_note">The email usually arrives within a few hours, but it can take up to a day. Nothing below can happen until it does, so start this first.</string>
+    <string name="onb_request_action">Open Snapchat’s Download My Data page</string>
+    <string name="onb_request_url">https://accounts.snapchat.com/v2/download-my-data</string>
+
+    <!-- Step 2 -->
+    <string name="onb_download_title">Download the ZIP files</string>
+    <string name="onb_download_body">The email links to one or more ZIP files. Download all of them, and leave them zipped — SnapVault reads the archives directly, and unzipping them first loses the data it needs to date your photos.</string>
+    <string name="onb_download_folder_intro">Keeping them together in one folder makes the next step a single click. SnapVault can make one for you:</string>
+    <string name="onb_download_folder_create">Create this folder</string>
+    <string name="onb_download_folder_reveal">Show it in my file manager</string>
+    <string name="onb_download_folder_own">Or choose your own folder at the next step — nothing here is required.</string>
+    <string name="onb_download_folder_created">Created. Drop your ZIP files in there as they download.</string>
+    <string name="onb_download_folder_existed">That folder already exists. Drop your ZIP files in it as they download.</string>
+    <string name="onb_download_folder_failed">Could not create it: %1$s. You can still choose any folder yourself at the next step.</string>
+    <string name="onb_download_folder_mobile">On this device, pick the ZIP files with the file picker on the Dashboard when you are ready.</string>
+
+    <!-- Step 3 -->
+    <string name="onb_folders_title">Point SnapVault at the ZIPs</string>
+    <string name="onb_folders_body">On the Dashboard you choose two things: the source, which is the folder holding your ZIP files, and the output folder, where the finished library is written.</string>
+    <string name="onb_folders_space">Leave at least as much free space in the output folder as your ZIP files take up — every photo and video is written out in full before anything is cleaned up. SnapVault checks before it starts, and stops without writing anything if there is not enough room.</string>
+    <string name="onb_folders_resume">You can stop a run and start it again later. Finished files are recorded, so a second run picks up where the first left off rather than starting over.</string>
+
+    <!-- Step 4 -->
+    <string name="onb_pipeline_title">What the phases do</string>
+    <string name="onb_pipeline_body">A run has four phases. Most are switches on the Dashboard, so you can run only the parts you want.</string>
+    <string name="onb_pipeline_download_title">Extract</string>
+    <string name="onb_pipeline_download_body">Reads the archives and pulls out every photo and video, skipping anything a previous run already finished.</string>
+    <string name="onb_pipeline_metadata_title">Write date and GPS metadata</string>
+    <string name="onb_pipeline_metadata_body">Snapchat exports arrive undated, so everything looks like it was taken today. This writes the real capture time and location back into each file, which is what makes Photos and Google Photos sort them correctly.</string>
+    <string name="onb_pipeline_combine_title">Combine overlays</string>
+    <string name="onb_pipeline_combine_body">Captions, stickers and timestamps are exported as a separate layer. This burns them back onto the photo or video, then replaces the original with the combined version.</string>
+    <string name="onb_pipeline_dedupe_title">Clean duplicate files</string>
+    <string name="onb_pipeline_dedupe_body">Finds files that are byte-for-byte identical and removes the copies. This one deletes, so it starts in preview mode: leave the preview on for the first run and read the log before letting it act.</string>
+
+    <!-- Step 5 -->
+    <string name="onb_run_title">Run it, then open your Library</string>
+    <string name="onb_run_body">Press Start run on the Dashboard. The log panel names each file as it goes, and the stepper tracks the phases. A large export takes a while — it is safe to leave it running.</string>
+    <string name="onb_run_review">When it finishes, open the Library tab. Open a photo to see the date it was taken and whether its location was saved, and mark the ones you want to keep as favorites.</string>
+    <string name="onb_run_replay">You can reopen this guide any time from Settings.</string>
+
+    <!-- Settings entry -->
+    <string name="set_onboarding_label">Getting Started guide</string>
+    <string name="set_onboarding_desc">Walk through requesting your Snapchat export, setting up folders, and what each phase does.</string>
+    <string name="set_onboarding_btn">Show guide</string>
+
+    <!-- Run progress line. Loaded by DashboardViewModel, not a composable, so a test can read the
+         resolved wording. Count templates keep their placeholders in the order the ViewModel
+         fills them: done, then total. -->
+    <string name="progress_reading_memories">Reading memories…</string>
+    <string name="progress_extracting_files">Extracting files…</string>
+    <string name="progress_extracting_count">Extracting: %1$d / %2$d</string>
+    <plurals name="progress_downloading_count">
+        <item quantity="one">Downloading: %1$d of %2$d file…</item>
+        <item quantity="other">Downloading: %1$d of %2$d files…</item>
+    </plurals>
+    <string name="progress_extracting_archives">Extracting downloaded archives…</string>
+    <string name="progress_metadata_count">Metadata: %1$d / %2$d</string>
+    <string name="progress_combining_overlays">Combining overlays…</string>
+    <string name="progress_combining_count">Combining: %1$d / %2$d</string>
+    <string name="progress_tagging_combined">Tagging combined files…</string>
+    <string name="progress_deduping_scanning">Deduplicating: Scanning…</string>
+    <string name="progress_duplicates_found">Duplicates: %1$d found (preview)</string>
+    <string name="progress_duplicates_removed">Duplicates: %1$d removed</string>
+    <string name="progress_run_complete">Run complete</string>
+    <string name="progress_run_complete_warnings">Completed with warnings</string>
+    <string name="progress_cancelled">Cancelled</string>
+    <string name="progress_failed">Failed</string>
+    <string name="progress_stopping">Stopping…</string>
+
+    <!-- Counted nouns in the run log and its error messages. Real plurals, not "file(s)". -->
+    <plurals name="count_failures">
+        <item quantity="one">%1$d failure</item>
+        <item quantity="other">%1$d failures</item>
+    </plurals>
+    <plurals name="count_warnings">
+        <item quantity="one">%1$d warning</item>
+        <item quantity="other">%1$d warnings</item>
+    </plurals>
+    <plurals name="count_archives">
+        <item quantity="one">%1$d archive</item>
+        <item quantity="other">%1$d archives</item>
+    </plurals>
+    <plurals name="count_zip_files">
+        <item quantity="one">%1$d ZIP file</item>
+        <item quantity="other">%1$d ZIP files</item>
+    </plurals>
+    <plurals name="count_files">
+        <item quantity="one">%1$d file</item>
+        <item quantity="other">%1$d files</item>
+    </plurals>
+    <plurals name="count_records">
+        <item quantity="one">%1$d record</item>
+        <item quantity="other">%1$d records</item>
+    </plurals>
+    <plurals name="count_overlays">
+        <item quantity="one">%1$d overlay</item>
+        <item quantity="other">%1$d overlays</item>
+    </plurals>
+    <plurals name="count_date_groups">
+        <item quantity="one">%1$d date group</item>
+        <item quantity="other">%1$d date groups</item>
+    </plurals>
+    <plurals name="count_duplicate_files">
+        <item quantity="one">%1$d duplicate file</item>
+        <item quantity="other">%1$d duplicate files</item>
+    </plurals>
 </resources>

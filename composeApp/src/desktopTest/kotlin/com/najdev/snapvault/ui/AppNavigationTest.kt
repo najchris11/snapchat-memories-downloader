@@ -68,6 +68,7 @@ class AppNavigationTest {
                     zipPipelineRunner = NoOpZipPipelineRunner,
                     fileSystem = FileSystem.SYSTEM,
                     outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
+                    onboardingMemory = com.najdev.snapvault.onboarding.OnboardingMemory.None,
                 )
             }
         }
@@ -125,6 +126,6 @@ class AppNavigationTest {
     private companion object {
         // Unique to the Settings screen: the sidebar label "Settings" also matches the nav
         // item, and the card heading matches the window title.
-        const val SETTINGS_MARKER = "Manage system dependencies and utility preferences."
+        const val SETTINGS_MARKER = "Appearance, helper tools and your library."
     }
 }

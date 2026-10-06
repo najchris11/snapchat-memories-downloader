@@ -52,6 +52,7 @@ class CloseFlowTest {
                 closeRequests = closeRequests,
                 onCloseWindow = { exits++ },
                 outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
+                onboardingMemory = com.najdev.snapvault.onboarding.OnboardingMemory.None,
             )
         }
         waitForIdle()
@@ -71,6 +72,13 @@ class CloseFlowTest {
         setContent { UnsavedFavoritesDialog(count = 2, onKeepOpen = { kept++ }, onQuitAnyway = { quit++ }) }
 
         onNode(hasText("2 favorites have not been saved yet", substring = true)).assertExists()
+        // What is lost is the mark, not the media. "They exist nowhere else — quitting now will
+        // lose them" read as though the photos themselves would go.
+        onNode(hasText("will unmark them", substring = true)).assertExists()
+        onNode(hasText("themselves are not affected", substring = true)).assertExists()
+        onAllNodes(hasText("exist nowhere else", substring = true)).fetchSemanticsNodes().let {
+            assertEquals(0, it.size, "the dialog must not suggest the photos would be lost")
+        }
 
         onNodeWithText("Keep SnapVault open").performClick()
         assertEquals(1, kept)

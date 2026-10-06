@@ -6,16 +6,17 @@ import java.io.File
 import java.net.URI
 
 actual val isAndroidBuild: Boolean = false
+actual val isIosBuild: Boolean = false
 actual val platformSupportPageUrl: String? = "https://ko-fi.com/najdev"
 
 actual suspend fun <T> runInterruptibleCompat(block: () -> T): T =
     runInterruptible(block = block)
 
-actual fun openUrl(url: String) {
-    runCatching {
+actual fun openUrl(url: String, onResult: (Boolean) -> Unit) {
+    val opened = runCatching {
         if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
             Desktop.getDesktop().browse(URI(url))
-            return
+            return@runCatching
         }
         // Headless-ish desktops and most Linux setups without the AWT Desktop integration.
         val os = System.getProperty("os.name").lowercase()
@@ -25,7 +26,8 @@ actual fun openUrl(url: String) {
             else -> arrayOf("xdg-open", url)
         }
         Runtime.getRuntime().exec(command)
-    }
+    }.isSuccess
+    onResult(opened)
 }
 
 actual fun binaryInstallHint(): String = when (BinaryExtractor.getPlatform()) {

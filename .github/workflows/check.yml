@@ -1,23 +1,80 @@
 name: PR Check
 
+# Pull requests test the merge result (refs/pull/N/merge), so the push run that follows a
+# merge into develop re-tests code the PR already validated — 10 of 21 recent runs were that
+# duplicate. main keeps its push trigger as a release-branch safety net.
 on:
   pull_request:
     branches: [ main, develop ]
+    # Required checks must be created even for docs-only PRs. Skip the build jobs below
+    # instead of skipping the entire workflow, which leaves branch protection Pending.
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'LICENSE'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+# A second push to the same ref makes the first run pointless — without this both go to
+# completion, and the macOS job alone bills at 10x. Not on main: a release-branch run is
+# worth finishing even if another push lands behind it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
-  # Desktop is the priority release target — this is the required check. Runs on Linux
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.filter.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether builds are needed
+        id: filter
+        shell: bash
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            git diff --no-renames --name-only -z "$PR_BASE_SHA...$PR_HEAD_SHA" | python3 scripts/ci_changes.py >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # All three platform checks are required on main and develop. Runs on Linux
   # because it's plain JVM/Compose Desktop work and doesn't need the macOS toolchain,
   # which is both faster and cheaper than the shared macOS runner pool.
   desktop:
+    needs: changes
+    # A failed detector must fail the required jobs, rather than letting skipped jobs
+    # satisfy branch protection. Only a successful, explicit docs-only decision skips.
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.build != 'false') }}
     runs-on: ubuntu-latest
     steps:
+      - name: Check change detection
+        if: ${{ needs.changes.result != 'success' }}
+        run: exit 1
+
       - uses: actions/checkout@v4
 
       - name: Set up JDK 21 (JetBrains Runtime)
         uses: actions/setup-java@v4
+        # Authenticated so the JBR lookup is not subject to the runner IP's shared
+        # anonymous rate limit. release.yml has had this since 8c24306; check.yml did
+        # not, so PR runs failed with "API rate limit exceeded for <runner ip>" whenever
+        # the shared pool was busy — a red X on a PR whose code is fine.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           java-version: '21.0.7'
           distribution: 'jetbrains'
@@ -27,7 +84,7 @@ jobs:
 
       # The release workflow's version logic, tested here so a broken change is caught on the
       # PR rather than when someone tries to cut a release.
-      - name: Test release scripts
+      - name: Test CI and release scripts
         run: python3 -m unittest discover -s scripts -p 'test_*.py'
 
       # Before the tests: a lint failure is cheap to produce and cheap to read, so there's
@@ -38,18 +95,30 @@ jobs:
       - name: Run Desktop Tests
         run: ./gradlew :composeApp:desktopTest
 
-  # Mobile is shelved for now; desktop is the active release target. Informational only
-  # (continue-on-error) rather than a required check: current arm64 macOS runner images no
-  # longer ship the Android SDK with no setup-android step here to provision one, so
-  # assembleDebug is expected to fail until mobile work resumes and that gap is closed.
-  mobile-preview:
-    runs-on: macos-latest
-    continue-on-error: true
+  # Split out of the old macOS-only mobile-preview job. Assembling the Android app needs the
+  # Android SDK, not the Apple toolchain, and a Linux runner bills at 1x against macOS's 10x
+  # — this was ~70 billable-equivalent minutes per run for work Linux does in ~3.
+  #
+  # No setup-android step: the runner image ships the SDK at /usr/local/lib/android/sdk with
+  # licences accepted, and AGP fetches any missing platform itself. Adding
+  # android-actions/setup-android actively broke this — its default package set still asks
+  # for the obsolete 'tools' package, which no longer exists in the SDK repository, so
+  # sdkmanager exits 1 before Gradle runs at all.
+  android:
+    needs: changes
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.build != 'false') }}
+    runs-on: ubuntu-latest
     steps:
+      - name: Check change detection
+        if: ${{ needs.changes.result != 'success' }}
+        run: exit 1
+
       - uses: actions/checkout@v4
 
       - name: Set up JDK 21 (JetBrains Runtime)
         uses: actions/setup-java@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           java-version: '21.0.7'
           distribution: 'jetbrains'
@@ -60,5 +129,50 @@ jobs:
       - name: Assemble Android Debug
         run: ./gradlew :composeApp:assembleDebug -Pandroid.suppressUnsupportedCompileSdk=37.0
 
-      - name: Compile iOS Simulator Target
-        run: ./gradlew :composeApp:compileKotlinIosSimulatorArm64
+  # The only job that genuinely needs macOS: the Kotlin/Native Apple toolchain does not
+  # link from Linux. Build the complete simulator app as well as the Kotlin framework
+  # so Swift, the Xcode build phase and the generated launch plist are checked too.
+  ios:
+    needs: changes
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.build != 'false') }}
+    runs-on: macos-latest
+    steps:
+      - name: Check change detection
+        if: ${{ needs.changes.result != 'success' }}
+        run: exit 1
+
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (JetBrains Runtime)
+        uses: actions/setup-java@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          java-version: '21.0.7'
+          distribution: 'jetbrains'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      # Link, not just compile. Compiling produces a klib and never shells out to xcrun,
+      # so it passes even when the Apple toolchain is unusable; linking the framework is
+      # the step that actually needs xcrun, and it is the step the iOS app consumes. A
+      # broken toolchain once left linking failing for a day while this job stayed green
+      # and every local iOS build silently reused the last framework that had linked.
+      - name: Link iOS Simulator Framework
+        run: ./gradlew :composeApp:linkDebugFrameworkIosSimulatorArm64
+
+      - name: Build unsigned iOS simulator app
+        run: |
+          xcodebuild build \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/ios-ci \
+            ARCHS=arm64 \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Verify built iOS app launch configuration
+        run: python3 scripts/verify_ios_app.py build/ios-ci/Build/Products/Debug-iphonesimulator/iosApp.app

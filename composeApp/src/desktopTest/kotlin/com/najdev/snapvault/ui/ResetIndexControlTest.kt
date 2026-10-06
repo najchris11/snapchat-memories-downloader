@@ -79,7 +79,7 @@ class ResetIndexControlTest {
     fun eachResetOutcomeIsShownInWordsThatSayWhatToDo() {
         val expected = mapOf(
             DashboardViewModel.IndexResetOutcome.Cleared to "Badges cleared",
-            DashboardViewModel.IndexResetOutcome.RunInProgress to "a sync is running",
+            DashboardViewModel.IndexResetOutcome.RunInProgress to "a run is in progress",
             DashboardViewModel.IndexResetOutcome.NoFolder to "choose an output folder first",
             DashboardViewModel.IndexResetOutcome.Failed to "could not be changed",
         )
@@ -124,11 +124,12 @@ class ResetIndexControlTest {
                     zipPipelineRunner = NoOpZipPipelineRunner,
                     fileSystem = FakeFileSystem(),
                     outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
+                    onboardingMemory = com.najdev.snapvault.onboarding.OnboardingMemory.None,
                 )
             }
         }
         onNode(hasRole(Role.Tab) and hasText("Settings")).performClick()
-        onNode(hasText("Clear Badges") and hasClickAction()).performScrollTo().performClick()
+        onNode(hasText("Clear badges") and hasClickAction()).performScrollTo().performClick()
         waitUntil(timeoutMillis = 5_000) {
             onAllNodes(hasText("choose an output folder first", substring = true)).fetchSemanticsNodes().isNotEmpty()
         }

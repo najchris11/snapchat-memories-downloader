@@ -72,6 +72,8 @@
 
     <!-- Dashboard banners -->
     <string name="banner_capabilities_title">Limited media support</string>
+    <string name="banner_android_preview_title">Android preview</string>
+    <string name="banner_android_preview_body">SnapVault on Android is an early preview. Importing does not work yet, so nothing will appear in your Library.</string>
     <string name="banner_capability_image_metadata_full">Date and GPS metadata are written to photos.</string>
     <string name="banner_capability_image_metadata_partial">Some image metadata cannot be written on this build.</string>
     <string name="banner_capability_image_metadata_unavailable">Image date and GPS metadata cannot be written on this build.</string>

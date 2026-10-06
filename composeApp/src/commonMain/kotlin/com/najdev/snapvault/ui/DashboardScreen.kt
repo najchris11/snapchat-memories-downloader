@@ -46,6 +46,7 @@ import com.najdev.snapvault.WindowSize
 import com.najdev.snapvault.ZipSourceMode
 import com.najdev.snapvault.binaryInstallHint
 import com.najdev.snapvault.capabilityBannerState
+import com.najdev.snapvault.isAndroidBuild
 import com.najdev.snapvault.platformMediaCapabilities
 import com.najdev.snapvault.ui.theme.LogColors
 import com.najdev.snapvault.ui.theme.SnapVaultColors
@@ -73,6 +74,7 @@ fun DashboardScreen(
     hasFFmpeg: Boolean = true,
     windowSize: WindowSize = WindowSize.Expanded,
     mediaCapabilities: MediaCapabilities = platformMediaCapabilities,
+    showAndroidPreview: Boolean = isAndroidBuild,
 ) {
     // Owned by the view model, not remembered here: this composable leaves composition every
     // time the user visits another screen or crosses a layout boundary, and remembered state
@@ -108,6 +110,7 @@ fun DashboardScreen(
                     hasExifTool,
                     hasFFmpeg,
                     mediaCapabilities,
+                    showAndroidPreview,
                 )
                 DashboardStatus(viewModel, compact = true)
             }
@@ -133,6 +136,7 @@ fun DashboardScreen(
                         hasExifTool,
                         hasFFmpeg,
                         mediaCapabilities,
+                        showAndroidPreview,
                     )
                 }
                 Spacer(Modifier.height(16.dp))
@@ -157,7 +161,17 @@ private fun DashboardControls(
     hasExifTool: Boolean,
     hasFFmpeg: Boolean,
     mediaCapabilities: MediaCapabilities,
+    showAndroidPreview: Boolean,
 ) {
+    if (showAndroidPreview) {
+        InlineBanner(
+            icon = Icons.Outlined.Info,
+            accent = SnapVaultColors.warning,
+            title = stringResource(Res.string.banner_android_preview_title),
+            body = stringResource(Res.string.banner_android_preview_body),
+        )
+    }
+
     capabilityBannerState(mediaCapabilities)?.let { state ->
         val messages = mutableListOf<String>()
         for (capability in state.capabilities) {

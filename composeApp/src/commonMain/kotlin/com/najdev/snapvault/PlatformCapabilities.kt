@@ -11,6 +11,37 @@ data class MediaCapabilities(
 
 expect val platformMediaCapabilities: MediaCapabilities
 
+internal val androidMediaCapabilities = MediaCapabilities(
+    // #51: ZIP import writes GPS when present but skips the date pass for plain photos.
+    imageMetadata = CapabilityLevel.Partial,
+    // AndroidMediaProcessor has no video metadata writer.
+    videoMetadata = CapabilityLevel.Unavailable,
+    // AndroidMediaProcessor composites photo overlays with Canvas.
+    imageOverlayCombine = CapabilityLevel.Full,
+    // AndroidZipPipelineRunner deliberately skips video overlay pairs.
+    videoOverlayCombine = CapabilityLevel.Unavailable,
+)
+
+internal val iosMediaCapabilities = MediaCapabilities(
+    // IosMediaProcessor writes photo date and location metadata.
+    imageMetadata = CapabilityLevel.Full,
+    // Videos receive filesystem modification dates only.
+    videoMetadata = CapabilityLevel.Partial,
+    // IosZipPipelineRunner combines photo overlays through IosMediaProcessor (#47).
+    imageOverlayCombine = CapabilityLevel.Full,
+    // IosMediaProcessor.combineVideoWithOverlay returns false.
+    videoOverlayCombine = CapabilityLevel.Unavailable,
+)
+
+internal val desktopMediaCapabilities = MediaCapabilities(
+    // ExifTool writes photo and video metadata.
+    imageMetadata = CapabilityLevel.Full,
+    videoMetadata = CapabilityLevel.Full,
+    // ImageIO combines photo overlays; FFmpeg combines video overlays.
+    imageOverlayCombine = CapabilityLevel.Full,
+    videoOverlayCombine = CapabilityLevel.Full,
+)
+
 enum class MediaCapability {
     ImageMetadata,
     VideoMetadata,

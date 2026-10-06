@@ -106,53 +106,13 @@ class AndroidZipPipelineRunner(
             val mainFile = byName[names.mainName] ?: continue
             val overlayFile = byName[names.overlayName] ?: continue
             oneAtATime.withPermit {
-                channel.send(combineOne(dir, names, mainFile, overlayFile, deleteOriginals))
+                channel.send(withContext(Dispatchers.IO) {
+                    combineAndroidOverlayPair(dir, names, mainFile, overlayFile, deleteOriginals, mediaProcessor)
+                })
             }
         }
 
         channel.close()
         consumer.join()
-    }
-
-    private suspend fun combineOne(
-        dir: File,
-        names: OverlayPairNames,
-        mainFile: File,
-        overlayFile: File,
-        deleteOriginals: Boolean,
-    ): CombineResult {
-        val outputFile = File(dir, names.outputName)
-        val warnings = mutableListOf<String>()
-
-        // Existing output, video, then animation: see overlayCombineSkipStatus, which is
-        // where the order and each reason are tested. The output check has to happen here —
-        // the processor is handed the final path and would replace whatever is there.
-        val status = overlayCombineSkipStatus(names, outputExists = outputFile.exists()) ?: run {
-            val combined = withContext(Dispatchers.IO) {
-                mediaProcessor.combineImageWithOverlay(
-                    mainFile.absolutePath,
-                    overlayFile.absolutePath,
-                    outputFile.absolutePath,
-                    onWarning = { warnings += it },
-                )
-            }
-            if (combined) OverlayCombineStatus.Combined else OverlayCombineStatus.Failed
-        }
-
-        // Only a confirmed combine has produced a second copy of the pixels; see
-        // mayDeleteOriginals, which is where that rule is tested.
-        if (mayDeleteOriginals(status, deleteOriginals)) {
-            if (!mainFile.delete()) warnings += "could not delete original: ${mainFile.name}"
-            if (!overlayFile.delete()) warnings += "could not delete overlay: ${overlayFile.name}"
-        }
-
-        return overlayCombineResult(
-            pair = names,
-            mainPath = mainFile.absolutePath,
-            overlayPath = overlayFile.absolutePath,
-            outputPath = outputFile.absolutePath,
-            status = status,
-            warnings = warnings,
-        )
     }
 }

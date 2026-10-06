@@ -100,8 +100,6 @@ Avoid `"item${if (n == 1) "" else "s"}"` — use a plural resource.
   `./gradlew clean` still clears it.
 - The debug build caps imports at 2,500 items. Never diagnose "missing memories" without
   checking `IS_DEBUG` first.
-- `iosMain`'s `VideoPlayer` builds its `AVPlayer` outside `remember`, so it is recreated on
-  every recomposition. Known, unfixed.
 
 ## Commits
 

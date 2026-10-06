@@ -6,6 +6,8 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
 import androidx.exifinterface.media.ExifInterface
+import com.najdev.snapvault.downloader.OverlayImageFormat
+import com.najdev.snapvault.downloader.overlayImageFormatForOutput
 import java.io.File
 
 class AndroidMediaProcessor : MediaProcessor {
@@ -112,8 +114,12 @@ class AndroidMediaProcessor : MediaProcessor {
             )
 
             val outputFile = File(outputPath)
+            val format = when (overlayImageFormatForOutput(outputPath)) {
+                OverlayImageFormat.Png -> Bitmap.CompressFormat.PNG
+                OverlayImageFormat.Jpeg -> Bitmap.CompressFormat.JPEG
+            }
             val compressed = outputFile.outputStream().use { out ->
-                compositeBitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
+                compositeBitmap.compress(format, JPEG_QUALITY, out)
             }
 
             // compress() can report success having written nothing, and a zero-byte file that

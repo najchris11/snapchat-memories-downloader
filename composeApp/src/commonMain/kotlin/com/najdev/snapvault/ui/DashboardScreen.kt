@@ -55,6 +55,7 @@ import com.najdev.snapvault.viewmodel.DashboardViewModel
 import com.najdev.snapvault.viewmodel.formatBytes
 import com.najdev.snapvault.viewmodel.PipelineOptions
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import snapchat_memories_downloader.composeapp.generated.resources.*
@@ -289,12 +290,13 @@ private fun DashboardControls(
                                 }
                             }
                         }
+                        val selectedCount = viewModel.selectedZipFiles.size
                         FilePickerBox(
                             icon = Icons.Outlined.FolderZip,
-                            label = when (viewModel.selectedZipFiles.size) {
-                                0 -> "Select mydata~*.zip files…"
+                            label = when (selectedCount) {
+                                0 -> stringResource(Res.string.zip_files_placeholder)
                                 1 -> viewModel.selectedZipFiles[0].substringAfterLast('/').substringAfterLast('\\')
-                                else -> "${viewModel.selectedZipFiles.size} ZIP files selected"
+                                else -> pluralStringResource(Res.plurals.zip_files_selected, selectedCount, selectedCount)
                             },
                             onClick = viewModel::pickMultipleZips,
                             isSelected = viewModel.selectedZipFiles.isNotEmpty(),
@@ -318,9 +320,9 @@ private fun DashboardControls(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
-                                if (viewModel.selectedZipFiles.size > 4) {
+                                if (selectedCount > 4) {
                                     Text(
-                                        "+ ${viewModel.selectedZipFiles.size - 4} more",
+                                        pluralStringResource(Res.plurals.zip_files_more, selectedCount - 4, selectedCount - 4),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -400,7 +402,7 @@ private fun DashboardControls(
                     val gpsDisclosure = stringResource(Res.string.opt_gps_disclosure)
                     PipelineItem(
                         icon = if (isZipMode) Icons.Outlined.CalendarMonth else Icons.Outlined.GpsFixed,
-                        label = if (isZipMode) stringResource(Res.string.opt_write_date_metadata) else stringResource(Res.string.opt_inject_gps),
+                        label = stringResource(metadataSwitchLabel(viewModel.importMode, options.preciseMatching)),
                         checked = options.runMetadata,
                         helperText = gpsDisclosure.takeIf { !isZipMode && options.runMetadata },
                         enabled = editable,
@@ -556,7 +558,7 @@ private fun DashboardStatus(
     // The four-circle stepper needs roughly 270dp (4 x 30dp circles, 3 x 36dp dividers, plus
     // labels). Below that it squashes, so compact gets a single-line equivalent instead.
     if (compact) {
-        CompactStepper(currentStep = viewModel.currentStep, hasWarnings = viewModel.hasWarnings)
+        CompactStepper(currentStep = viewModel.currentStep, hasWarnings = viewModel.hasWarnings, importMode = viewModel.importMode)
     } else {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -565,7 +567,7 @@ private fun DashboardStatus(
         ) {
             StepItem(1, stringResource(Res.string.dash_step_setup), viewModel.currentStep == 0, viewModel.currentStep > 0, Icons.Outlined.Edit)
             StepperDivider(viewModel.currentStep > 0)
-            StepItem(2, stringResource(Res.string.dash_step_syncing), viewModel.currentStep == 1, viewModel.currentStep > 1, Icons.Outlined.CloudSync)
+            StepItem(2, stringResource(stepTwoLabel(viewModel.importMode)), viewModel.currentStep == 1, viewModel.currentStep > 1, Icons.Outlined.CloudSync)
             StepperDivider(viewModel.currentStep > 1)
             StepItem(3, stringResource(Res.string.dash_step_processing), viewModel.currentStep == 2, viewModel.currentStep > 2, Icons.Outlined.AutoFixHigh)
             StepperDivider(viewModel.currentStep > 2)
@@ -1099,15 +1101,36 @@ fun StepItem(
 }
 
 /**
+ * Step two extracts in ZIP mode and only downloads in Legacy mode. It was labelled
+ * "Downloading" in both, so the recommended path described work it never did.
+ */
+internal fun stepTwoLabel(importMode: ImportMode): StringResource = when (importMode) {
+    ImportMode.Zip -> Res.string.dash_step_extracting
+    ImportMode.Legacy -> Res.string.dash_step_downloading
+}
+
+/**
+ * Whether the metadata switch writes a location. Legacy always does; ZIP only while precise
+ * matching is on. The ZIP label said "Write Date Metadata" while writing GPS by default, so
+ * the one switch labelled date-only was the one embedding where each photo was taken.
+ */
+internal fun metadataSwitchLabel(importMode: ImportMode, preciseMatching: Boolean): StringResource =
+    if (importMode == ImportMode.Legacy || preciseMatching) {
+        Res.string.opt_write_location_metadata
+    } else {
+        Res.string.opt_write_date_metadata
+    }
+
+/**
  * Single-line equivalent of the four-circle stepper, for windows too narrow to fit it.
  * Carries the same three facts — which step, how many, and whether the finished run
  * reported failures — as text plus dots, in a row that cannot squash.
  */
 @Composable
-internal fun CompactStepper(currentStep: Int, hasWarnings: Boolean) {
+internal fun CompactStepper(currentStep: Int, hasWarnings: Boolean, importMode: ImportMode) {
     val labels = listOf(
         stringResource(Res.string.dash_step_setup),
-        stringResource(Res.string.dash_step_syncing),
+        stringResource(stepTwoLabel(importMode)),
         stringResource(Res.string.dash_step_processing),
         stringResource(Res.string.dash_step_complete),
     )

@@ -88,7 +88,7 @@ class StepperSemanticsTest {
             StepItem(2, "Downloading", active = true, complete = false, icon = Icons.Outlined.CloudSync)
         }
         val compact = stateOf("Step 2 of 4") {
-            CompactStepper(currentStep = 1, hasWarnings = false)
+            CompactStepper(currentStep = 1, hasWarnings = false, importMode = com.najdev.snapvault.ImportMode.Legacy)
         }
         assertEquals(expanded, compact)
     }

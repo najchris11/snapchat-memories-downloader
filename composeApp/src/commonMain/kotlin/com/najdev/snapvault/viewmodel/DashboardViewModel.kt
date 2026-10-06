@@ -25,8 +25,7 @@ import okio.Path.Companion.toPath
 import okio.buffer
 import okio.use
 import org.jetbrains.compose.resources.getString
-import snapchat_memories_downloader.composeapp.generated.resources.Res
-import snapchat_memories_downloader.composeapp.generated.resources.zip_precise_matching_log
+import snapchat_memories_downloader.composeapp.generated.resources.*
 import kotlin.time.TimeSource
 
 private class PipelineAbortException(message: String, cause: Throwable? = null) : Exception(message, cause)
@@ -98,6 +97,8 @@ class DashboardViewModel(
     var progress by mutableStateOf(0f)
         private set
     var progressText by mutableStateOf("")
+    // Loaded when a run starts; the callbacks that move the progress line only fill in counts.
+    private lateinit var progressStrings: ProgressText
         private set
     var speedText by mutableStateOf("SPEED: --")
         private set
@@ -382,6 +383,7 @@ class DashboardViewModel(
         // stale job's belated cleanup (BUG-06).
         lateinit var thisJob: Job
         thisJob = scope.launch {
+            progressStrings = ProgressText.load()
             try {
                 val outDir = downloadFolder ?: throw PipelineAbortException("No output folder selected.")
                 // Claimed before any work starts, so a second window is turned away at the
@@ -422,15 +424,15 @@ class DashboardViewModel(
                     hasWarnings = true
                     failureCount = pipelineFailureCount
                     warningCount = pipelineWarningCount
-                    progressText = "Completed with warnings"
-                    log("[WARN] Sync complete — $pipelineFailureCount failure(s) and $pipelineWarningCount warning(s), see above.")
+                    progressText = progressStrings.runCompleteWithWarnings
+                    log("[WARN] Run complete — ${plural(Res.plurals.count_failures, pipelineFailureCount)} and ${plural(Res.plurals.count_warnings, pipelineWarningCount)}, see above.")
                 } else {
-                    progressText = "Pipeline Complete"
-                    log("[SUCCESS] Sync complete!")
+                    progressText = progressStrings.runComplete
+                    log("[SUCCESS] Run complete!")
                 }
             } catch (e: CancellationException) {
-                log("[WARN] Sync cancelled by user.")
-                progressText = "Cancelled"
+                log("[WARN] Run stopped.")
+                progressText = progressStrings.cancelled
                 progress = 0f
                 indeterminate = false
                 speedText = "SPEED: --"
@@ -439,15 +441,15 @@ class DashboardViewModel(
                 throw e
             } catch (e: PipelineAbortException) {
                 log("[ERROR] ${e.message}")
-                progressText = "Failed"
+                progressText = progressStrings.failed
                 progress = 0f
                 indeterminate = false
                 speedText = "SPEED: --"
                 etaText = "ETA: --"
                 currentStep = 0
             } catch (e: Exception) {
-                log("[ERROR] Pipeline failed: ${e.message}")
-                progressText = "Failed"
+                log("[ERROR] Run failed: ${e.message}")
+                progressText = progressStrings.failed
                 progress = 0f
                 indeterminate = false
                 speedText = "SPEED: --"
@@ -459,8 +461,8 @@ class DashboardViewModel(
                 // the SupervisorJob root with no installed CoroutineExceptionHandler, and
                 // get silently printed to stderr while `finally` still reset the UI to idle.
                 // That read as the pipeline hanging then vanishing with zero log output.
-                log("[ERROR] Pipeline crashed: ${e::class.simpleName}: ${e.message}")
-                progressText = "Failed"
+                log("[ERROR] Run crashed:${e::class.simpleName}: ${e.message}")
+                progressText = progressStrings.failed
                 progress = 0f
                 indeterminate = false
                 speedText = "SPEED: --"
@@ -484,7 +486,7 @@ class DashboardViewModel(
         val job = syncJob ?: return
         if (!job.isActive) return
         log("[WARN] Stopping — cancelling in-flight work…")
-        progressText = "Stopping…"
+        if (::progressStrings.isInitialized) progressText = progressStrings.stopping
         job.cancel()
         // isRunning flips in the pipeline's finally block once cancellation completes.
     }
@@ -632,7 +634,7 @@ class DashboardViewModel(
             VaultIndex.resetKeepingFavorites(fileSystem, folder)
             IndexResetOutcome.Cleared
         }.getOrElse { e ->
-            log("[ERROR] Could not clear the vault index: ${e.message}")
+            log("[ERROR] Could not clear the Library's saved badges: ${e.message}")
             IndexResetOutcome.Failed
         }
     }
@@ -680,10 +682,10 @@ class DashboardViewModel(
                 log(
                     "[INFO] Stopping before $name: it needs ${formatBytes(archive.requiredBytes)} plus " +
                         "${formatBytes(EXTRACTION_SPACE_RESERVE_BYTES)} to process, and only ${formatBytes(free)} " +
-                        "is free. $deletedCount archive(s) were imported; the rest are untouched.",
+                        "is free. Imported so far: ${plural(Res.plurals.count_archives, deletedCount)}; the rest are untouched.",
                 )
                 throw PipelineAbortException(
-                    "Ran out of space after importing $deletedCount archive(s). Free up space and run the import " +
+                    "Ran out of space after importing ${plural(Res.plurals.count_archives, deletedCount)}. Free up space and run the import " +
                         "again — the archives that were not imported are still where they were.",
                 )
             }
@@ -742,7 +744,7 @@ class DashboardViewModel(
         }
 
         log(
-            "[INFO] Low-space import: $deletedCount archive(s) deleted, freeing ${formatBytes(freedBytes)}" +
+            "[INFO] Low-space import: deleted ${plural(Res.plurals.count_archives, deletedCount)}, freeing ${formatBytes(freedBytes)}" +
                 if (keptCount > 0) "; $keptCount kept, see the warnings above." else ".",
         )
     }
@@ -783,7 +785,7 @@ class DashboardViewModel(
         workerCount: Int,
         lowSpaceMode: Boolean = false,
     ) {
-        log("[INFO] Scanning for ZIP file(s)…")
+        log("[INFO] Scanning for ZIP files…")
         val zipFiles: List<String> = when (zipSourceMode) {
             ZipSourceMode.Folder -> {
                 zipPipelineRunner.listZipFiles(
@@ -795,8 +797,8 @@ class DashboardViewModel(
             }
         }
 
-        if (zipFiles.isEmpty()) throw PipelineAbortException("No .zip files found in selected folder.")
-        log("[INFO] Found ${zipFiles.size} zip file(s).")
+        if (zipFiles.isEmpty()) throw PipelineAbortException("No ZIP files found in the selected folder.")
+        log("[INFO] Found ${plural(Res.plurals.count_zip_files, zipFiles.size)}.")
 
         val itemsByZip = mutableMapOf<String, List<HtmlMemoryEntry>>()
         var totalMemoryCount = 0
@@ -817,18 +819,18 @@ class DashboardViewModel(
             } else "no entries"
             log("[INFO] $zipName: ${entries.size} memories, $parsedFileCount files parsed ($dateRange)")
             if (unmatchedCount > 0) {
-                log("[WARN] $zipName: $unmatchedCount file(s) in memories/ skipped — unexpected filename format. Examples: ${unmatchedSamples.joinToString(", ")}")
+                log("[WARN] $zipName: skipped ${plural(Res.plurals.count_files, unmatchedCount)} in memories/ — unexpected filename format. Examples: ${unmatchedSamples.joinToString(", ")}")
                 pipelineWarningCount += unmatchedCount
             }
         }
-        log("[INFO] Indexed $totalMemoryCount memories across ${itemsByZip.size} zip(s).")
+        log("[INFO] Indexed $totalMemoryCount memories across ${plural(Res.plurals.count_zip_files, itemsByZip.size)}.")
 
         // Stop before touching the output folder. Carrying on ran metadata, combination and
         // dedupe over whatever the folder already held, saved an empty index, and finished at
         // "Pipeline Complete" — for an import that imported nothing (D10).
         if (totalMemoryCount == 0) {
             throw PipelineAbortException(
-                "Found no Snapchat memories in the selected ZIP file(s), so nothing was imported. " +
+                "Found no Snapchat memories in the ${plural(Res.plurals.count_zip_files, zipFiles.size)} you selected, so nothing was imported. " +
                     "Choose the ZIP files from Snapchat's \"Download My Data\" export — their memories are in a memories/ folder.",
             )
         }
@@ -896,7 +898,7 @@ class DashboardViewModel(
         val totalItems = itemsByZip.values.sumOf { list ->
             list.sumOf { entry -> if (entry.hasOverlay && entry.overlayFileName != null) 2 else 1 }
         }
-        progressText = "Extracting files…"
+        progressText = progressStrings.extractingFiles
         val extractEta = EtaEstimator()
 
         val onExtractProgress: (ExtractResult) -> Unit = { result ->
@@ -912,7 +914,7 @@ class DashboardViewModel(
             val done = extractedCount + skippedCount + extractErrorCount
             extractEta.record(done)
             progress = done.toFloat() / totalItems.coerceAtLeast(1)
-            progressText = "Extracting: $done / $totalItems"
+            progressText = progressStrings.extracting(done, totalItems)
             val rate = extractEta.ratePerSec()
             if (rate != null) {
                 speedText = "${rate.toInt().coerceAtLeast(1)} files/s"
@@ -962,15 +964,15 @@ class DashboardViewModel(
 
                 val records = memoryJsonSources.flatMap { parseZipMemoryRecords(it) }.distinct()
                 if (memoryJsonSources.size > 1) {
-                    log("[INFO] Experimental metadata matching found memories_history.json in ${memoryJsonSources.size} zip(s); merged into ${records.size} distinct record(s).")
+                    log("[INFO] Precise matching found memories_history.json in ${plural(Res.plurals.count_zip_files, memoryJsonSources.size)}; merged into ${plural(Res.plurals.count_records, records.size)}.")
                 }
                 val plan = buildExperimentalZipMetadataPlan(itemsByZip.values.flatten(), records)
                 plan.warnings.forEach { log("[WARN] $it") }
                 if (plan.targets.isEmpty()) {
-                    log("[WARN] Experimental metadata matching produced no targets; falling back to date-only ZIP metadata.")
+                    log("[WARN] Precise matching found no files to tag; writing dates only.")
                     writeZipDateMetadata(itemsByZip, outDir, workerCount, downloadedMeta)
                 } else {
-                    writeZipExperimentalMetadata(plan.targets, outDir, workerCount, downloadedMeta)
+                    writeZipExperimentalMetadata(plan.targets, outDir, workerCount, downloadedMeta, runCombine)
                 }
             } else {
                 writeZipDateMetadata(itemsByZip, outDir, workerCount, downloadedMeta)
@@ -992,11 +994,11 @@ class DashboardViewModel(
             // this run and carry `favorited = false`, and a favorite toggled *during* the run
             // exists only on disk. Writing the run's own map would wipe both.
             VaultIndex.writeMerging(fileSystem, outDir, downloadedMeta, derived.favoritesFrom, derived.goneSources)
-            log("[INFO] Vault index saved (${downloadedMeta.size} entries).")
+            log("[INFO] Library badges saved (${downloadedMeta.size} files).")
         }.onFailure { e ->
             // Every badge and favorite this run carried lives in that file; failing to save it
-            // is a failed step, not a footnote under "Sync complete!" (D10).
-            log("[ERROR] Could not write vault index: ${e.message}")
+            // is a failed step, not a footnote under "Run complete!" (D10).
+            log("[ERROR] Could not save the Library's badges: ${e.message}")
             pipelineFailureCount++
         }
 
@@ -1023,8 +1025,8 @@ class DashboardViewModel(
         dryRun: Boolean,
         workerCount: Int,
     ) {
-        progressText = "Reading memories…"
-        log("[INFO] Starting pipeline sequence…")
+        progressText = progressStrings.readingMemories
+        log("[INFO] Starting run…")
 
         val htmlPath = htmlFile ?: throw PipelineAbortException("No HTML/JSON file selected.")
         val fileContent = fileSystem.read(htmlPath.toPath()) { readUtf8() }
@@ -1039,7 +1041,7 @@ class DashboardViewModel(
         if (AppBuildConfig.IS_DEBUG) log("[DEBUG] Limiting to 2500 items (debug mode)")
 
         val items = if (AppBuildConfig.IS_DEBUG) parsed.take(2500) else parsed
-        if (items.isEmpty()) throw PipelineAbortException("No items found. Use memories_history.json from your Snapchat export (mydata.snapchat.com).")
+        if (items.isEmpty()) throw PipelineAbortException("No items found. Use memories_history.json from your Snapchat export (accounts.snapchat.com/v2/download-my-data).")
 
         val downloadedMeta: MutableMap<String, FileMeta> = VaultIndex.read(fileSystem, outDir).toMutableMap()
 
@@ -1055,6 +1057,7 @@ class DashboardViewModel(
             var done = 0
             val totalCount = items.size
             val dlEta = EtaEstimator()
+            val downloadingText = progressStrings.downloading(totalCount)
 
             try {
                 val downloader = DownloadEngine(httpClient, fileSystem)
@@ -1063,7 +1066,7 @@ class DashboardViewModel(
                     done++
                     dlEta.record(done)
                     progress = done.toFloat() / totalCount
-                    progressText = "Downloading: $done of $totalCount files…"
+                    progressText = downloadingText(done, totalCount)
                     val rate = dlEta.ratePerSec()
                     if (rate != null) {
                         speedText = "${rate.toInt().coerceAtLeast(1)} files/s"
@@ -1121,7 +1124,7 @@ class DashboardViewModel(
         // fresh downloads and ones already present from an interrupted run, so resume
         // still works — but a ZIP the user keeps in the destination for their own reasons
         // is never opened, flattened, or deleted (D01).
-        progressText = "Extracting downloaded archives…"
+        progressText = progressStrings.extractingArchives
         val ownedArchives = presentItems.mapNotNull { it.downloadedPath }
             .filter { it.substringAfterLast('.', "").lowercase() == "zip" }
         val extractedFiles = zipPipelineRunner.extractDownloadedArchives(outDir, ownedArchives) { msg ->
@@ -1129,7 +1132,7 @@ class DashboardViewModel(
             pipelineWarningCount++
         }
         if (extractedFiles.isNotEmpty()) {
-            log("[INFO] Extracted ${extractedFiles.size} file(s) from downloaded overlay archives.")
+            log("[INFO] Extracted ${plural(Res.plurals.count_files, extractedFiles.size)} from downloaded overlay archives.")
         }
 
         if (runMetadata) {
@@ -1148,11 +1151,11 @@ class DashboardViewModel(
             // this run and carry `favorited = false`, and a favorite toggled *during* the run
             // exists only on disk. Writing the run's own map would wipe both.
             VaultIndex.writeMerging(fileSystem, outDir, downloadedMeta, derived.favoritesFrom, derived.goneSources)
-            log("[INFO] Vault index saved (${downloadedMeta.size} entries).")
+            log("[INFO] Library badges saved (${downloadedMeta.size} files).")
         }.onFailure { e ->
             // Every badge and favorite this run carried lives in that file; failing to save it
-            // is a failed step, not a footnote under "Sync complete!" (D10).
-            log("[ERROR] Could not write vault index: ${e.message}")
+            // is a failed step, not a footnote under "Run complete!" (D10).
+            log("[ERROR] Could not save the Library's badges: ${e.message}")
             pipelineFailureCount++
         }
     }
@@ -1166,7 +1169,7 @@ class DashboardViewModel(
         val metaEntries = itemsByZip.values.flatten()
         val metaTotal = metaEntries.size
         val byDate = metaEntries.groupBy { it.date }
-        log("[INFO] Writing date metadata — ${metaTotal} files across ${byDate.size} date group(s)…")
+        log("[INFO] Writing date metadata — ${plural(Res.plurals.count_files, metaTotal)} across ${plural(Res.plurals.count_date_groups, byDate.size)}…")
 
         var metaCount = 0
         var metaDone = 0
@@ -1190,7 +1193,7 @@ class DashboardViewModel(
                     metaDone += r.entries.size
                     metaEta.record(metaDone)
                     progress = metaDone.toFloat() / metaTotal.coerceAtLeast(1)
-                    progressText = "Metadata: $metaDone / $metaTotal"
+                    progressText = progressStrings.metadata(metaDone, metaTotal)
                     val rate = metaEta.ratePerSec()
                     if (rate != null) {
                         speedText = "${rate.toInt().coerceAtLeast(1)} files/s"
@@ -1251,10 +1254,11 @@ class DashboardViewModel(
         outDir: String,
         workerCount: Int,
         downloadedMeta: MutableMap<String, FileMeta>,
+        combineRuns: Boolean,
     ) {
-        log("[INFO] Writing experimental ZIP metadata — ${targets.size} files (date + GPS where available)…")
+        log("[INFO] Writing metadata — ${plural(Res.plurals.count_files, targets.size)} (date, plus GPS where matched)…")
         progress = 0f
-        progressText = "Metadata: 0 / ${targets.size}"
+        progressText = progressStrings.metadata(0, targets.size)
 
         var gpsCount = 0
         var dateCount = 0
@@ -1294,7 +1298,7 @@ class DashboardViewModel(
                     done++
                     metaEta.record(done)
                     progress = done.toFloat() / targets.size.coerceAtLeast(1)
-                    progressText = "Metadata: $done / ${targets.size}"
+                    progressText = progressStrings.metadata(done, targets.size)
                     val rate = metaEta.ratePerSec()
                     if (rate != null) {
                         speedText = "${rate.toInt().coerceAtLeast(1)} files/s"
@@ -1334,10 +1338,10 @@ class DashboardViewModel(
         speedText = "SPEED: --"
         etaText = "ETA: --"
         if (riffSkippedCount > 0) {
-            log("[INFO] Skipped $riffSkippedCount overlay(s) stored as WebP but named .png — exiftool would reject them; harmless, they're consumed by the combine phase. Examples: ${riffSkippedSamples.joinToString(", ")}")
+            log(riffSkipLogLine(riffSkippedCount, riffSkippedSamples, combineRuns))
         }
         if (failCount > 0) {
-            log("[WARN] Metadata: $failCount file(s) failed to tag. Examples: ${failSamples.joinToString(", ")}")
+            log("[WARN] Metadata: failed to tag ${plural(Res.plurals.count_files, failCount)}. Examples: ${failSamples.joinToString(", ")}")
         }
         log(
             "[INFO] Metadata: ${gpsCount + dateCount} tagged ($gpsCount with GPS)" +
@@ -1371,7 +1375,7 @@ class DashboardViewModel(
         var combineEncoder: String? = null
         progress = 0f
         indeterminate = false
-        progressText = "Combining overlays…"
+        progressText = progressStrings.combiningOverlays
 
         // The per-pair combine summary used to be logged after the whole combine phase
         // returned — which is after the date-fallback sub-phase below, so it read as
@@ -1382,7 +1386,7 @@ class DashboardViewModel(
             summaryLogged = true
             val combineSummary = buildString {
                 append("[INFO] Combined $combinedCount overlay pairs")
-                if (combineSkippedCount > 0) append(", $combineSkippedCount skipped (unsupported format)")
+                if (combineSkippedCount > 0) append(", $combineSkippedCount skipped (see warnings above)")
                 if (combineErrorCount > 0) append(", $combineErrorCount errors")
                 append(".")
             }
@@ -1393,7 +1397,7 @@ class DashboardViewModel(
                     log("[INFO] Video encodes: ${stats.hardware} hardware, ${stats.software} software.")
                     // A hardware encoder was active at start but some files still went software.
                     if (combineEncoder != null && stats.software > 0) {
-                        log("[WARN] ${stats.software} video(s) fell back to software encoding (see stderr for per-file reasons).")
+                        log("[WARN] Videos that fell back to software encoding: ${stats.software}.")
                     }
                 }
             }
@@ -1415,7 +1419,7 @@ class DashboardViewModel(
                 combineEncoder = mediaProcessor.activeVideoEncoder()
                 val encoderLabel = combineEncoder?.let { "hardware ($it)" } ?: "software (libx264)"
                 log("[INFO] Found $actual overlay pairs. Combining… [video encoder: $encoderLabel]")
-                progressText = "Combining: 0 / $actual"
+                progressText = progressStrings.combining(0, actual)
                 // Nothing to combine — no onProgress callback will ever fire to close this out.
                 if (actual == 0) {
                     progress = 1f
@@ -1427,8 +1431,8 @@ class DashboardViewModel(
                 // of a precise-looking 0% (BUG-04) — and reset stale combine-phase metrics
                 // (BUG-04's "stale ETA/pairs-per-sec" complaint) the moment this sub-phase
                 // starts, not whenever the whole combine phase eventually returns.
-                log("[INFO] Tagging $total combined file(s) with date metadata…")
-                progressText = "Tagging combined files…"
+                log("[INFO] Tagging combined files with date metadata… ($total)")
+                progressText = progressStrings.taggingCombined
                 progress = 0f
                 indeterminate = true
                 speedText = "SPEED: --"
@@ -1442,16 +1446,26 @@ class DashboardViewModel(
                     combinedCount++
                     recordCombinedOutput(result, meta, derived)
                 }
-                result.status.startsWith("skipped:") -> combineSkippedCount++
+                result.status.startsWith("skipped:") -> {
+                    combineSkippedCount++
+                    // The summary sends the reader to the warnings for why. A skip that brought
+                    // none of its own (FFmpeg missing) would otherwise go unexplained.
+                    if (result.warnings.isEmpty()) {
+                        log("[WARN] ${combineSubject(result)}: ${result.status.removePrefix("skipped:").trim()}")
+                        pipelineWarningCount++
+                    }
+                }
                 result.status.startsWith("error") -> {
                     combineErrorCount++
-                    log("[ERROR] Overlay combine ${result.uuid.take(8)}: ${result.status}")
+                    // Named by file: the truncated UUID this used to print matched nothing the
+                    // user could find on disk.
+                    log("[ERROR] Could not combine ${combineSubject(result)}: ${result.status.removePrefix("error:").trim()}")
                 }
             }
             combineDone++
             combineEta.record(combineDone)
             progress = combineDone.toFloat() / combineTotal
-            progressText = "Combining: $combineDone / $combineTotal"
+            progressText = progressStrings.combining(combineDone, combineTotal)
             val rate = combineEta.ratePerSec()
             if (rate != null) {
                 speedText = "${rate.toInt().coerceAtLeast(1)} pairs/s"
@@ -1511,9 +1525,9 @@ class DashboardViewModel(
         }
 
         if (targets.isEmpty()) return
-        log("[INFO] Writing metadata (date + GPS where available) to ${targets.size} file(s)…")
+        log("[INFO] Writing metadata (date + GPS where available) to ${plural(Res.plurals.count_files, targets.size)}…")
         progress = 0f
-        progressText = "Metadata: 0 / ${targets.size}"
+        progressText = progressStrings.metadata(0, targets.size)
 
         var gpsCount = 0
         var dateCount = 0
@@ -1542,7 +1556,7 @@ class DashboardViewModel(
                     done++
                     metaEta.record(done)
                     progress = done.toFloat() / targets.size
-                    progressText = "Metadata: $done / ${targets.size}"
+                    progressText = progressStrings.metadata(done, targets.size)
                     val rate = metaEta.ratePerSec()
                     if (rate != null) {
                         speedText = "${rate.toInt().coerceAtLeast(1)} files/s"
@@ -1589,8 +1603,8 @@ class DashboardViewModel(
     }
 
     private suspend fun runDeduplication(outDir: String, dryRun: Boolean) {
-        log("[INFO] Scanning for duplicate files…${if (dryRun) " (dry run — nothing will be deleted)" else ""}")
-        progressText = "Deduplicating: Scanning…"
+        log("[INFO] Scanning for duplicate files…${if (dryRun) " (preview — nothing will be deleted)" else ""}")
+        progressText = progressStrings.dedupeScanning
         speedText = "SPEED: --"
         etaText = "ETA: --"
         // Hashing/deletion runs as one blocking call with no per-file callback — show that
@@ -1611,10 +1625,10 @@ class DashboardViewModel(
         } else {
             val totalDeleted = results.sumOf { it.deletedFiles.size }
             val totalFailed = results.sumOf { it.failedFiles.size }
-            progressText = if (dryRun) "Deduplicating: Found $totalDeleted duplicates" else "Deduplicating: Removed $totalDeleted files"
+            progressText = progressStrings.duplicates(totalDeleted, preview = dryRun)
             results.forEach { res ->
                 if (dryRun) {
-                    log("[WARN] Dry run — would keep ${res.keptFile} and delete: ${res.deletedFiles.joinToString()}")
+                    log("[WARN] Preview — would keep ${res.keptFile} and delete: ${res.deletedFiles.joinToString()}")
                 } else {
                     if (res.deletedFiles.isNotEmpty()) {
                         log("[DELETED DUPES] Kept ${res.keptFile}, deleted: ${res.deletedFiles.joinToString()}")
@@ -1625,14 +1639,32 @@ class DashboardViewModel(
                 }
             }
             if (dryRun) {
-                log("[INFO] Dry run complete — $totalDeleted duplicate file(s) would be deleted. Disable dry run to apply.")
+                // Named after the switch. Nothing in the UI is called a dry run.
+                log("[INFO] Preview complete — ${plural(Res.plurals.count_duplicate_files, totalDeleted)} would be deleted. Turn off Preview duplicate removal to delete them.")
             } else if (totalFailed > 0) {
                 pipelineFailureCount += totalFailed
-                log("[WARN] Deduplication: $totalDeleted file(s) deleted, $totalFailed could not be deleted.")
+                log("[WARN] Deduplication: deleted ${plural(Res.plurals.count_files, totalDeleted)}; $totalFailed could not be deleted.")
             }
         }
     }
 }
+
+/**
+ * The log line for overlays the metadata step skipped because they are WebP named .png.
+ *
+ * It called them "harmless, they're consumed by the combine phase" whether or not that phase
+ * was going to run. With combining off they stay in the library untagged.
+ */
+internal suspend fun riffSkipLogLine(count: Int, samples: List<String>, combineRuns: Boolean): String {
+    val consequence = if (combineRuns) "harmless, they're consumed by the combine phase" else "they stay untagged"
+    return "[INFO] Skipped ${plural(Res.plurals.count_overlays, count)} stored as WebP but named .png — exiftool would reject them; " +
+        "$consequence. Examples: ${samples.joinToString(", ")}"
+}
+
+/** The main file of a combine result's pair, by name — what the user can find on disk. */
+private fun combineSubject(result: CombineResult): String =
+    result.sourcePaths.firstOrNull()?.substringAfterLast('/')?.substringAfterLast('\\')
+        ?: result.outputPath.substringAfterLast('/').substringAfterLast('\\').ifEmpty { result.uuid }
 
 private class EtaEstimator(private val windowMs: Long = 30_000L) {
     private data class Sample(val elapsedMs: Long, val done: Int)

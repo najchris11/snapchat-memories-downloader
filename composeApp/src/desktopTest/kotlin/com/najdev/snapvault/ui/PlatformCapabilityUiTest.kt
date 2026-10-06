@@ -117,8 +117,8 @@ class PlatformCapabilityUiTest {
         onNodeWithText("Media capabilities").assertIsDisplayed()
         onNodeWithText("Image metadata").assertIsDisplayed()
         onNodeWithText("Video metadata").assertIsDisplayed()
-        onNodeWithText("Photo overlay combining").assertIsDisplayed()
-        onNodeWithText("Video overlay combining").assertIsDisplayed()
+        onNodeWithText("Combine photo overlays").assertIsDisplayed()
+        onNodeWithText("Combine video overlays").assertIsDisplayed()
         onNodeWithText("ExifTool").assertDoesNotExist()
         onNodeWithText("FFmpeg").assertDoesNotExist()
     }
@@ -142,7 +142,7 @@ class PlatformCapabilityUiTest {
             }
         }
 
-        onNodeWithText("System Dependencies").assertIsDisplayed()
+        onNodeWithText("Helper tools").assertIsDisplayed()
         onNodeWithText("ExifTool").assertIsDisplayed()
         onNodeWithText("FFmpeg").assertIsDisplayed()
         onNodeWithText("Image metadata").assertDoesNotExist()

@@ -5,9 +5,11 @@ import androidx.compose.ui.test.assertIsDisplayed
 
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.v2.runComposeUiTest
 import com.najdev.snapvault.WindowSize
 import com.najdev.snapvault.onboarding.DropFolderOutcome
@@ -48,7 +50,7 @@ class OnboardingScreenTest {
                         dropFolderSuggestion = null,
                         onCreateDropFolder = { DropFolderOutcome.Created },
                         canRevealFolder = false,
-                        onOpenUrl = {},
+                        onOpenUrl = { _, _ -> },
                     )
                 }
             }
@@ -76,7 +78,7 @@ class OnboardingScreenTest {
                         dropFolderSuggestion = null,
                         onCreateDropFolder = { DropFolderOutcome.Created },
                         canRevealFolder = false,
-                        onOpenUrl = {},
+                        onOpenUrl = { _, _ -> },
                     )
                 }
             }
@@ -99,7 +101,7 @@ class OnboardingScreenTest {
                         dropFolderSuggestion = null,
                         onCreateDropFolder = { DropFolderOutcome.Created },
                         canRevealFolder = false,
-                        onOpenUrl = {},
+                        onOpenUrl = { _, _ -> },
                     )
                 }
             }
@@ -122,7 +124,7 @@ class OnboardingScreenTest {
                         dropFolderSuggestion = "/tmp/snapvault-test-drop",
                         onCreateDropFolder = { path -> requested += path; DropFolderOutcome.Created },
                         canRevealFolder = false,
-                        onOpenUrl = {},
+                        onOpenUrl = { _, _ -> },
                     )
                 }
             }
@@ -148,7 +150,7 @@ class OnboardingScreenTest {
                         dropFolderSuggestion = "/nope/snapvault",
                         onCreateDropFolder = { DropFolderOutcome.Failed("permission denied") },
                         canRevealFolder = false,
-                        onOpenUrl = {},
+                        onOpenUrl = { _, _ -> },
                     )
                 }
             }
@@ -172,7 +174,7 @@ class OnboardingScreenTest {
                         onCreateDropFolder = { DropFolderOutcome.Created },
                         canRevealFolder = false,
                         windowSize = WindowSize.Compact,
-                        onOpenUrl = {},
+                        onOpenUrl = { _, _ -> },
                     )
                 }
             }
@@ -194,6 +196,20 @@ class OnboardingScreenTest {
             "delete" in body || "removes" in body,
             "the dedupe explanation must say it deletes: '$body'",
         )
+    }
+
+    // The space advice promised SnapVault "offers a way through if the disk is tight". That
+    // offer — deleting each ZIP as it is imported — is gated off for release, so a user who
+    // trusted the promise met a plain refusal. The copy may only promise it while it ships.
+    @Test
+    fun theSpaceAdviceOnlyPromisesTheLowSpaceOfferWhenItShips() {
+        val advice = stringResource("onb_folders_space").lowercase()
+        if (!com.najdev.snapvault.viewmodel.LOW_SPACE_DELETE_ENABLED) {
+            assertTrue(
+                "way through" !in advice && "offer" !in advice,
+                "the low-space offer is disabled, so onboarding cannot promise it: '$advice'",
+            )
+        }
     }
 
     // The one link in the flow that strands every new user if it is wrong: the bare host
@@ -219,13 +235,40 @@ class OnboardingScreenTest {
                         dropFolderSuggestion = null,
                         onCreateDropFolder = { DropFolderOutcome.Created },
                         canRevealFolder = false,
-                        onOpenUrl = { opened += it },
+                        onOpenUrl = { url, onResult -> opened += url; onResult(true) },
+                    )
+                }
+            }
+            // Exercise the physical pointer path through the verticalScroll parent. A semantics
+            // action alone would not catch an ancestor consuming the touch before the button.
+            onNodeWithText(stringResource("onb_request_action")).performTouchInput { click() }
+            onNodeWithText(stringResource("support_open_failed")).assertDoesNotExist()
+        }
+        assertEquals(listOf("https://accounts.snapchat.com/v2/download-my-data"), opened)
+    }
+
+    // UIKit reports an unhandled URL by completing openURL:options:completionHandler: with
+    // false; it does not throw. That result used to be discarded, so LinkButton's selectable
+    // fallback could never appear for the iOS failure mode it was intended to handle.
+    @Test
+    fun aRejectedBrowserRequestShowsTheExactUrlAsAFallback() {
+        val url = stringResource("onb_request_url")
+        runComposeUiTest {
+            setContent {
+                SnapVaultTheme(darkMode = true) {
+                    OnboardingScreen(
+                        onFinish = {}, onSkip = {},
+                        dropFolderSuggestion = null,
+                        onCreateDropFolder = { DropFolderOutcome.Created },
+                        canRevealFolder = false,
+                        onOpenUrl = { _, onResult -> onResult(false) },
                     )
                 }
             }
             onNodeWithText(stringResource("onb_request_action")).performClick()
+            onNodeWithText(stringResource("support_open_failed")).assertIsDisplayed()
+            onNodeWithText(url).assertIsDisplayed()
         }
-        assertEquals(listOf("https://accounts.snapchat.com/v2/download-my-data"), opened)
     }
 
     // The walkthrough button was written to hide itself while onb_video_url was empty, and
@@ -248,7 +291,7 @@ class OnboardingScreenTest {
                         dropFolderSuggestion = null,
                         onCreateDropFolder = { DropFolderOutcome.Created },
                         canRevealFolder = false,
-                        onOpenUrl = { opened += it },
+                        onOpenUrl = { url, _ -> opened += url },
                         videoUrl = configured,
                     )
                 }
@@ -270,7 +313,7 @@ class OnboardingScreenTest {
                         dropFolderSuggestion = null,
                         onCreateDropFolder = { DropFolderOutcome.Created },
                         canRevealFolder = false,
-                        onOpenUrl = {},
+                        onOpenUrl = { _, _ -> },
                         videoUrl = "",
                     )
                 }

@@ -5,6 +5,20 @@ enum class OverlayCombineStatus {
     /** Never attempted: the platform cannot composite this kind of media. */
     SkippedVideo,
 
+    /**
+     * Never attempted: the main file holds more than one frame, and compositing it would
+     * keep only the first. Refusing costs the user a burned-in overlay on one GIF; the
+     * alternative cost them every frame after the first, permanently.
+     */
+    SkippedAnimated,
+
+    /**
+     * Never attempted: the output name is already taken — by a previous run's result, or by
+     * a combined file the user has since edited. Neither is ours to overwrite, and finding one
+     * is not a reason to delete the originals.
+     */
+    SkippedExistingOutput,
+
     /** Attempted and did not produce a usable output. */
     Failed,
 
@@ -26,6 +40,23 @@ internal const val METADATA_NOT_CARRIED_MARKER = "could not carry its metadata"
  */
 fun mayDeleteOriginals(status: OverlayCombineStatus, deleteRequested: Boolean): Boolean =
     deleteRequested && status == OverlayCombineStatus.Combined
+
+/**
+ * Why a pair will not be attempted, or null if it should be combined.
+ *
+ * The existing-output check comes first and is what the desktop combiner has done since D02.
+ * The mobile runners used to hand the final path straight to their encoders — Android writes
+ * to it directly, iOS removed whatever was there before moving its output into place — so a
+ * re-import replaced a combined image the user had edited, reported Combined, and then
+ * deleted both originals, leaving no copy of anything.
+ */
+fun overlayCombineSkipStatus(pair: OverlayPairNames, outputExists: Boolean): OverlayCombineStatus? =
+    when {
+        outputExists -> OverlayCombineStatus.SkippedExistingOutput
+        pair.isVideo -> OverlayCombineStatus.SkippedVideo
+        pair.isAnimatedImage -> OverlayCombineStatus.SkippedAnimated
+        else -> null
+    }
 
 /**
  * Builds the result for one pair.
@@ -54,6 +85,27 @@ fun overlayCombineResult(
             outputPath = mainPath,
             status = "skipped: video overlays are not combined on this platform yet",
             warnings = warnings + "${pair.mainName}: video overlay combining is not available on this platform yet",
+            sourcePaths = sources,
+        )
+
+        OverlayCombineStatus.SkippedAnimated -> CombineResult(
+            uuid = uuid,
+            // Points at the original: nothing new was written, and the original is the only
+            // thing holding frames two onward.
+            outputPath = mainPath,
+            status = "skipped: animated images are not combined",
+            warnings = warnings +
+                "${pair.mainName}: combining would keep only the first frame, so the animation was left as it is",
+            sourcePaths = sources,
+        )
+
+        OverlayCombineStatus.SkippedExistingOutput -> CombineResult(
+            uuid = uuid,
+            // Points at the original: this run wrote nothing, and the file at outputPath is
+            // not something it produced.
+            outputPath = mainPath,
+            status = "skipped: output already exists",
+            warnings = warnings + "output already exists, pair left alone: ${pair.outputName}",
             sourcePaths = sources,
         )
 

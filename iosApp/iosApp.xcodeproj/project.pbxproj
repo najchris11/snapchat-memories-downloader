@@ -109,6 +109,14 @@
 /* Begin PBXShellScriptBuildPhase section */
 		SV00000000000000000040 /* Run Kotlin/Native Build */ = {
 			isa = PBXShellScriptBuildPhase;
+			/* Run this phase every build, i.e. Xcode's "Based on dependency analysis"
+			   unchecked. Xcode's analysis cannot see Kotlin sources -- the phase declares no
+			   inputPaths, so Xcode concluded it was up to date and skipped it entirely on
+			   every incremental build. Editing anything under composeApp/src therefore had no
+			   effect on the app: xcodebuild reported BUILD SUCCEEDED and relinked yesterday's
+			   framework. Gradle already does correct up-to-date checking, so running it every
+			   time costs a no-op Gradle invocation and nothing else. */
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -262,6 +270,7 @@
 					"$(SRCROOT)/../composeApp/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
 				);
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = iosApp/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -289,6 +298,7 @@
 					"$(SRCROOT)/../composeApp/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
 				);
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = iosApp/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

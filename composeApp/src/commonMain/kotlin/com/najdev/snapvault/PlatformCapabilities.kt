@@ -12,7 +12,8 @@ data class MediaCapabilities(
 expect val platformMediaCapabilities: MediaCapabilities
 
 internal val androidMediaCapabilities = MediaCapabilities(
-    // #51: ZIP import writes GPS when present but skips the date pass for plain photos.
+    // #51: AndroidZipPipelineRunner has no own plain-photo date pass; DashboardViewModel
+    // has a separate pass, but Android ZIP reading is still stubbed (#52).
     imageMetadata = CapabilityLevel.Partial,
     // AndroidMediaProcessor has no video metadata writer.
     videoMetadata = CapabilityLevel.Unavailable,

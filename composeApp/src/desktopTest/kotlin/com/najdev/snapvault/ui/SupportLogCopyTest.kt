@@ -42,7 +42,7 @@ class SupportLogCopyTest {
                 SnapVaultTheme(darkMode = true) { DashboardScreen(viewModel = viewModel, onNavigateToSettings = {}) }
             }
         }
-        onNodeWithContentDescription("Copy logs").performClick()
+        onNodeWithContentDescription("Copy log").performClick()
         waitForIdle()
 
         val copied = assertNotNull(clipboard.copied, "nothing was copied").text

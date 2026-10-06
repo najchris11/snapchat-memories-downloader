@@ -151,7 +151,7 @@ object HistoryParser {
         val naCount = htmlContent.split("""color: #999;">N/A""").size - 1
         if (naCount > 0 && "downloadMemories" in htmlContent) {
             return "All $naCount download links have expired (N/A). " +
-                "Request a fresh data export from mydata.snapchat.com and use it within 7 days."
+                "Request a fresh data export from accounts.snapchat.com/v2/download-my-data and use it within 7 days."
         }
         val doc = Ksoup.parse(htmlContent)
         val onclickEls = doc.select("[onclick*=downloadMemories]")

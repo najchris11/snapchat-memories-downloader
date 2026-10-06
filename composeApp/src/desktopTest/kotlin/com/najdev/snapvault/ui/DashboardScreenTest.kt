@@ -2,6 +2,9 @@ package com.najdev.snapvault.ui
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -95,7 +98,7 @@ class DashboardScreenTest {
         setContent {
             SnapVaultTheme(darkMode = true) { DashboardScreen(viewModel = viewModel, onNavigateToSettings = {}) }
         }
-        val notice = "After a successful merge and metadata copy, the original photo or video and its overlay are permanently deleted."
+        val notice = stringResource("opt_combine_cleanup_helper")
         onNodeWithText("Combine photo and video overlays").assertIsDisplayed()
         onNodeWithText(notice).assertIsDisplayed()
         onNode(hasText("Combine photo and video overlays") and isToggleable()).performClick()
@@ -184,15 +187,75 @@ class DashboardScreenTest {
         onAllNodes(hasText("step", substring = true)).assertCountEquals(0)
     }
 
+    // failureCount sums failed files and writes across every phase, so the banner used to read
+    // "47 steps failed" for a run that has four steps. It must not call the count steps.
     @Test
     fun failuresLeadTheBannerWhenThereAreAny() = runComposeUiTest {
         setContent {
             SnapVaultTheme(darkMode = true) {
-                RunOutcomeBanner(failureCount = 1, warningCount = 4, onViewLog = {})
+                RunOutcomeBanner(failureCount = 47, warningCount = 4, onViewLog = {})
             }
         }
 
-        onNodeWithText("1 step failed").assertIsDisplayed()
+        onNodeWithText("Finished with 47 failures").assertIsDisplayed()
+        onAllNodes(hasText("step", substring = true)).assertCountEquals(0)
+    }
+
+    @Test
+    fun aSingleFailureIsSingular() = runComposeUiTest {
+        setContent {
+            SnapVaultTheme(darkMode = true) {
+                RunOutcomeBanner(failureCount = 1, warningCount = 0, onViewLog = {})
+            }
+        }
+
+        onNodeWithText("Finished with 1 failure").assertIsDisplayed()
+    }
+
+    // The ZIP metadata switch read "Write Date Metadata" while precise matching — on by
+    // default — wrote each photo's GPS position too. Its label has to follow what it writes.
+    @Test
+    fun theZipMetadataSwitchSaysLocationWheneverItWritesOne() = runComposeUiTest {
+        val withLocation = stringResource("opt_write_location_metadata")
+        val dateOnly = stringResource("opt_write_date_metadata")
+        val viewModel = idleDashboardViewModel()
+        setContent {
+            SnapVaultTheme(darkMode = true) { DashboardScreen(viewModel = viewModel, onNavigateToSettings = {}) }
+        }
+
+        // ZIP import, defaults: precise matching is on, so a location is written.
+        onNodeWithText(withLocation).assertIsDisplayed()
+        onAllNodes(hasText(dateOnly)).assertCountEquals(0)
+
+        onNode(hasText("Precise time + GPS matching") and isToggleable()).performClick()
+        waitForIdle()
+        onNodeWithText(dateOnly).assertIsDisplayed()
+        onAllNodes(hasText(withLocation)).assertCountEquals(0)
+
+        // Legacy always writes the export's location.
+        viewModel.changeImportMode(ImportMode.Legacy)
+        waitForIdle()
+        onNodeWithText(withLocation).assertIsDisplayed()
+        viewModel.dispose()
+    }
+
+    // Step two extracts in ZIP mode and only downloads in Legacy mode, but it said
+    // "Downloading" in both — on the recommended path, a step that downloads nothing.
+    @Test
+    fun stepTwoIsNamedForWhatTheImportModeDoes() = runComposeUiTest {
+        var mode by mutableStateOf(ImportMode.Zip)
+        setContent {
+            SnapVaultTheme(darkMode = true) {
+                CompactStepper(currentStep = 1, hasWarnings = false, importMode = mode)
+            }
+        }
+
+        onNode(hasText("Extracting", substring = true)).assertIsDisplayed()
+        onAllNodes(hasText("Downloading", substring = true)).assertCountEquals(0)
+
+        mode = ImportMode.Legacy
+        waitForIdle()
+        onNode(hasText("Downloading", substring = true)).assertIsDisplayed()
     }
 
     // D18: precise matching writes each memory's GPS position into the file itself, and it is

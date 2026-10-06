@@ -37,6 +37,9 @@ import com.najdev.snapvault.ThemeMode
 import org.jetbrains.compose.resources.stringResource
 import snapchat_memories_downloader.composeapp.generated.resources.*
 
+internal fun showsDependencySection(isAndroid: Boolean, isIos: Boolean): Boolean =
+    !isAndroid && !isIos
+
 @Composable
 fun SettingsScreen(
     hasExifTool: Boolean,
@@ -57,6 +60,7 @@ fun SettingsScreen(
     // Defaulted so the many call sites that are not about onboarding need no change; the
     // row is hidden rather than dead when no host supplies it.
     onShowOnboarding: (() -> Unit)? = null,
+    showDependencySection: Boolean = showsDependencySection(isAndroidBuild, isIosBuild),
 ) {
     Column(
         modifier = Modifier
@@ -169,15 +173,68 @@ fun SettingsScreen(
             }
         }
 
-        // ── Media environment ────────────────────────────────────────────────
-        SettingsCard {
-            MediaEnvironmentSection(
-                hasExifTool = hasExifTool,
-                hasFFmpeg = hasFFmpeg,
-                onVerifyDependencies = onVerifyDependencies,
-                usesDesktopTooling = !isAndroidBuild && !isIosBuild,
-                mediaCapabilities = platformMediaCapabilities,
-            )
+        // ── System Dependencies ───────────────────────────────────────────────
+        if (showDependencySection) {
+            SettingsCard {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    SettingsSectionLabel(
+                        icon = Icons.Outlined.Terminal,
+                        text = stringResource(Res.string.set_deps_title)
+                    )
+
+                    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            maxItemsInEachRow = if (maxWidth < 600.dp) 1 else 2,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                        ) {
+                            DependencyItem(
+                                name = stringResource(Res.string.set_dep_exiftool_name),
+                                description = stringResource(Res.string.set_dep_exiftool_description),
+                                status = if (hasExifTool) DependencyStatus.READY else DependencyStatus.MISSING,
+                                icon = Icons.Outlined.GpsFixed,
+                                modifier = Modifier.weight(1f),
+                            )
+                            DependencyItem(
+                                name = stringResource(Res.string.set_dep_ffmpeg_name),
+                                description = stringResource(Res.string.set_dep_ffmpeg_description),
+                                status = if (hasFFmpeg) DependencyStatus.READY else DependencyStatus.MISSING,
+                                icon = Icons.Outlined.Videocam,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+
+                    TextButton(onClick = onVerifyDependencies) {
+                        Text(
+                            text = stringResource(Res.string.set_deps_refresh),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = SnapVaultColors.info,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                    val hint = binaryInstallHint()
+                    if ((!hasExifTool || !hasFFmpeg) && hint.isNotEmpty()) {
+                        Text(
+                            hint,
+                            style = MaterialTheme.typography.labelSmall,
+                            lineHeight = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        } else {
+            SettingsCard {
+                MediaEnvironmentSection(
+                    hasExifTool = hasExifTool,
+                    hasFFmpeg = hasFFmpeg,
+                    onVerifyDependencies = onVerifyDependencies,
+                    usesDesktopTooling = false,
+                    mediaCapabilities = platformMediaCapabilities,
+                )
+            }
         }
 
         // ── Advanced Tools ────────────────────────────────────────────────────

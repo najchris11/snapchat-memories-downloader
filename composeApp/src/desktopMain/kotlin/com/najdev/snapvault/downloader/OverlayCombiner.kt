@@ -50,7 +50,8 @@ class OverlayCombiner(
         val mainFile: File,
         val overlayFile: File,
         val outputFile: File,
-        val isVideo: Boolean
+        val isVideo: Boolean,
+        val isAnimatedImage: Boolean = false,
     )
 
     fun findPairs(outputDir: String): List<OverlayPair> {
@@ -71,6 +72,7 @@ class OverlayCombiner(
                 overlayFile = overlayFile,
                 outputFile = File(outputDir, names.outputName),
                 isVideo = names.isVideo,
+                isAnimatedImage = names.isAnimatedImage,
             )
         }
     }
@@ -178,6 +180,18 @@ class OverlayCombiner(
             return "skipped: output already exists"
         }
 
+        // ImageIO.read returns frame one of a GIF and combineImages then writes JPEG bytes
+        // into a file still named .gif. It reported success, so the animation was replaced by
+        // a still that also lied about its format. Refusing costs one burned-in overlay;
+        // proceeding cost every frame after the first. See ANIMATION_UNSAFE_FORMATS.
+        if (pair.isAnimatedImage) {
+            onWarning(
+                "combining would keep only the first frame, so the animation was left as it is: " +
+                    pair.mainFile.name
+            )
+            return "skipped: animated images are not combined"
+        }
+
         // Everything is built in our staging directory and committed only once it is
         // verified. The encoder never sees the final path, so a killed ffmpeg cannot leave
         // a truncated file where MediaScanner will index it as a finished memory.
@@ -252,7 +266,7 @@ class OverlayCombiner(
                     // exists nowhere else. Losing it was D02.
                     onWarning("originals kept: metadata is not on ${pair.outputFile.name}")
                 } else {
-                    if (!pair.mainFile.delete()) onWarning("could not delete main: ${pair.mainFile.name}")
+                    if (!pair.mainFile.delete()) onWarning("could not delete original: ${pair.mainFile.name}")
                     if (!pair.overlayFile.delete()) onWarning("could not delete overlay: ${pair.overlayFile.name}")
                 }
             }

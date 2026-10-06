@@ -166,6 +166,9 @@ class ProgressTextTest {
         )
         assertEquals(expected, seen.filter { it in expected }, "all samples: $seen")
         assertEquals("Run complete", viewModel.progressText)
+        // The download and badge summaries used to say "1 new" and "0 files".
+        assertTrue(viewModel.logs.any { it == "[INFO] Downloads: 1 new file, 0 existing files." }, viewModel.logs.toString())
+        assertTrue(viewModel.logs.any { it == "[INFO] Library badges saved (1 file)." }, viewModel.logs.toString())
     }
 
     @Test
@@ -186,6 +189,8 @@ class ProgressTextTest {
         awaitCompletion()
 
         assertTrue("Downloading: 2 of 2 files…" in seen, "all samples: $seen")
+        assertTrue(viewModel.logs.any { it == "[INFO] Downloads: 2 new files, 0 existing files." }, viewModel.logs.toString())
+        assertTrue(viewModel.logs.any { it == "[INFO] Library badges saved (2 files)." }, viewModel.logs.toString())
     }
 
     @Test
@@ -228,7 +233,7 @@ class ProgressTextTest {
         awaitCompletion()
 
         val log = viewModel.logs.single { it.startsWith("[INFO] Tagging") }
-        assertEquals("[INFO] Tagging combined files with date metadata… (1)", log)
+        assertEquals("[INFO] Tagging combined 1 file with date metadata…", log)
     }
 
     private fun dedupeRun(dryRun: Boolean) {

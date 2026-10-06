@@ -14,6 +14,21 @@ internal class CountTemplate(private val text: String) {
         text.replace(DONE_TOKEN, done.toString()).replace(TOTAL_TOKEN, total.toString())
 }
 
+/** A counted log noun resolved before entering a plain callback. */
+internal class CountedNoun(private val one: String, private val other: String) {
+    operator fun invoke(count: Int): String =
+        (if (count == 1) one else other).replace(COUNT_TOKEN, count.toString())
+
+    companion object {
+        private const val COUNT_TOKEN = "314159265"
+
+        suspend fun load(resource: PluralStringResource) = CountedNoun(
+            getPluralString(resource, 1, 314159265),
+            getPluralString(resource, 2, 314159265),
+        )
+    }
+}
+
 /**
  * The run's progress line, resolved from strings.xml up front.
  *
@@ -36,6 +51,10 @@ internal class ProgressText private constructor(
     val extracting: CountTemplate,
     val metadata: CountTemplate,
     val combining: CountTemplate,
+    val files: CountedNoun,
+    val overlayPairs: CountedNoun,
+    val errors: CountedNoun,
+    val videoEncodes: CountedNoun,
     private val duplicatesFound: String,
     private val duplicatesRemoved: String,
 ) {
@@ -62,6 +81,10 @@ internal class ProgressText private constructor(
             extracting = CountTemplate(getString(Res.string.progress_extracting_count, DONE_TOKEN, TOTAL_TOKEN)),
             metadata = CountTemplate(getString(Res.string.progress_metadata_count, DONE_TOKEN, TOTAL_TOKEN)),
             combining = CountTemplate(getString(Res.string.progress_combining_count, DONE_TOKEN, TOTAL_TOKEN)),
+            files = CountedNoun.load(Res.plurals.count_files),
+            overlayPairs = CountedNoun.load(Res.plurals.count_overlay_pairs),
+            errors = CountedNoun.load(Res.plurals.count_errors),
+            videoEncodes = CountedNoun.load(Res.plurals.count_video_encodes),
             duplicatesFound = getString(Res.string.progress_duplicates_found, DONE_TOKEN),
             duplicatesRemoved = getString(Res.string.progress_duplicates_removed, DONE_TOKEN),
         )

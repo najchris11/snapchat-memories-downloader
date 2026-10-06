@@ -8,13 +8,14 @@ name: Release
 #
 #   prepare  — work out the version and refuse one that is not above every release
 #   build    — per platform: run the test suite, package the installer, verify it
-#   publish  — only if every build succeeded: commit the version, tag, and publish them together
+#   stage    — commit the version on a temporary branch and pass its required desktop check
+#   publish  — fast-forward main to that checked commit, tag, and publish installers
 #
 # The previous workflow tagged and pushed before any test ran, and each platform uploaded its
 # own installer to the release as it finished, so one platform could publish while another
 # failed.
 #
-# Dry runs (the default) do everything except publish, from any branch. Use one to test a
+# Dry runs (the default) build without staging or publishing, from any branch. Use one to test a
 # change to this workflow; `simulate_failure` fails one platform's build to show that nothing
 # is published when any platform fails.
 on:
@@ -194,16 +195,73 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  publish:
-    # `needs` succeeds only when every matrix build succeeded, so one failed platform
-    # publishes nothing.
+  stage-version:
+    # A version commit needs the required desktop check before protected main accepts it.
+    # This job only runs after every installer has passed its platform gate.
     needs: [prepare, build]
     if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
+    outputs:
+      commit: ${{ steps.stage.outputs.commit }}
+      branch: ${{ steps.stage.outputs.branch }}
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          fetch-depth: 0
+
+      - name: Stage the version commit
+        id: stage
+        run: |
+          branch="release-staging-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          git switch -c "$branch"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          python3 scripts/release_version.py apply "$VERSION"
+          git add gradle.properties composeApp/build.gradle.kts
+          git commit -m "chore: release $TAG"
+          commit="$(git rev-parse HEAD)"
+          git push origin "HEAD:refs/heads/$branch"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+      - name: Run required checks on the version commit
+        env:
+          BRANCH: ${{ steps.stage.outputs.branch }}
+          COMMIT: ${{ steps.stage.outputs.commit }}
+        run: |
+          gh workflow run check.yml --ref "$BRANCH"
+          run_id=""
+          for attempt in {1..30}; do
+            run_id="$(gh run list --workflow check.yml --branch "$BRANCH" --event workflow_dispatch \
+              --json databaseId,headSha --limit 100 \
+              --jq "[.[] | select(.headSha == \"$COMMIT\") | .databaseId] | first // empty")"
+            if [[ -n "$run_id" ]]; then
+              break
+            fi
+            sleep 10
+          done
+          if [[ -z "$run_id" ]]; then
+            echo "::error::No dispatched PR Check run found for staged commit $COMMIT"
+            exit 1
+          fi
+          gh run watch "$run_id" --exit-status
+
+  publish:
+    # A failed platform build or staged check prevents publication.
+    needs: [prepare, build, stage-version]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
       TAG: ${{ needs.prepare.outputs.tag }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -235,19 +293,32 @@ jobs:
           (cd dist && sha256sum -- * > SHA256SUMS.txt)
           cat dist/SHA256SUMS.txt
 
-      - name: Commit the version and tag it
+      - name: Fast-forward main to the checked version commit and tag it
+        env:
+          BRANCH: ${{ needs.stage-version.outputs.branch }}
+          COMMIT: ${{ needs.stage-version.outputs.commit }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          python3 scripts/release_version.py apply "$VERSION"
-          git add gradle.properties composeApp/build.gradle.kts
-          git commit -m "chore: release $TAG [skip ci]"
-          git tag "$TAG"
+          git fetch origin "refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+          if [[ "$(git rev-parse "refs/remotes/origin/$BRANCH")" != "$COMMIT" ]]; then
+            echo "::error::Staged branch moved after its required check passed."
+            exit 1
+          fi
+          if [[ "$(git rev-parse "$COMMIT^")" != "${{ needs.prepare.outputs.sha }}" ]]; then
+            echo "::error::Staged version commit is not based on the tested source."
+            exit 1
+          fi
+          git merge --ff-only "$COMMIT"
           git push origin HEAD:main
+          git tag "$TAG"
           git push origin "$TAG"
 
       - name: Publish the release
         run: gh release create "$TAG" dist/* --title "$TAG" --verify-tag
+
+      - name: Remove the temporary branch
+        env:
+          BRANCH: ${{ needs.stage-version.outputs.branch }}
+        run: git push origin --delete "$BRANCH"
 
   dry-run-summary:
     needs: [prepare, build]

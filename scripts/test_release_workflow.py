@@ -52,6 +52,19 @@ class ReleaseWorkflowTest(unittest.TestCase):
         self.assertIn("commit: ${{ steps.stage.outputs.commit }}", staged)
         self.assertIn("branch: ${{ steps.stage.outputs.branch }}", staged)
 
+    # workflow_dispatch jobs do not satisfy protected-main's required desktop check.
+    # Report the verified result only after the exact dispatched run succeeds.
+    def test_verified_desktop_status_is_scoped_and_follows_watch(self):
+        staged = job(self.release, "stage-version")
+        self.assertRegex(staged, r"permissions:\n\s+contents: write\n\s+actions: write\n\s+statuses: write")
+        self.assertNotIn("statuses: write", self.release.split("jobs:", 1)[0])
+        for name in ("prepare", "build", "publish", "dry-run-summary"):
+            self.assertNotIn("statuses: write", job(self.release, name))
+        watch = 'gh run watch "$run_id" --exit-status'
+        report = 'python3 scripts/report_release_status.py --run-id "$run_id" --sha "$COMMIT" --branch "$BRANCH"'
+        self.assertIn(report, staged)
+        self.assertLess(staged.index(watch), staged.index(report))
+
     def test_failed_validation_prevents_publish_and_main_movement_is_refused(self):
         published = job(self.release, "publish")
         self.assertIn("needs: [prepare, build, stage-version]", published)

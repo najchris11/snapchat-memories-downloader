@@ -204,6 +204,7 @@ jobs:
     permissions:
       contents: write
       actions: write
+      statuses: write
     outputs:
       commit: ${{ steps.stage.outputs.commit }}
       branch: ${{ steps.stage.outputs.branch }}
@@ -253,6 +254,7 @@ jobs:
             exit 1
           fi
           gh run watch "$run_id" --exit-status
+          python3 scripts/report_release_status.py --run-id "$run_id" --sha "$COMMIT" --branch "$BRANCH"
 
   publish:
     # A failed platform build or staged check prevents publication.

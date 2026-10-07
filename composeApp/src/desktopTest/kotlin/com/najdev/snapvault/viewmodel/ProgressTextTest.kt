@@ -1,6 +1,7 @@
 package com.najdev.snapvault.viewmodel
 
 import com.najdev.snapvault.ImportMode
+import com.najdev.snapvault.SerializedFileSystem
 import com.najdev.snapvault.UnenforcedOutputDirectoryLocker
 import com.najdev.snapvault.downloader.CombineResult
 import com.najdev.snapvault.downloader.ExtractResult
@@ -21,6 +22,10 @@ import okio.FileSystem
 import okio.Path
 import okio.Path.Companion.toPath
 import okio.fakefilesystem.FakeFileSystem
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import androidx.compose.runtime.snapshots.ObserverHandle
 import androidx.compose.runtime.snapshots.Snapshot
 import kotlin.test.AfterTest
@@ -65,6 +70,43 @@ class ProgressTextTest {
         override fun onPathParameter(path: Path, functionName: String, parameterName: String): Path {
             sample()
             return path
+        }
+    }
+
+    private fun sampledFileSystem(delegate: FileSystem): FileSystem = SamplingFileSystem(SerializedFileSystem(delegate))
+
+    // FakeFileSystem's unsynchronised map threw ConcurrentModificationException while two
+    // downloads wrote different .part files. Force overlap so this fixture cannot regress.
+    @Test
+    fun samplingFixtureSerializesConcurrentFakeFileSystemCalls() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val active = AtomicInteger()
+        val guardedFake = object : ForwardingFileSystem(FakeFileSystem()) {
+            override fun metadataOrNull(path: Path): okio.FileMetadata? {
+                check(active.incrementAndGet() == 1) { "concurrent fake filesystem access" }
+                try {
+                    entered.countDown()
+                    check(release.await(1, TimeUnit.SECONDS)) { "first filesystem call was not released" }
+                    return super.metadataOrNull(path)
+                } finally {
+                    active.decrementAndGet()
+                }
+            }
+        }
+        val sampled = sampledFileSystem(guardedFake)
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            val first = pool.submit { sampled.metadataOrNull("/out".toPath()) }
+            assertTrue(entered.await(1, TimeUnit.SECONDS))
+            val second = pool.submit { sampled.metadataOrNull("/out".toPath()) }
+            Thread.sleep(100)
+            release.countDown()
+            first.get(2, TimeUnit.SECONDS)
+            second.get(2, TimeUnit.SECONDS)
+        } finally {
+            release.countDown()
+            pool.shutdownNow()
         }
     }
 
@@ -116,7 +158,7 @@ class ProgressTextTest {
     ): DashboardViewModel {
         fs.createDirectories("/out".toPath())
         fs.write("/history.json".toPath()) { writeUtf8(history) }
-        val sampling = SamplingFileSystem(fs)
+        val sampling = sampledFileSystem(fs)
         return DashboardViewModel(
             zipPipelineRunner = runner,
             mediaProcessor = FakeMediaProcessor(),

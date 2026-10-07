@@ -30,6 +30,7 @@ class SettingsDependencySectionTest {
         onAllNodesWithText("Helper tools").assertCountEquals(0)
         onAllNodesWithText("ExifTool").assertCountEquals(0)
         onAllNodesWithText("FFmpeg").assertCountEquals(0)
+        onNodeWithText("Media capabilities").assertIsDisplayed()
     }
 
     @Test

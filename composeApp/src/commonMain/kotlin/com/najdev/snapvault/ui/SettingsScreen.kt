@@ -19,14 +19,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.AppBuildConfig
+import com.najdev.snapvault.CapabilityLevel
+import com.najdev.snapvault.MediaCapabilities
 import com.najdev.snapvault.binaryInstallHint
 import com.najdev.snapvault.isAndroidBuild
 import com.najdev.snapvault.isIosBuild
+import com.najdev.snapvault.platformMediaCapabilities
 import com.najdev.snapvault.platformSupportPageUrl
 import com.najdev.snapvault.ui.theme.SnapVaultColors
 import com.najdev.snapvault.LayoutOverride
@@ -222,6 +226,16 @@ fun SettingsScreen(
                     }
                 }
             }
+        } else {
+            SettingsCard {
+                MediaEnvironmentSection(
+                    hasExifTool = hasExifTool,
+                    hasFFmpeg = hasFFmpeg,
+                    onVerifyDependencies = onVerifyDependencies,
+                    usesDesktopTooling = false,
+                    mediaCapabilities = platformMediaCapabilities,
+                )
+            }
         }
 
         // ── Advanced Tools ────────────────────────────────────────────────────
@@ -365,6 +379,113 @@ fun SettingsScreen(
 }
 
 @Composable
+internal fun MediaEnvironmentSection(
+    hasExifTool: Boolean,
+    hasFFmpeg: Boolean,
+    onVerifyDependencies: () -> Unit,
+    usesDesktopTooling: Boolean,
+    mediaCapabilities: MediaCapabilities,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        SettingsSectionLabel(
+            icon = if (usesDesktopTooling) Icons.Outlined.Terminal else Icons.Outlined.BuildCircle,
+            text = stringResource(
+                if (usesDesktopTooling) Res.string.set_deps_title else Res.string.set_capabilities_title
+            ),
+        )
+
+        if (usesDesktopTooling) {
+            DesktopDependencyList(
+                hasExifTool = hasExifTool,
+                hasFFmpeg = hasFFmpeg,
+                onVerifyDependencies = onVerifyDependencies,
+            )
+        } else {
+            CapabilityList(mediaCapabilities)
+        }
+    }
+}
+
+@Composable
+private fun DesktopDependencyList(
+    hasExifTool: Boolean,
+    hasFFmpeg: Boolean,
+    onVerifyDependencies: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        DependencyItem(
+            name = stringResource(Res.string.set_dep_exiftool_name),
+            description = stringResource(Res.string.set_dep_exiftool_description),
+            status = if (hasExifTool) DependencyStatus.READY else DependencyStatus.MISSING,
+            icon = Icons.Outlined.GpsFixed,
+            modifier = Modifier.weight(1f),
+        )
+        DependencyItem(
+            name = stringResource(Res.string.set_dep_ffmpeg_name),
+            description = stringResource(Res.string.set_dep_ffmpeg_description),
+            status = if (hasFFmpeg) DependencyStatus.READY else DependencyStatus.MISSING,
+            icon = Icons.Outlined.Videocam,
+            modifier = Modifier.weight(1f),
+        )
+    }
+
+    TextButton(onClick = onVerifyDependencies) {
+        Text(
+            text = stringResource(Res.string.set_deps_refresh),
+            style = MaterialTheme.typography.bodySmall,
+            color = SnapVaultColors.info,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+    val hint = binaryInstallHint()
+    if ((!hasExifTool || !hasFFmpeg) && hint.isNotEmpty()) {
+        Text(
+            hint,
+            style = MaterialTheme.typography.labelSmall,
+            lineHeight = 16.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun CapabilityList(capabilities: MediaCapabilities) {
+    val items = listOf(
+        Triple(
+            Res.string.set_capability_image_metadata,
+            Res.string.set_capability_image_metadata_description,
+            capabilities.imageMetadata,
+        ),
+        Triple(
+            Res.string.set_capability_video_metadata,
+            Res.string.set_capability_video_metadata_description,
+            capabilities.videoMetadata,
+        ),
+        Triple(
+            Res.string.set_capability_image_overlay,
+            Res.string.set_capability_image_overlay_description,
+            capabilities.imageOverlayCombine,
+        ),
+        Triple(
+            Res.string.set_capability_video_overlay,
+            Res.string.set_capability_video_overlay_description,
+            capabilities.videoOverlayCombine,
+        ),
+    )
+    items.forEach { (name, description, level) ->
+        CapabilityItem(
+            name = stringResource(name),
+            description = stringResource(description),
+            level = level,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
 fun SettingsCard(content: @Composable () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -482,6 +603,66 @@ fun DependencyItem(
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = statusColor
+            )
+        }
+    }
+}
+
+@Composable
+private fun CapabilityItem(
+    name: String,
+    description: String,
+    level: CapabilityLevel,
+    modifier: Modifier = Modifier,
+) {
+    val statusColor = when (level) {
+        CapabilityLevel.Full -> SnapVaultColors.success
+        CapabilityLevel.Partial -> SnapVaultColors.warning
+        CapabilityLevel.Unavailable -> MaterialTheme.colorScheme.error
+    }
+    val statusIcon = if (level == CapabilityLevel.Full) {
+        Icons.Outlined.CheckCircle
+    } else {
+        Icons.Outlined.ErrorOutline
+    }
+    val statusText = stringResource(
+        when (level) {
+            CapabilityLevel.Full -> Res.string.set_capability_full
+            CapabilityLevel.Partial -> Res.string.set_capability_partial
+            CapabilityLevel.Unavailable -> Res.string.set_capability_unavailable
+        }
+    )
+
+    // One node per capability, so a screen reader announces the name with its status and a
+    // test can assert which status belongs to which row.
+    Row(
+        modifier = modifier
+            .semantics(mergeDescendants = true) {}
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .padding(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                description,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Icon(statusIcon, null, tint = statusColor, modifier = Modifier.size(14.dp))
+            Text(
+                statusText,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = statusColor,
             )
         }
     }

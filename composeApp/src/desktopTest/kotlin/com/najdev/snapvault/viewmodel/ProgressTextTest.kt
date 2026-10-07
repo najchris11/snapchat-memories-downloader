@@ -13,9 +13,11 @@ import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
 import io.ktor.http.headersOf
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import okio.ForwardingFileSystem
 import okio.FileSystem
@@ -318,6 +320,10 @@ class ProgressTextTest {
     fun terminalStatesUsePlainWording() {
         // Cancelled and Stopping… share a path: stop a run that is hanging in the extractor.
         val started = CompletableDeferred<Unit>()
+        // Cancellation is held open until the test has looked at "Stopping…". Without this the
+        // cancel runs on another thread and can finish, and set "Cancelled", before the
+        // assertion reads the text, so the test failed on CI about one run in a few.
+        val finishCancelling = CompletableDeferred<Unit>()
         val runner = SamplingRunner(sample = ::sample)
         val hanging = object : ZipPipelineRunner by runner {
             override suspend fun extractDownloadedArchives(
@@ -326,7 +332,11 @@ class ProgressTextTest {
                 onWarn: (String) -> Unit,
             ): List<String> {
                 started.complete(Unit)
-                awaitCancellation()
+                try {
+                    awaitCancellation()
+                } finally {
+                    withContext(NonCancellable) { finishCancelling.await() }
+                }
             }
         }
         newViewModel(FakeFileSystem(), hanging, oneRow)
@@ -342,6 +352,7 @@ class ProgressTextTest {
         runBlocking { withTimeout(30_000) { started.await() } }
         viewModel.stopSync()
         assertEquals("Stopping…", viewModel.progressText)
+        finishCancelling.complete(Unit)
         awaitCompletion()
 
         assertEquals("Cancelled", viewModel.progressText)

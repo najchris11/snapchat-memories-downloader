@@ -39,7 +39,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.najdev.snapvault.ImportMode
 import com.najdev.snapvault.WindowSize
-import com.najdev.snapvault.ZipSourceMode
 import com.najdev.snapvault.binaryInstallHint
 import com.najdev.snapvault.isAndroidBuild
 import com.najdev.snapvault.ui.theme.LogColors
@@ -201,26 +200,9 @@ private fun DashboardControls(
             if (viewModel.importMode == ImportMode.Zip) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    ModeToggleButton(
-                        label = stringResource(Res.string.zip_source_folder),
-                        selected = viewModel.zipSourceMode == ZipSourceMode.Folder,
-                        onClick = { viewModel.changeZipSourceMode(ZipSourceMode.Folder) },
-                        modifier = Modifier.weight(1f),
-                        enabled = !viewModel.isRunning
-                    )
-                    ModeToggleButton(
-                        label = stringResource(Res.string.zip_source_files),
-                        selected = viewModel.zipSourceMode == ZipSourceMode.MultipleFiles,
-                        onClick = { viewModel.changeZipSourceMode(ZipSourceMode.MultipleFiles) },
-                        modifier = Modifier.weight(1f),
-                        enabled = !viewModel.isRunning
-                    )
-                }
-
-                if (viewModel.zipSourceMode == ZipSourceMode.Folder) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(stringResource(Res.string.zip_folder_label), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         FilePickerBox(
                             icon = Icons.Outlined.FolderZip,
@@ -230,67 +212,17 @@ private fun DashboardControls(
                             enabled = !viewModel.isRunning
                         )
                     }
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(stringResource(Res.string.zip_files_label), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            if (viewModel.selectedZipFiles.isNotEmpty()) {
-                                TextButton(
-                                    onClick = { viewModel.changeZipSourceMode(ZipSourceMode.MultipleFiles) },
-                                    enabled = !viewModel.isRunning,
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                ) {
-                                    Text(
-                                        stringResource(Res.string.btn_clear),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                    )
-                                }
-                            }
-                        }
-                        val selectedCount = viewModel.selectedZipFiles.size
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(stringResource(Res.string.zip_single_file_label), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         FilePickerBox(
                             icon = Icons.Outlined.FolderZip,
-                            label = when (selectedCount) {
-                                0 -> stringResource(Res.string.zip_files_placeholder)
-                                1 -> viewModel.selectedZipFiles[0].substringAfterLast('/').substringAfterLast('\\')
-                                else -> pluralStringResource(Res.plurals.zip_files_selected, selectedCount, selectedCount)
-                            },
-                            onClick = viewModel::pickMultipleZips,
+                            label = viewModel.selectedZipFiles.firstOrNull()
+                                ?.substringAfterLast('/')?.substringAfterLast('\\')
+                                ?: stringResource(Res.string.zip_single_file_placeholder),
+                            onClick = viewModel::pickZipFile,
                             isSelected = viewModel.selectedZipFiles.isNotEmpty(),
                             enabled = !viewModel.isRunning
                         )
-                        if (viewModel.selectedZipFiles.size > 1) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-                                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(3.dp)
-                            ) {
-                                viewModel.selectedZipFiles.take(4).forEach { path ->
-                                    Text(
-                                        path.substringAfterLast('/').substringAfterLast('\\'),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                                if (selectedCount > 4) {
-                                    Text(
-                                        pluralStringResource(Res.plurals.zip_files_more, selectedCount - 4, selectedCount - 4),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
                     }
                 }
             } else {
@@ -411,10 +343,7 @@ private fun DashboardControls(
 private fun DashboardActions(viewModel: DashboardViewModel) {
     // Action buttons
     val canStart = viewModel.downloadFolder != null && when (viewModel.importMode) {
-        ImportMode.Zip -> when (viewModel.zipSourceMode) {
-            ZipSourceMode.Folder -> viewModel.zipFolder != null
-            ZipSourceMode.MultipleFiles -> viewModel.selectedZipFiles.isNotEmpty()
-        }
+        ImportMode.Zip -> viewModel.zipFolder != null || viewModel.selectedZipFiles.isNotEmpty()
         ImportMode.Legacy -> viewModel.htmlFile != null
     }
 

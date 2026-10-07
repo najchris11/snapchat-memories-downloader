@@ -1,7 +1,9 @@
 # Verbiage audit — 2026-09-28
 
 Scope: `strings.xml`, every hardcoded user-visible literal (including log lines), and the
-desktop picker titles. Docs excluded. Nothing has been changed yet.
+desktop picker titles. Docs excluded. Most findings were addressed in 0167977; the
+remaining Legacy source choice is tracked in #54, and the log plural sweep in #55
+is completed on this branch pending merge.
 
 ## Contents
 
@@ -16,6 +18,8 @@ desktop picker titles. Docs excluded. Nothing has been changed yet.
 ---
 
 ## 1. Wording that states something false
+
+Status: Done in 0167977. The strings and log lines cited below now describe the behavior.
 
 These mislead rather than just read badly — fix first.
 
@@ -96,6 +100,8 @@ These mislead rather than just read badly — fix first.
 
 ## 2. Ambiguous or alarming
 
+Status: Done in 0167977. The cited UI strings and log lines use the suggested wording.
+
 - **Unsaved-favorites dialog** — `close_unsaved_body`: "It exists nowhere else — quitting now
   will lose it." Reads as though the *photo* is lost; only the favorite mark is.
   Suggest: "1 favorite hasn't been saved yet. Quitting now will unmark it."
@@ -137,6 +143,9 @@ These mislead rather than just read badly — fix first.
 
 ## 3. One concept, several names
 
+Status: Done in 0167977. The main action is called a run; the Legacy source choice is
+tracked separately in #54.
+
 Pick one term per row and use it everywhere users look.
 
 | Concept | Current variants | Notes |
@@ -156,6 +165,10 @@ yeah the accounts.snapchat.com link is the correct one, idk what the other one i
 
 ## 4. Jargon users shouldn't see
 
+Status: Mostly done in 0167977. Legacy (HTML/JSON) source selection remains open in #54;
+Dashboard log plurals are covered by #55 on this branch pending merge. Two timestamp-matcher
+warnings in `ExperimentalZipMetadataMatcher.kt` still say "file(s)".
+
 - **"Pipeline"** — "Pipeline Options" (`dash_pipeline_title`), "where the pipeline writes"
   (`lib_empty_no_folder`), "Pipeline Complete" (progress text).
 - **Settings subtitle** — "Manage system dependencies and utility preferences."
@@ -173,6 +186,8 @@ yeah the accounts.snapchat.com link is the correct one, idk what the other one i
 ---
 
 ## 5. Hardcoded strings (CLAUDE.md Strings rule)
+
+Status: Done in 0167977. The listed picker labels and progress text now use resources.
 
 These should move to `strings.xml`:
 

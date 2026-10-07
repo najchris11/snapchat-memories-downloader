@@ -1,6 +1,7 @@
 package com.najdev.snapvault.viewmodel
 
 import com.najdev.snapvault.ImportMode
+import com.najdev.snapvault.SerializedFileSystem
 import com.najdev.snapvault.UnenforcedOutputDirectoryLocker
 import com.najdev.snapvault.downloader.CombineResult
 import com.najdev.snapvault.downloader.ExtractResult
@@ -12,15 +13,21 @@ import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
 import io.ktor.http.headersOf
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import okio.ForwardingFileSystem
 import okio.FileSystem
 import okio.Path
 import okio.Path.Companion.toPath
 import okio.fakefilesystem.FakeFileSystem
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import androidx.compose.runtime.snapshots.ObserverHandle
 import androidx.compose.runtime.snapshots.Snapshot
 import kotlin.test.AfterTest
@@ -65,6 +72,43 @@ class ProgressTextTest {
         override fun onPathParameter(path: Path, functionName: String, parameterName: String): Path {
             sample()
             return path
+        }
+    }
+
+    private fun sampledFileSystem(delegate: FileSystem): FileSystem = SamplingFileSystem(SerializedFileSystem(delegate))
+
+    // FakeFileSystem's unsynchronised map threw ConcurrentModificationException while two
+    // downloads wrote different .part files. Force overlap so this fixture cannot regress.
+    @Test
+    fun samplingFixtureSerializesConcurrentFakeFileSystemCalls() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val active = AtomicInteger()
+        val guardedFake = object : ForwardingFileSystem(FakeFileSystem()) {
+            override fun metadataOrNull(path: Path): okio.FileMetadata? {
+                check(active.incrementAndGet() == 1) { "concurrent fake filesystem access" }
+                try {
+                    entered.countDown()
+                    check(release.await(1, TimeUnit.SECONDS)) { "first filesystem call was not released" }
+                    return super.metadataOrNull(path)
+                } finally {
+                    active.decrementAndGet()
+                }
+            }
+        }
+        val sampled = sampledFileSystem(guardedFake)
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            val first = pool.submit { sampled.metadataOrNull("/out".toPath()) }
+            assertTrue(entered.await(1, TimeUnit.SECONDS))
+            val second = pool.submit { sampled.metadataOrNull("/out".toPath()) }
+            Thread.sleep(100)
+            release.countDown()
+            first.get(2, TimeUnit.SECONDS)
+            second.get(2, TimeUnit.SECONDS)
+        } finally {
+            release.countDown()
+            pool.shutdownNow()
         }
     }
 
@@ -116,7 +160,7 @@ class ProgressTextTest {
     ): DashboardViewModel {
         fs.createDirectories("/out".toPath())
         fs.write("/history.json".toPath()) { writeUtf8(history) }
-        val sampling = SamplingFileSystem(fs)
+        val sampling = sampledFileSystem(fs)
         return DashboardViewModel(
             zipPipelineRunner = runner,
             mediaProcessor = FakeMediaProcessor(),
@@ -166,6 +210,9 @@ class ProgressTextTest {
         )
         assertEquals(expected, seen.filter { it in expected }, "all samples: $seen")
         assertEquals("Run complete", viewModel.progressText)
+        // The download and badge summaries used to say "1 new" and "0 files".
+        assertTrue(viewModel.logs.any { it == "[INFO] Downloads: 1 new file, 0 existing files." }, viewModel.logs.toString())
+        assertTrue(viewModel.logs.any { it == "[INFO] Library badges saved (1 file)." }, viewModel.logs.toString())
     }
 
     @Test
@@ -186,6 +233,8 @@ class ProgressTextTest {
         awaitCompletion()
 
         assertTrue("Downloading: 2 of 2 files…" in seen, "all samples: $seen")
+        assertTrue(viewModel.logs.any { it == "[INFO] Downloads: 2 new files, 0 existing files." }, viewModel.logs.toString())
+        assertTrue(viewModel.logs.any { it == "[INFO] Library badges saved (2 files)." }, viewModel.logs.toString())
     }
 
     @Test
@@ -228,7 +277,7 @@ class ProgressTextTest {
         awaitCompletion()
 
         val log = viewModel.logs.single { it.startsWith("[INFO] Tagging") }
-        assertEquals("[INFO] Tagging combined files with date metadata… (1)", log)
+        assertEquals("[INFO] Tagging combined 1 file with date metadata…", log)
     }
 
     private fun dedupeRun(dryRun: Boolean) {
@@ -271,6 +320,10 @@ class ProgressTextTest {
     fun terminalStatesUsePlainWording() {
         // Cancelled and Stopping… share a path: stop a run that is hanging in the extractor.
         val started = CompletableDeferred<Unit>()
+        // Cancellation is held open until the test has looked at "Stopping…". Without this the
+        // cancel runs on another thread and can finish, and set "Cancelled", before the
+        // assertion reads the text, so the test failed on CI about one run in a few.
+        val finishCancelling = CompletableDeferred<Unit>()
         val runner = SamplingRunner(sample = ::sample)
         val hanging = object : ZipPipelineRunner by runner {
             override suspend fun extractDownloadedArchives(
@@ -279,7 +332,11 @@ class ProgressTextTest {
                 onWarn: (String) -> Unit,
             ): List<String> {
                 started.complete(Unit)
-                awaitCancellation()
+                try {
+                    awaitCancellation()
+                } finally {
+                    withContext(NonCancellable) { finishCancelling.await() }
+                }
             }
         }
         newViewModel(FakeFileSystem(), hanging, oneRow)
@@ -295,6 +352,7 @@ class ProgressTextTest {
         runBlocking { withTimeout(30_000) { started.await() } }
         viewModel.stopSync()
         assertEquals("Stopping…", viewModel.progressText)
+        finishCancelling.complete(Unit)
         awaitCompletion()
 
         assertEquals("Cancelled", viewModel.progressText)

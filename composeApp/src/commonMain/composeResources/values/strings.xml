@@ -365,6 +365,38 @@
         <item quantity="one">%1$d file</item>
         <item quantity="other">%1$d files</item>
     </plurals>
+    <plurals name="count_memories">
+        <item quantity="one">%1$d memory</item>
+        <item quantity="other">%1$d memories</item>
+    </plurals>
+    <plurals name="count_items">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
+    <plurals name="count_overlay_pairs">
+        <item quantity="one">%1$d overlay pair</item>
+        <item quantity="other">%1$d overlay pairs</item>
+    </plurals>
+    <plurals name="count_errors">
+        <item quantity="one">%1$d error</item>
+        <item quantity="other">%1$d errors</item>
+    </plurals>
+    <plurals name="count_combine_errors">
+        <item quantity="one">%1$d combine error</item>
+        <item quantity="other">%1$d combine errors</item>
+    </plurals>
+    <plurals name="count_new_files">
+        <item quantity="one">%1$d new file</item>
+        <item quantity="other">%1$d new files</item>
+    </plurals>
+    <plurals name="count_existing_files">
+        <item quantity="one">%1$d existing file</item>
+        <item quantity="other">%1$d existing files</item>
+    </plurals>
+    <plurals name="count_video_encodes">
+        <item quantity="one">%1$d video encode</item>
+        <item quantity="other">%1$d video encodes</item>
+    </plurals>
     <plurals name="count_records">
         <item quantity="one">%1$d record</item>
         <item quantity="other">%1$d records</item>

@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -632,8 +633,11 @@ private fun CapabilityItem(
         }
     )
 
+    // One node per capability, so a screen reader announces the name with its status and a
+    // test can assert which status belongs to which row.
     Row(
         modifier = modifier
+            .semantics(mergeDescendants = true) {}
             .clip(RoundedCornerShape(10.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .padding(14.dp),

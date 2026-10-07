@@ -123,6 +123,34 @@ class PlatformCapabilityUiTest {
         onNodeWithText("FFmpeg").assertDoesNotExist()
     }
 
+    // Names alone would stay green if every row were passed CapabilityLevel.Full, which would
+    // tell an iOS user that video overlays are combined. Each row must carry its own status.
+    @Test
+    fun mobileEnvironmentShowsTheStatusOfEachCapability() = runComposeUiTest {
+        setContent {
+            SnapVaultTheme(darkMode = true) {
+                MediaEnvironmentSection(
+                    hasExifTool = false,
+                    hasFFmpeg = false,
+                    onVerifyDependencies = {},
+                    usesDesktopTooling = false,
+                    mediaCapabilities = MediaCapabilities(
+                        imageMetadata = CapabilityLevel.Full,
+                        videoMetadata = CapabilityLevel.Partial,
+                        imageOverlayCombine = CapabilityLevel.Unavailable,
+                        videoOverlayCombine = CapabilityLevel.Unavailable,
+                    ),
+                )
+            }
+        }
+
+        fun row(name: String, status: String) = onNode(hasText(name) and hasText(status))
+        row("Image metadata", "Available").assertIsDisplayed()
+        row("Video metadata", "Limited").assertIsDisplayed()
+        row("Combine photo overlays", "Unavailable").assertIsDisplayed()
+        row("Combine video overlays", "Unavailable").assertIsDisplayed()
+    }
+
     @Test
     fun desktopEnvironmentKeepsActionableBinaryDetection() = runComposeUiTest {
         setContent {

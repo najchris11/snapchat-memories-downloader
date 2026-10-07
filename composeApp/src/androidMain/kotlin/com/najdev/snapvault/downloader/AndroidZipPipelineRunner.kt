@@ -5,6 +5,7 @@ import com.najdev.snapvault.parser.HtmlMemoryEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -107,7 +108,10 @@ class AndroidZipPipelineRunner(
             val overlayFile = byName[names.overlayName] ?: continue
             oneAtATime.withPermit {
                 channel.send(withContext(Dispatchers.IO) {
-                    combineAndroidOverlayPair(dir, names, mainFile, overlayFile, deleteOriginals, mediaProcessor)
+                    combineAndroidOverlayPair(
+                        dir, names, mainFile, overlayFile, deleteOriginals, mediaProcessor,
+                        checkCancelled = { ensureActive() },
+                    )
                 })
             }
         }

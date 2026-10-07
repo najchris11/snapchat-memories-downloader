@@ -118,4 +118,29 @@ class AndroidOverlayCombineTest {
         assertTrue(main.exists() && overlay.exists())
         assertFalse(File(dir, STAGING_DIR_NAME).exists())
     }
+
+    // Regression: the helper ran inside withContext(IO), so a Stop pressed during the blocking
+    // encode was only seen after the output was published and both originals deleted. The
+    // checkpoint after the encode must stop the run before either happens.
+    @Test
+    fun cancellationDuringEncodeKeepsOriginalsAndPublishesNothing() {
+        var cancelled = false
+        try {
+            combineAndroidOverlayPair(
+                dir, pair, main, overlay, deleteOriginals = true,
+                mediaProcessor = FakeProcessor { output, _ ->
+                    File(output).writeText("composite")
+                    true
+                },
+                checkCancelled = { throw kotlin.coroutines.cancellation.CancellationException("stop") },
+            )
+        } catch (_: kotlin.coroutines.cancellation.CancellationException) {
+            cancelled = true
+        }
+
+        assertTrue(cancelled, "cancellation must propagate to the caller")
+        assertFalse(File(dir, pair.outputName).exists(), "no output may be published after a Stop")
+        assertTrue(main.exists() && overlay.exists(), "originals must survive a Stop")
+        assertEquals(listOf(main.name, overlay.name).sorted(), dir.list()!!.sorted(), "staging must be cleaned up")
+    }
 }

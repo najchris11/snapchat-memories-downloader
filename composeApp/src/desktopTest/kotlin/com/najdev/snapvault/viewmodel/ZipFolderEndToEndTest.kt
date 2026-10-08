@@ -2,6 +2,7 @@ package com.najdev.snapvault.viewmodel
 
 import com.najdev.snapvault.OutputFolderMemory
 import com.najdev.snapvault.PlatformPickers
+import com.najdev.snapvault.ZipSourceMode
 import com.najdev.snapvault.UnenforcedOutputDirectoryLocker
 import com.najdev.snapvault.VaultIndex
 import com.najdev.snapvault.downloader.DesktopZipPipelineRunner
@@ -51,11 +52,11 @@ class ZipFolderEndToEndTest {
         library = File(root, "library").apply { mkdirs() }
     }
 
-    private class Pickers(private val zips: String, private val output: String) : PlatformPickers {
+    private class Pickers(private val zips: String, private val output: String, private val chosenZips: List<String> = emptyList()) : PlatformPickers {
         override fun pickHtmlFile(onResult: (String?) -> Unit) = onResult(null)
         override fun pickOutputFolder(onResult: (String?) -> Unit) = onResult(output)
         override fun pickZipFolder(onResult: (String?) -> Unit) = onResult(zips)
-        override fun pickMultipleZips(onResult: (List<String>) -> Unit) = onResult(emptyList())
+        override fun pickMultipleZips(onResult: (List<String>) -> Unit) = onResult(chosenZips)
     }
 
     private class RecordingMetadata : MediaProcessor {
@@ -107,11 +108,11 @@ class ZipFolderEndToEndTest {
 
     private lateinit var lateViewModel: DashboardViewModel
 
-    private fun viewModel(metadata: RecordingMetadata): DashboardViewModel = DashboardViewModel(
+    private fun viewModel(metadata: RecordingMetadata, vararg chosenZips: String): DashboardViewModel = DashboardViewModel(
         zipPipelineRunner = SamplingRunner(DesktopZipPipelineRunner(metadata)) { progressSamples += it },
         mediaProcessor = metadata,
         fileSystem = FileSystem.SYSTEM,
-        pickers = Pickers(zipFolder.path, library.path),
+        pickers = Pickers(zipFolder.path, library.path, chosenZips.toList()),
         outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
         outputFolderMemory = OutputFolderMemory.None,
     ).apply {
@@ -145,7 +146,14 @@ class ZipFolderEndToEndTest {
         return ByteArrayOutputStream().also { ImageIO.write(image, "jpg", it) }.toByteArray()
     }
 
-    private fun exportZip(name: String, mediaName: String, bytes: ByteArray, capturedAt: String, history: String? = null): File {
+    private fun exportZip(
+        name: String,
+        mediaName: String,
+        bytes: ByteArray,
+        capturedAt: String,
+        history: String? = null,
+        overlay: Pair<String, ByteArray>? = null,
+    ): File {
         val archive = File(zipFolder, name)
         val epoch = Instant.parse(capturedAt).epochSecond.toInt()
         val timestampExtra = ByteBuffer.allocate(9).order(ByteOrder.LITTLE_ENDIAN)
@@ -157,6 +165,11 @@ class ZipFolderEndToEndTest {
             })
             zip.write(bytes)
             zip.closeEntry()
+            if (overlay != null) {
+                zip.putNextEntry(ZipEntry("memories/${overlay.first}"))
+                zip.write(overlay.second)
+                zip.closeEntry()
+            }
             if (history != null) {
                 zip.putNextEntry(ZipEntry("json/memories_history.json"))
                 zip.write(history.toByteArray())
@@ -209,6 +222,142 @@ class ZipFolderEndToEndTest {
             assertTrue(viewModel.logs.any { "Extracted 0 new, 2 already existed" in it })
             assertContentEquals(firstBytes, File(library, firstName).readBytes())
             assertContentEquals(secondBytes, File(library, secondName).readBytes())
+        } finally {
+            viewModel.dispose()
+        }
+    }
+
+    // A file picker used to leave the folder mode active, so Start scanned a folder
+    // instead of importing the selected archive. Re-running must also skip existing media.
+    @Test
+    fun chosenZipImportsAndRerunsWithoutReplacingMedia() {
+        val mediaName = "2024-03-11_AAA-main.jpg"
+        val overlayName = "2024-03-11_AAA-overlay.png"
+        val bytes = jpeg(0xCC3322)
+        val overlayBytes = ByteArrayOutputStream().also {
+            ImageIO.write(BufferedImage(2, 2, BufferedImage.TYPE_INT_ARGB), "png", it)
+        }.toByteArray()
+        val archive = exportZip(
+            "memories-1.zip", mediaName, bytes, "2024-03-11T12:34:56Z",
+            overlay = overlayName to overlayBytes,
+        )
+        val viewModel = viewModel(RecordingMetadata(), archive.path)
+
+        try {
+            viewModel.pickMultipleZips()
+            assertEquals(listOf(archive.path), viewModel.selectedZipFiles)
+            assertEquals(null, viewModel.zipFolder)
+            viewModel.importFolder()
+
+            assertEquals("Run complete", viewModel.progressText, viewModel.logs.joinToString("\n"))
+            assertTrue("Extracting: 2 / 2" in progressSamples, progressSamples.toString())
+            assertContentEquals(bytes, File(library, mediaName).readBytes())
+            assertContentEquals(overlayBytes, File(library, overlayName).readBytes())
+            assertTrue(VaultIndex.read(FileSystem.SYSTEM, library.path).containsKey(mediaName))
+            assertEquals(setOf(mediaName, overlayName), scanMediaFiles(library.path).map { File(it.id).name }.toSet())
+
+            viewModel.importFolder()
+            assertTrue(viewModel.logs.any { "Extracted 0 new, 2 already existed" in it })
+            assertContentEquals(bytes, File(library, mediaName).readBytes())
+            assertContentEquals(overlayBytes, File(library, overlayName).readBytes())
+        } finally {
+            viewModel.dispose()
+        }
+    }
+
+    // An archive without Snapchat memories must fail before creating an empty library index.
+    @Test
+    fun chosenZipWithoutMemoriesFailsWithoutWritingMedia() {
+        val archive = exportZip("unrelated.zip", "not-a-snapchat-file.jpg", jpeg(0x449944), "2024-03-11T12:34:56Z")
+        exportZip("memories-2.zip", "2024-03-12_BBB-main.jpg", jpeg(0x2266CC), "2024-03-12T08:09:10Z")
+        val viewModel = viewModel(RecordingMetadata(), archive.path)
+
+        try {
+            viewModel.pickMultipleZips()
+            viewModel.importFolder()
+            assertEquals("Failed", viewModel.progressText, viewModel.logs.joinToString("\n"))
+            assertTrue(viewModel.logs.any { "Found no Snapchat memories" in it })
+            assertTrue(scanMediaFiles(library.path).isEmpty())
+            assertTrue(VaultIndex.read(FileSystem.SYSTEM, library.path).isEmpty())
+        } finally {
+            viewModel.dispose()
+        }
+    }
+
+    // The ZIP picker takes several archives at once, and they need not share a folder. This
+    // is the route #65 flagged as lost when the Folder/Files toggle went away: a folder scan
+    // cannot reach archives saved in two places, so the selection itself has to.
+    @Test
+    fun zipsChosenFromDifferentFoldersAreImportedInOneRun() {
+        val firstName = "2024-03-11_AAA-main.jpg"
+        val secondName = "2024-03-12_BBB-main.jpg"
+        val first = exportZip("memories-1.zip", firstName, jpeg(0xCC3322), "2024-03-11T12:34:56Z")
+        val moved = exportZip("memories-2.zip", secondName, jpeg(0x2266CC), "2024-03-12T08:09:10Z")
+        val elsewhere = File(root, "downloads").apply { mkdirs() }
+        val second = File(elsewhere, moved.name).also { moved.renameTo(it) }
+        val viewModel = viewModel(RecordingMetadata(), first.path, second.path)
+
+        try {
+            viewModel.pickMultipleZips()
+            assertEquals(listOf(first.path, second.path), viewModel.selectedZipFiles)
+            assertEquals(null, viewModel.zipFolder)
+            viewModel.importFolder()
+
+            assertEquals("Run complete", viewModel.progressText, viewModel.logs.joinToString("\n"))
+            assertEquals(setOf(firstName, secondName), scanMediaFiles(library.path).map { File(it.id).name }.toSet())
+        } finally {
+            viewModel.dispose()
+        }
+    }
+
+    @Test
+    fun choosingFolderAfterZipsClearsTheFileSelection() {
+        val archive = exportZip("memories-1.zip", "2024-03-11_AAA-main.jpg", jpeg(0xCC3322), "2024-03-11T12:34:56Z")
+        val viewModel = viewModel(RecordingMetadata(), archive.path)
+        try {
+            viewModel.pickMultipleZips()
+            viewModel.pickZipFolder()
+            assertEquals(zipFolder.path, viewModel.zipFolder)
+            assertTrue(viewModel.selectedZipFiles.isEmpty())
+        } finally {
+            viewModel.dispose()
+        }
+    }
+
+    @Test
+    fun cancellingTheZipPickerKeepsTheChosenFolder() {
+        val viewModel = viewModel(RecordingMetadata())
+        try {
+            viewModel.pickMultipleZips()
+            assertEquals(zipFolder.path, viewModel.zipFolder)
+            assertTrue(viewModel.selectedZipFiles.isEmpty())
+        } finally {
+            viewModel.dispose()
+        }
+    }
+
+    @Test
+    fun emptyZipFolderReportsNoZipFiles() {
+        val viewModel = viewModel(RecordingMetadata())
+        try {
+            viewModel.importFolder()
+            assertEquals("Failed", viewModel.progressText, viewModel.logs.joinToString("\n"))
+            assertTrue(viewModel.logs.any { "No ZIP files found in the selected folder." in it })
+            assertTrue(VaultIndex.read(FileSystem.SYSTEM, library.path).isEmpty())
+        } finally {
+            viewModel.dispose()
+        }
+    }
+
+    @Test
+    fun startingWithoutAZipSourceExplainsWhatToChoose() {
+        val viewModel = viewModel(RecordingMetadata())
+        try {
+            viewModel.changeZipSourceMode(ZipSourceMode.Folder)
+            viewModel.importFolder()
+            assertEquals("Failed", viewModel.progressText, viewModel.logs.joinToString("\n"))
+            assertTrue(viewModel.logs.any { "Choose a ZIP folder or file before starting." in it })
+            assertTrue(VaultIndex.read(FileSystem.SYSTEM, library.path).isEmpty())
         } finally {
             viewModel.dispose()
         }

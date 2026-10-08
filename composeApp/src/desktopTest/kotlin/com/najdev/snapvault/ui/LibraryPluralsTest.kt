@@ -8,12 +8,11 @@ import snapchat_memories_downloader.composeapp.generated.resources.Res
 import snapchat_memories_downloader.composeapp.generated.resources.lib_file_count
 import snapchat_memories_downloader.composeapp.generated.resources.lib_photo_count
 import snapchat_memories_downloader.composeapp.generated.resources.lib_video_count
-import snapchat_memories_downloader.composeapp.generated.resources.zip_files_selected
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Five counts were pluralised as `"$n item${if (n == 1) "" else "s"}"` — English by
+ * Library counts were pluralised as `"$n item${if (n == 1) "" else "s"}"` — English by
  * construction, and not localisable without rewriting the call site, since most languages
  * do not form plurals by appending a letter and several have more than two forms.
  *
@@ -22,7 +21,7 @@ import kotlin.test.assertEquals
  * only the rendered text shows it.
  *
  * The inspector's "items tagged" and "assets combined" counts now reuse lib_file_count; the
- * ZIP picker's "N ZIP files selected" was a literal until the verbiage audit.
+ * ZIP picker shows its own count through count_zip_files; DashboardScreenTest covers it.
  */
 @OptIn(ExperimentalTestApi::class)
 class LibraryPluralsTest {
@@ -36,7 +35,6 @@ class LibraryPluralsTest {
                     "file" to Res.plurals.lib_file_count,
                     "photo" to Res.plurals.lib_photo_count,
                     "video" to Res.plurals.lib_video_count,
-                    "zip" to Res.plurals.zip_files_selected,
                 ).forEach { (name, resource) ->
                     rendered["$name-1"] = pluralStringResource(resource, 1, 1)
                     rendered["$name-2"] = pluralStringResource(resource, 2, 2)
@@ -50,7 +48,5 @@ class LibraryPluralsTest {
         assertEquals("2 photos", rendered["photo-2"])
         assertEquals("1 video", rendered["video-1"])
         assertEquals("2 videos", rendered["video-2"])
-        assertEquals("1 ZIP file selected", rendered["zip-1"])
-        assertEquals("2 ZIP files selected", rendered["zip-2"])
     }
 }

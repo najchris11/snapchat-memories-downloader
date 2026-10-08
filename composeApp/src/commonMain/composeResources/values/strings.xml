@@ -147,8 +147,8 @@
     <!-- ZIP import -->
     <string name="zip_folder_label">Folder of ZIPs</string>
     <string name="zip_folder_placeholder">Choose a folder</string>
-    <string name="zip_single_file_label">Single ZIP file</string>
-    <string name="zip_single_file_placeholder">Choose a ZIP file</string>
+    <string name="zip_files_label">ZIP files</string>
+    <string name="zip_files_placeholder">Choose one or more ZIPs</string>
     <string name="zip_source_missing_error">Choose a ZIP folder or file before starting.</string>
 
     <!-- Desktop file dialog titles -->
@@ -156,7 +156,6 @@
     <string name="picker_output_title">Choose an output folder</string>
     <string name="picker_zip_folder_title">Choose the folder that holds your Snapchat ZIPs</string>
     <string name="picker_zip_files_title">Choose your Snapchat ZIP files</string>
-    <string name="picker_zip_file_title">Choose a Snapchat ZIP file</string>
 
     <!-- Log panel -->
     <string name="log_view_logs">View log</string>
@@ -280,11 +279,15 @@
     <string name="onb_download_folder_created">Created. Drop your ZIP files in there as they download.</string>
     <string name="onb_download_folder_existed">That folder already exists. Drop your ZIP files in it as they download.</string>
     <string name="onb_download_folder_failed">Could not create it: %1$s. You can still choose any folder yourself at the next step.</string>
-    <string name="onb_download_folder_mobile">On this device, pick the ZIP files with the file picker on the Dashboard when you are ready.</string>
+    <string name="onb_download_folder_mobile">On this device, pick your ZIP files with the ZIP files button on the Dashboard when you are ready.</string>
 
     <!-- Step 3 -->
     <string name="onb_folders_title">Point SnapVault at the ZIPs</string>
-    <string name="onb_folders_body">On the Dashboard you choose two things: the source, which is the folder holding your ZIP files, and the output folder, where the finished library is written.</string>
+    <string name="onb_folders_body">On the Dashboard you choose two things: the source, which is where your ZIP files are, and the output folder, where the finished library is written. There are two ways to choose the source.</string>
+    <string name="onb_folders_source_folder_title">Folder of ZIPs</string>
+    <string name="onb_folders_source_folder_body">Pick the folder and SnapVault imports every ZIP inside it. Best when you saved all of the downloads in one place.</string>
+    <string name="onb_folders_source_files_title">ZIP files</string>
+    <string name="onb_folders_source_files_body">Pick the archives themselves, and select as many as you need in one go: hold Ctrl or Shift on desktop, or tap each one on a phone. Best when they are spread across different folders.</string>
     <string name="onb_folders_space">Leave at least as much free space in the output folder as your ZIP files take up — every photo and video is written out in full before anything is cleaned up. SnapVault checks before it starts, and stops without writing anything if there is not enough room.</string>
     <string name="onb_folders_resume">You can stop a run and start it again later. Finished files are recorded, so a second run picks up where the first left off rather than starting over.</string>
 

@@ -52,12 +52,6 @@ class IosPickers : PlatformPickers {
         }
     }
 
-    override fun pickZipFile(onResult: (String?) -> Unit) {
-        presentPicker(slot = PickerSlot.ZIP_FILES, types = listOf("public.zip-archive", "com.pkware.zip-archive"), multiple = false) { urls ->
-            onResult(urls.firstOrNull()?.path)
-        }
-    }
-
     override fun releaseAllSecurityAccess() {
         accessedUrlsBySlot.values.flatten().forEach { url ->
             try {

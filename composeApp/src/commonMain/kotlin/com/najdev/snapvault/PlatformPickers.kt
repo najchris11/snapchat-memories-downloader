@@ -9,9 +9,6 @@ interface PlatformPickers {
     }
     fun pickOutputFolder(onResult: (String?) -> Unit)
     fun pickZipFolder(onResult: (String?) -> Unit)
-    fun pickZipFile(onResult: (String?) -> Unit) {
-        pickMultipleZips { onResult(it.firstOrNull()) }
-    }
     fun pickMultipleZips(onResult: (List<String>) -> Unit)
     fun releaseAllSecurityAccess() {}
 }

@@ -67,26 +67,51 @@ class DashboardScreenTest {
             override fun pickHtmlFile(onResult: (String?) -> Unit) = onResult(null)
             override fun pickOutputFolder(onResult: (String?) -> Unit) = onResult("/library")
             override fun pickZipFolder(onResult: (String?) -> Unit) = onResult("/exports")
-            override fun pickZipFile(onResult: (String?) -> Unit) = onResult("/exports/memories.zip")
-            override fun pickMultipleZips(onResult: (List<String>) -> Unit) = onResult(emptyList())
+            override fun pickMultipleZips(onResult: (List<String>) -> Unit) = onResult(listOf("/exports/memories.zip"))
         })
         setContent {
             SnapVaultTheme(darkMode = true) { DashboardScreen(viewModel = viewModel, onNavigateToSettings = {}) }
         }
 
         onNodeWithText(stringResource("zip_folder_placeholder")).assertIsDisplayed()
-        onNodeWithText(stringResource("zip_single_file_placeholder")).assertIsDisplayed()
-        onAllNodes(hasText(stringResource("zip_single_file_label")) and isToggleable()).assertCountEquals(0)
+        onNodeWithText(stringResource("zip_files_placeholder")).assertIsDisplayed()
+        onAllNodes(hasText(stringResource("zip_files_label")) and isToggleable()).assertCountEquals(0)
         onNode(hasText("Start", substring = true) and hasClickAction()).assertIsNotEnabled()
 
         viewModel.pickOutputFolder()
-        onNodeWithText(stringResource("zip_single_file_placeholder")).performClick()
+        onNodeWithText(stringResource("zip_files_placeholder")).performClick()
         waitForIdle()
         onNode(hasText("Start", substring = true) and hasClickAction()).assertIsEnabled()
 
         onNodeWithText(stringResource("zip_folder_placeholder")).performClick()
         waitForIdle()
         onNode(hasText("Start", substring = true) and hasClickAction()).assertIsEnabled()
+        viewModel.dispose()
+    }
+
+    // The ZIP files button used to name only the first archive, so choosing three looked the
+    // same as choosing one and the user could not tell the whole selection had registered.
+    @Test
+    fun zipFilesButtonNamesOneArchiveAndCountsSeveral() = runComposeUiTest {
+        var chosen = listOf("/exports/memories-1.zip")
+        val viewModel = idleDashboardViewModel(object : PlatformPickers {
+            override fun pickHtmlFile(onResult: (String?) -> Unit) = onResult(null)
+            override fun pickOutputFolder(onResult: (String?) -> Unit) = onResult("/library")
+            override fun pickZipFolder(onResult: (String?) -> Unit) = onResult("/exports")
+            override fun pickMultipleZips(onResult: (List<String>) -> Unit) = onResult(chosen)
+        })
+        setContent {
+            SnapVaultTheme(darkMode = true) { DashboardScreen(viewModel = viewModel, onNavigateToSettings = {}) }
+        }
+
+        onNodeWithText(stringResource("zip_files_placeholder")).performClick()
+        waitForIdle()
+        onNodeWithText("memories-1.zip").assertIsDisplayed()
+
+        chosen = listOf("/exports/memories-1.zip", "/downloads/memories-2.zip")
+        onNodeWithText("memories-1.zip").performClick()
+        waitForIdle()
+        onNodeWithText("2 ZIP files").assertIsDisplayed()
         viewModel.dispose()
     }
 

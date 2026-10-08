@@ -213,13 +213,15 @@ private fun DashboardControls(
                         )
                     }
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(stringResource(Res.string.zip_single_file_label), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(Res.string.zip_files_label), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         FilePickerBox(
                             icon = Icons.Outlined.FolderZip,
-                            label = viewModel.selectedZipFiles.firstOrNull()
-                                ?.substringAfterLast('/')?.substringAfterLast('\\')
-                                ?: stringResource(Res.string.zip_single_file_placeholder),
-                            onClick = viewModel::pickZipFile,
+                            label = when (viewModel.selectedZipFiles.size) {
+                                0 -> stringResource(Res.string.zip_files_placeholder)
+                                1 -> viewModel.selectedZipFiles.single().substringAfterLast('/').substringAfterLast('\\')
+                                else -> pluralStringResource(Res.plurals.count_zip_files, viewModel.selectedZipFiles.size, viewModel.selectedZipFiles.size)
+                            },
+                            onClick = viewModel::pickMultipleZips,
                             isSelected = viewModel.selectedZipFiles.isNotEmpty(),
                             enabled = !viewModel.isRunning
                         )

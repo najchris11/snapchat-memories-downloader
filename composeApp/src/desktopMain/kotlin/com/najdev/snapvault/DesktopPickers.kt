@@ -7,7 +7,6 @@ import snapchat_memories_downloader.composeapp.generated.resources.Res
 import snapchat_memories_downloader.composeapp.generated.resources.picker_history_title
 import snapchat_memories_downloader.composeapp.generated.resources.picker_output_title
 import snapchat_memories_downloader.composeapp.generated.resources.picker_zip_files_title
-import snapchat_memories_downloader.composeapp.generated.resources.picker_zip_file_title
 import snapchat_memories_downloader.composeapp.generated.resources.picker_zip_folder_title
 import java.awt.FileDialog
 import java.awt.Frame
@@ -18,7 +17,6 @@ data class PickerTitles(
     val outputFolder: String,
     val zipFolder: String,
     val zipFiles: String,
-    val zipFile: String,
 )
 
 class DesktopPickers(private val titles: PickerTitles) : PlatformPickers {
@@ -72,14 +70,6 @@ class DesktopPickers(private val titles: PickerTitles) : PlatformPickers {
         val files = dialog.files?.map { it.absolutePath } ?: emptyList()
         onResult(files)
     }
-
-    override fun pickZipFile(onResult: (String?) -> Unit) {
-        val dialog = FileDialog(null as Frame?, titles.zipFile, FileDialog.LOAD)
-        dialog.setFilenameFilter { _, name -> name.endsWith(".zip", ignoreCase = true) }
-        dialog.isVisible = true
-        val result = if (dialog.file != null) java.io.File(dialog.directory, dialog.file).absolutePath else null
-        onResult(result)
-    }
 }
 
 @Composable
@@ -89,7 +79,6 @@ actual fun rememberPlatformPickers(): PlatformPickers {
         outputFolder = stringResource(Res.string.picker_output_title),
         zipFolder = stringResource(Res.string.picker_zip_folder_title),
         zipFiles = stringResource(Res.string.picker_zip_files_title),
-        zipFile = stringResource(Res.string.picker_zip_file_title),
     )
     return remember(titles) { DesktopPickers(titles) }
 }

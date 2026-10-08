@@ -21,7 +21,7 @@ import kotlin.test.assertEquals
  * only the rendered text shows it.
  *
  * The inspector's "items tagged" and "assets combined" counts now reuse lib_file_count; the
- * ZIP picker now offers a single-file action, so it no longer displays a file count.
+ * ZIP picker shows its own count through count_zip_files; DashboardScreenTest covers it.
  */
 @OptIn(ExperimentalTestApi::class)
 class LibraryPluralsTest {

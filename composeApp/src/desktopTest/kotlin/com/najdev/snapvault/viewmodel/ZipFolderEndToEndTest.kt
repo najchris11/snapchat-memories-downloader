@@ -52,12 +52,11 @@ class ZipFolderEndToEndTest {
         library = File(root, "library").apply { mkdirs() }
     }
 
-    private class Pickers(private val zips: String, private val output: String, private val singleZip: String? = null) : PlatformPickers {
+    private class Pickers(private val zips: String, private val output: String, private val chosenZips: List<String> = emptyList()) : PlatformPickers {
         override fun pickHtmlFile(onResult: (String?) -> Unit) = onResult(null)
         override fun pickOutputFolder(onResult: (String?) -> Unit) = onResult(output)
         override fun pickZipFolder(onResult: (String?) -> Unit) = onResult(zips)
-        override fun pickZipFile(onResult: (String?) -> Unit) = onResult(singleZip)
-        override fun pickMultipleZips(onResult: (List<String>) -> Unit) = onResult(emptyList())
+        override fun pickMultipleZips(onResult: (List<String>) -> Unit) = onResult(chosenZips)
     }
 
     private class RecordingMetadata : MediaProcessor {
@@ -109,11 +108,11 @@ class ZipFolderEndToEndTest {
 
     private lateinit var lateViewModel: DashboardViewModel
 
-    private fun viewModel(metadata: RecordingMetadata, singleZip: String? = null): DashboardViewModel = DashboardViewModel(
+    private fun viewModel(metadata: RecordingMetadata, vararg chosenZips: String): DashboardViewModel = DashboardViewModel(
         zipPipelineRunner = SamplingRunner(DesktopZipPipelineRunner(metadata)) { progressSamples += it },
         mediaProcessor = metadata,
         fileSystem = FileSystem.SYSTEM,
-        pickers = Pickers(zipFolder.path, library.path, singleZip),
+        pickers = Pickers(zipFolder.path, library.path, chosenZips.toList()),
         outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
         outputFolderMemory = OutputFolderMemory.None,
     ).apply {
@@ -228,10 +227,10 @@ class ZipFolderEndToEndTest {
         }
     }
 
-    // A single-file picker used to leave the folder mode active, so Start scanned a folder
+    // A file picker used to leave the folder mode active, so Start scanned a folder
     // instead of importing the selected archive. Re-running must also skip existing media.
     @Test
-    fun chosenSingleZipImportsAndRerunsWithoutReplacingMedia() {
+    fun chosenZipImportsAndRerunsWithoutReplacingMedia() {
         val mediaName = "2024-03-11_AAA-main.jpg"
         val overlayName = "2024-03-11_AAA-overlay.png"
         val bytes = jpeg(0xCC3322)
@@ -245,7 +244,7 @@ class ZipFolderEndToEndTest {
         val viewModel = viewModel(RecordingMetadata(), archive.path)
 
         try {
-            viewModel.pickZipFile()
+            viewModel.pickMultipleZips()
             assertEquals(listOf(archive.path), viewModel.selectedZipFiles)
             assertEquals(null, viewModel.zipFolder)
             viewModel.importFolder()
@@ -268,13 +267,13 @@ class ZipFolderEndToEndTest {
 
     // An archive without Snapchat memories must fail before creating an empty library index.
     @Test
-    fun chosenSingleZipWithoutMemoriesFailsWithoutWritingMedia() {
+    fun chosenZipWithoutMemoriesFailsWithoutWritingMedia() {
         val archive = exportZip("unrelated.zip", "not-a-snapchat-file.jpg", jpeg(0x449944), "2024-03-11T12:34:56Z")
         exportZip("memories-2.zip", "2024-03-12_BBB-main.jpg", jpeg(0x2266CC), "2024-03-12T08:09:10Z")
         val viewModel = viewModel(RecordingMetadata(), archive.path)
 
         try {
-            viewModel.pickZipFile()
+            viewModel.pickMultipleZips()
             viewModel.importFolder()
             assertEquals("Failed", viewModel.progressText, viewModel.logs.joinToString("\n"))
             assertTrue(viewModel.logs.any { "Found no Snapchat memories" in it })
@@ -285,12 +284,38 @@ class ZipFolderEndToEndTest {
         }
     }
 
+    // The ZIP picker takes several archives at once, and they need not share a folder. This
+    // is the route #65 flagged as lost when the Folder/Files toggle went away: a folder scan
+    // cannot reach archives saved in two places, so the selection itself has to.
     @Test
-    fun choosingFolderAfterSingleZipClearsTheFileSelection() {
+    fun zipsChosenFromDifferentFoldersAreImportedInOneRun() {
+        val firstName = "2024-03-11_AAA-main.jpg"
+        val secondName = "2024-03-12_BBB-main.jpg"
+        val first = exportZip("memories-1.zip", firstName, jpeg(0xCC3322), "2024-03-11T12:34:56Z")
+        val moved = exportZip("memories-2.zip", secondName, jpeg(0x2266CC), "2024-03-12T08:09:10Z")
+        val elsewhere = File(root, "downloads").apply { mkdirs() }
+        val second = File(elsewhere, moved.name).also { moved.renameTo(it) }
+        val viewModel = viewModel(RecordingMetadata(), first.path, second.path)
+
+        try {
+            viewModel.pickMultipleZips()
+            assertEquals(listOf(first.path, second.path), viewModel.selectedZipFiles)
+            assertEquals(null, viewModel.zipFolder)
+            viewModel.importFolder()
+
+            assertEquals("Run complete", viewModel.progressText, viewModel.logs.joinToString("\n"))
+            assertEquals(setOf(firstName, secondName), scanMediaFiles(library.path).map { File(it.id).name }.toSet())
+        } finally {
+            viewModel.dispose()
+        }
+    }
+
+    @Test
+    fun choosingFolderAfterZipsClearsTheFileSelection() {
         val archive = exportZip("memories-1.zip", "2024-03-11_AAA-main.jpg", jpeg(0xCC3322), "2024-03-11T12:34:56Z")
         val viewModel = viewModel(RecordingMetadata(), archive.path)
         try {
-            viewModel.pickZipFile()
+            viewModel.pickMultipleZips()
             viewModel.pickZipFolder()
             assertEquals(zipFolder.path, viewModel.zipFolder)
             assertTrue(viewModel.selectedZipFiles.isEmpty())
@@ -300,10 +325,10 @@ class ZipFolderEndToEndTest {
     }
 
     @Test
-    fun cancellingSingleZipPickerKeepsTheChosenFolder() {
+    fun cancellingTheZipPickerKeepsTheChosenFolder() {
         val viewModel = viewModel(RecordingMetadata())
         try {
-            viewModel.pickZipFile()
+            viewModel.pickMultipleZips()
             assertEquals(zipFolder.path, viewModel.zipFolder)
             assertTrue(viewModel.selectedZipFiles.isEmpty())
         } finally {

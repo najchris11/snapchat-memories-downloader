@@ -311,8 +311,9 @@ class DashboardViewModel(
         }
     }
     fun pickZipFolder() = pickers.pickZipFolder { it?.let { path -> zipFolder = path; selectedZipFiles = emptyList(); zipSourceMode = ZipSourceMode.Folder } }
-    fun pickZipFile() = pickers.pickZipFile { it?.let { path -> selectedZipFiles = listOf(path); zipFolder = null; zipSourceMode = ZipSourceMode.MultipleFiles } }
-    fun pickMultipleZips() = pickers.pickMultipleZips { paths -> if (paths.isNotEmpty()) { selectedZipFiles = paths; zipFolder = null } }
+    fun pickMultipleZips() = pickers.pickMultipleZips { paths ->
+        if (paths.isNotEmpty()) { selectedZipFiles = paths; zipFolder = null; zipSourceMode = ZipSourceMode.MultipleFiles }
+    }
 
     fun changeImportMode(mode: ImportMode) { importMode = mode }
 

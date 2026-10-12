@@ -156,6 +156,8 @@
     <string name="picker_output_title">Choose an output folder</string>
     <string name="picker_zip_folder_title">Choose the folder that holds your Snapchat ZIPs</string>
     <string name="picker_zip_files_title">Choose your Snapchat ZIP files</string>
+    <string name="picker_zip_files_filter">ZIP archives</string>
+    <string name="picker_history_filter">Snapchat history (JSON or HTML)</string>
 
     <!-- Log panel -->
     <string name="log_view_logs">View log</string>

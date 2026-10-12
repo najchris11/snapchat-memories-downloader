@@ -131,7 +131,7 @@ fun App(
                 BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                     // Medium is a real bucket, not a synonym for Expanded: it keeps the
                     // sidebar but the screens drop their fixed-width secondary panels, since
-                    // 600–840dp cannot afford a 220dp sidebar and a 280dp inspector at once.
+                    // 1000–1200dp cannot afford a 220dp sidebar and a 280dp inspector at once.
                     val windowSize = getActiveWindowSize(maxWidth, layoutOverride)
                     if (showOnboarding) {
                         // Inside BoxWithConstraints rather than over the whole window, so the

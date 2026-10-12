@@ -1087,6 +1087,7 @@ class DashboardViewModelTest {
 
     private class OutcomeRunner(
         private val zips: List<String> = emptyList(),
+        private val extractResults: List<ExtractResult> = emptyList(),
         private val archiveWarnings: List<String> = emptyList(),
         private val combineResults: List<CombineResult> = emptyList(),
         private val dateFallbackErrors: List<String> = emptyList(),
@@ -1101,6 +1102,7 @@ class DashboardViewModelTest {
             onProgress: (ExtractResult) -> Unit,
         ) {
             extractCalled = true
+            extractResults.forEach(onProgress)
         }
         override suspend fun extractDownloadedArchives(
             outputDir: String,
@@ -1224,9 +1226,10 @@ class DashboardViewModelTest {
             write("/history.json".toPath()) { writeUtf8(historyJson) }
         },
         mode: ImportMode = ImportMode.Legacy,
+        media: MediaProcessor = FakeMediaProcessor(),
     ) = DashboardViewModel(
         zipPipelineRunner = runner,
-        mediaProcessor = FakeMediaProcessor(),
+        mediaProcessor = media,
         fileSystem = disk,
         pickers = FolderPickers(),
         outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
@@ -1248,6 +1251,173 @@ class DashboardViewModelTest {
             dryRun = true,
         )
         awaitCompletion(this)
+    }
+
+    // The ZIP log used fixed plural nouns for a single memory and parsed file, and the
+    // final summary repeated the error. Exercise both quantities through a real ZIP run.
+    @Test
+    fun zipLogAgreesWithOneAndTwoMemoriesAndFiles() {
+        for (count in 1..2) {
+            val entries = (1..count).map { n -> "memories/2023-10-12_AAA${n}-main.jpg" to "photo" }
+            val viewModel = outcomeViewModel(OutcomeRunner(zips = listOf(realZip(*entries.toTypedArray()))), mode = ImportMode.Zip)
+            viewModel.runWith(combine = false)
+
+            val memory = if (count == 1) "1 memory" else "2 memories"
+            val files = if (count == 1) "1 file" else "2 files"
+            assertTrue(viewModel.logs.any { "$memory, $files parsed" in it }, viewModel.logs.toString())
+            assertTrue(viewModel.logs.any { "Indexed $memory across 1 ZIP file" in it }, viewModel.logs.toString())
+            assertTrue(viewModel.logs.any { "Done — $memory, 0 files on disk" in it }, viewModel.logs.toString())
+        }
+    }
+
+    // The history parser logged "1 items"; date tagging and badge persistence used
+    // "1 files" on their one-file paths.
+    @Test
+    fun parsedItemsAndDateMetadataLogAgreeWithOneAndTwo() {
+        for (count in 1..2) {
+            val rows = (1..count).joinToString(",") { n ->
+                """{"Download Link":"https://example.com/$n","Date":"2024-01-01 00:00:00 UTC"}"""
+            }
+            val disk = FakeFileSystem().apply {
+                createDirectories("/out".toPath())
+                write("/history.json".toPath()) { writeUtf8("""{"Saved Media":[$rows]}""") }
+            }
+            val legacy = outcomeViewModel(OutcomeRunner(), disk)
+            legacy.runWith(combine = false)
+            val items = if (count == 1) "1 item" else "2 items"
+            assertTrue(legacy.logs.any { "parsed $items" in it }, legacy.logs.toString())
+            assertTrue(legacy.logs.any { it == "[INFO] Library badges saved (0 files)." }, legacy.logs.toString())
+
+            val entries = (1..count).map { n -> "memories/2023-10-12_AAA${n}-main.jpg" to "photo" }
+            val zip = outcomeViewModel(OutcomeRunner(zips = listOf(realZip(*entries.toTypedArray()))), mode = ImportMode.Zip)
+            zip.startSync(false, true, false, false, false, true)
+            awaitCompletion(zip)
+            val files = if (count == 1) "1 file" else "2 files"
+            assertTrue(zip.logs.any { it.startsWith("[INFO] Metadata: $files tagged") }, zip.logs.toString())
+
+            val failedMedia = object : MediaProcessor by FakeMediaProcessor() {
+                override fun writeDateMetadataBatch(
+                    filePaths: List<String>,
+                    dateOnly: String,
+                    onError: ((String) -> Unit)?,
+                ): Int {
+                    filePaths.forEach { onError?.invoke("date metadata failed: $it") }
+                    return 0
+                }
+            }
+            val failed = outcomeViewModel(
+                OutcomeRunner(zips = listOf(realZip(*entries.toTypedArray()))),
+                mode = ImportMode.Zip,
+                media = failedMedia,
+            )
+            failed.startSync(false, true, false, false, false, true)
+            awaitCompletion(failed)
+            assertTrue(
+                failed.logs.any { it == "[INFO] Metadata: 0 files tagged, $files could not be tagged (see [WARN] lines above)." },
+                failed.logs.toString(),
+            )
+        }
+    }
+
+    // The combine callback logged "1 overlay pairs" before the date fallback phase.
+    @Test
+    fun combineLogAgreesWithOneAndTwoOverlayPairs() {
+        for (count in 1..2) {
+            val results = (1..count).map { n -> CombineResult(uuid = "pair$n", outputPath = "", status = "combined") }
+            val viewModel = newViewModel(results, metaStartTotal = count)
+            viewModel.runCombineOnly()
+
+            val pairs = if (count == 1) "1 overlay pair" else "2 overlay pairs"
+            val files = if (count == 1) "1 file" else "2 files"
+            assertTrue(viewModel.logs.any { it.startsWith("[INFO] Found $pairs. Combining") }, viewModel.logs.toString())
+            assertTrue(viewModel.logs.any { it.startsWith("[INFO] Combined $pairs.") }, viewModel.logs.toString())
+            assertTrue(viewModel.logs.any { "Tagging combined $files with date metadata" in it }, viewModel.logs.toString())
+
+            val failures = (1..count).map { n -> CombineResult(uuid = "failed$n", outputPath = "", status = "error: boom") }
+            val failed = newViewModel(failures)
+            failed.runCombineOnly()
+            val errors = if (count == 1) "1 error" else "2 errors"
+            assertTrue(failed.logs.any { it == "[INFO] Combined 0 overlay pairs, $errors." }, failed.logs.toString())
+        }
+    }
+
+    // Extraction used a bare count and a fixed "errors" noun, which hid what was counted
+    // and produced "1 errors". The final disk count must agree with the same results.
+    @Test
+    fun extractionLogAgreesWithOneAndTwoFilesAndErrors() {
+        for (count in 1..2) {
+            val entries = (1..count).map { n -> "memories/2023-10-12_AAA${n}-main.jpg" to "photo" }
+            val results = (1..count).map { n ->
+                ExtractResult("item$n", "item$n.jpg", "/out/item$n.jpg", skipped = false, error = null)
+            }
+            val viewModel = outcomeViewModel(
+                OutcomeRunner(zips = listOf(realZip(*entries.toTypedArray())), extractResults = results),
+                mode = ImportMode.Zip,
+            )
+            viewModel.runWith(combine = false)
+            val files = if (count == 1) "1 file" else "2 files"
+            assertTrue(viewModel.logs.any { it == "[INFO] Extracted ${if (count == 1) "1 new file" else "2 new files"}, 0 existing files." }, viewModel.logs.toString())
+            assertTrue(viewModel.logs.any { "Done — ${if (count == 1) "1 memory" else "2 memories"}, $files on disk" in it }, viewModel.logs.toString())
+
+            val existing = outcomeViewModel(
+                OutcomeRunner(zips = listOf(realZip(*entries.toTypedArray())), extractResults = results.map { it.copy(skipped = true) }),
+                mode = ImportMode.Zip,
+            )
+            existing.runWith(combine = false)
+            assertTrue(existing.logs.any { it == "[INFO] Extracted 0 new files, ${if (count == 1) "1 existing file" else "2 existing files"}." }, existing.logs.toString())
+
+            val errors = results.map { it.copy(error = "broken") }
+            val failed = outcomeViewModel(
+                OutcomeRunner(zips = listOf(realZip(*entries.toTypedArray())), extractResults = errors),
+                mode = ImportMode.Zip,
+            )
+            failed.runWith(combine = false)
+            assertTrue(failed.logs.any { it == "[INFO] Extracted 0 new files, 0 existing files, ${if (count == 1) "1 error" else "2 errors"}." }, failed.logs.toString())
+        }
+    }
+
+    // The combine summary's skipped count had no noun, and the encoder fallback's
+    // trailing count left a fixed plural at the start of the sentence.
+    @Test
+    fun combineSkippedAndEncoderFallbackLogsAgreeWithOneAndTwo() {
+        for (count in 1..2) {
+            val skipped = (1..count).map { n -> CombineResult("pair$n", "", "skipped: no overlay") }
+            val media = object : MediaProcessor by FakeMediaProcessor() {
+                override fun activeVideoEncoder() = "h264_test"
+                override fun videoEncodeStats() = com.najdev.snapvault.metadata.VideoEncodeStats(1, count)
+            }
+            val viewModel = outcomeViewModel(
+                OutcomeRunner(combineResults = skipped),
+                media = media,
+            )
+            viewModel.runWith()
+            val pairs = if (count == 1) "1 overlay pair" else "2 overlay pairs"
+            val encodes = if (count == 1) "1 video encode" else "2 video encodes"
+            assertTrue(viewModel.logs.any { it == "[INFO] Combined 0 overlay pairs, $pairs skipped (see warnings above)." }, viewModel.logs.toString())
+            assertTrue(viewModel.logs.any { it == "[WARN] $encodes fell back to software encoding." }, viewModel.logs.toString())
+        }
+    }
+
+    // The ZIP completion line repeated raw overlay and combine-error counts after the
+    // combine callback had already finished, so the final message must agree too.
+    @Test
+    fun zipCompletionAgreesWithCombinedSkippedAndErrorCounts() {
+        for (count in 1..2) {
+            val results = listOf(CombineResult("combined", "", "combined")) +
+                (1..count).map { n -> CombineResult("skipped$n", "", "skipped: no overlay") } +
+                (1..count).map { n -> CombineResult("error$n", "", "error: failed") }
+            val viewModel = outcomeViewModel(
+                OutcomeRunner(
+                    zips = listOf(realZip("memories/2023-10-12_AAA-main.jpg" to "photo")),
+                    combineResults = results,
+                ),
+                mode = ImportMode.Zip,
+            )
+            viewModel.runWith()
+            val pairs = if (count == 1) "1 overlay pair" else "2 overlay pairs"
+            val errors = if (count == 1) "1 combine error" else "2 combine errors"
+            assertTrue(viewModel.logs.any { "1 overlay combined ($pairs skipped), $errors." in it }, viewModel.logs.toString())
+        }
     }
 
     // D10, observed live: a ZIP holding only notes.txt went through metadata, combination and

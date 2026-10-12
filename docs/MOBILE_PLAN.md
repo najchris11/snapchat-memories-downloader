@@ -464,6 +464,19 @@ convincing false negative. Apple's `strings` has no `-e` flag.
   report `SkippedVideo` and leave originals untouched, so this is a missing
   feature, not a correctness bug. Media3 `Transformer` (Android) and
   `AVMutableVideoComposition` (iOS) are the routes.
+- **Onboarding animation: choosing several ZIPs at once.** The "Point SnapVault at the
+  ZIPs" step explains, in text, the two ways to choose a source: a folder of ZIPs, or the
+  ZIP files themselves, selected together (#65). Text undersells the second one, because
+  multi-select works differently in each platform's native file picker. Wanted: a short looping animation of several archives being picked and
+  landing on the ZIP files button, which then reads "3 ZIP files".
+  *Decision:* draw it in Compose, do not bundle a recording. A packed-in video grows every
+  install on every platform, cannot follow dark mode, the theme or a translation, and goes
+  stale the first time the picker or the Dashboard changes. A Compose animation costs a few
+  KB, uses `MaterialTheme` colours and `strings.xml`, and is testable. Requirements: honour
+  reduced motion with a still frame; give it a `contentDescription` that says what it shows;
+  no text baked into an image. *Fallback:* if the animation is not worth building, record a
+  clip and host it, as the existing walkthrough already is (`onb_video_url`), rather than
+  bundling it.
 - **No mobile test execution anywhere.** All platform builds now block PRs,
   including the complete iOS simulator app and its generated launch plist, but
   device or simulator runtime tests remain a separate gap.

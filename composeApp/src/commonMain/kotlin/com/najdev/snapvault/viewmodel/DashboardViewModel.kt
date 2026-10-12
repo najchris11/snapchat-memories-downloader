@@ -310,8 +310,10 @@ class DashboardViewModel(
             }
         }
     }
-    fun pickZipFolder() = pickers.pickZipFolder { it?.let { path -> zipFolder = path; selectedZipFiles = emptyList() } }
-    fun pickMultipleZips() = pickers.pickMultipleZips { paths -> if (paths.isNotEmpty()) { selectedZipFiles = paths; zipFolder = null } }
+    fun pickZipFolder() = pickers.pickZipFolder { it?.let { path -> zipFolder = path; selectedZipFiles = emptyList(); zipSourceMode = ZipSourceMode.Folder } }
+    fun pickMultipleZips() = pickers.pickMultipleZips { paths ->
+        if (paths.isNotEmpty()) { selectedZipFiles = paths; zipFolder = null; zipSourceMode = ZipSourceMode.MultipleFiles }
+    }
 
     fun changeImportMode(mode: ImportMode) { importMode = mode }
 
@@ -786,15 +788,11 @@ class DashboardViewModel(
         lowSpaceMode: Boolean = false,
     ) {
         log("[INFO] Scanning for ZIP files…")
-        val zipFiles: List<String> = when (zipSourceMode) {
-            ZipSourceMode.Folder -> {
-                zipPipelineRunner.listZipFiles(
-                    zipFolder ?: throw PipelineAbortException("No ZIP folder selected.")
-                )
-            }
-            ZipSourceMode.MultipleFiles -> {
-                selectedZipFiles.ifEmpty { throw PipelineAbortException("No ZIP files selected.") }
-            }
+        val selectedFolder = zipFolder
+        val zipFiles: List<String> = when {
+            selectedZipFiles.isNotEmpty() -> selectedZipFiles
+            selectedFolder != null -> zipPipelineRunner.listZipFiles(selectedFolder)
+            else -> throw PipelineAbortException(getString(Res.string.zip_source_missing_error))
         }
 
         if (zipFiles.isEmpty()) throw PipelineAbortException("No ZIP files found in the selected folder.")

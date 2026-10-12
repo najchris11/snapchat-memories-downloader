@@ -15,11 +15,11 @@ import okio.fakefilesystem.FakeFileSystem
  * pipeline runner that does nothing, and a filesystem that is not the real one. Tests that
  * drive a run build their own, because what the runner does is the thing under test there.
  */
-internal fun idleDashboardViewModel() = DashboardViewModel(
+internal fun idleDashboardViewModel(pickers: PlatformPickers = NoPickers) = DashboardViewModel(
     zipPipelineRunner = IdleRunner,
     mediaProcessor = IdleTools,
     fileSystem = FakeFileSystem(),
-    pickers = NoPickers,
+    pickers = pickers,
     outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
     outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
 )

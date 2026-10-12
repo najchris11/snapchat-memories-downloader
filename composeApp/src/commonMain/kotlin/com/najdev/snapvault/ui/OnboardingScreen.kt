@@ -25,7 +25,9 @@ import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.CleaningServices
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.FileCopy
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.FolderZip
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.PlayCircleOutline
 import androidx.compose.material.icons.outlined.Schedule
@@ -456,6 +458,8 @@ private fun FolderResult(text: String, ok: Boolean) {
 private fun ChooseFoldersStep() {
     StepHeading(Res.string.onb_folders_title)
     StepBody(Res.string.onb_folders_body)
+    PhaseCard(Icons.Outlined.FolderZip, Res.string.onb_folders_source_folder_title, Res.string.onb_folders_source_folder_body)
+    PhaseCard(Icons.Outlined.FileCopy, Res.string.onb_folders_source_files_title, Res.string.onb_folders_source_files_body)
     StepNote(stringResource(Res.string.onb_folders_space), Icons.Outlined.FolderOpen)
     StepNote(stringResource(Res.string.onb_folders_resume), Icons.Outlined.Schedule)
 }

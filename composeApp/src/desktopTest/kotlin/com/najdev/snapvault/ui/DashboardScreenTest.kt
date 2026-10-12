@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasClickAction
@@ -17,6 +18,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.v2.runComposeUiTest
 import com.najdev.snapvault.ImportMode
+import com.najdev.snapvault.PlatformPickers
 import com.najdev.snapvault.WindowSize
 import com.najdev.snapvault.viewmodel.DEFAULT_DRY_RUN
 import com.najdev.snapvault.viewmodel.DEFAULT_PIPELINE_EXPANDED
@@ -55,6 +57,62 @@ class DashboardScreenTest {
             DEFAULT_PIPELINE_EXPANDED,
             "Pipeline Options must start expanded, or an enabled dedupe step is invisible",
         )
+    }
+
+    // Folder and file used to be exclusive tabs; a ZIP picked through the file route could
+    // leave Start disabled when the folder tab was active.
+    @Test
+    fun zipSourceShowsBothPickerActionsAndEnablesStartForEitherSelection() = runComposeUiTest {
+        val viewModel = idleDashboardViewModel(object : PlatformPickers {
+            override fun pickHtmlFile(onResult: (String?) -> Unit) = onResult(null)
+            override fun pickOutputFolder(onResult: (String?) -> Unit) = onResult("/library")
+            override fun pickZipFolder(onResult: (String?) -> Unit) = onResult("/exports")
+            override fun pickMultipleZips(onResult: (List<String>) -> Unit) = onResult(listOf("/exports/memories.zip"))
+        })
+        setContent {
+            SnapVaultTheme(darkMode = true) { DashboardScreen(viewModel = viewModel, onNavigateToSettings = {}) }
+        }
+
+        onNodeWithText(stringResource("zip_folder_placeholder")).assertIsDisplayed()
+        onNodeWithText(stringResource("zip_files_placeholder")).assertIsDisplayed()
+        onAllNodes(hasText(stringResource("zip_files_label")) and isToggleable()).assertCountEquals(0)
+        onNode(hasText("Start", substring = true) and hasClickAction()).assertIsNotEnabled()
+
+        viewModel.pickOutputFolder()
+        onNodeWithText(stringResource("zip_files_placeholder")).performClick()
+        waitForIdle()
+        onNode(hasText("Start", substring = true) and hasClickAction()).assertIsEnabled()
+
+        onNodeWithText(stringResource("zip_folder_placeholder")).performClick()
+        waitForIdle()
+        onNode(hasText("Start", substring = true) and hasClickAction()).assertIsEnabled()
+        viewModel.dispose()
+    }
+
+    // The ZIP files button used to name only the first archive, so choosing three looked the
+    // same as choosing one and the user could not tell the whole selection had registered.
+    @Test
+    fun zipFilesButtonNamesOneArchiveAndCountsSeveral() = runComposeUiTest {
+        var chosen = listOf("/exports/memories-1.zip")
+        val viewModel = idleDashboardViewModel(object : PlatformPickers {
+            override fun pickHtmlFile(onResult: (String?) -> Unit) = onResult(null)
+            override fun pickOutputFolder(onResult: (String?) -> Unit) = onResult("/library")
+            override fun pickZipFolder(onResult: (String?) -> Unit) = onResult("/exports")
+            override fun pickMultipleZips(onResult: (List<String>) -> Unit) = onResult(chosen)
+        })
+        setContent {
+            SnapVaultTheme(darkMode = true) { DashboardScreen(viewModel = viewModel, onNavigateToSettings = {}) }
+        }
+
+        onNodeWithText(stringResource("zip_files_placeholder")).performClick()
+        waitForIdle()
+        onNodeWithText("memories-1.zip").assertIsDisplayed()
+
+        chosen = listOf("/exports/memories-1.zip", "/downloads/memories-2.zip")
+        onNodeWithText("memories-1.zip").performClick()
+        waitForIdle()
+        onNodeWithText("2 ZIP files").assertIsDisplayed()
+        viewModel.dispose()
     }
 
     private fun stringResource(key: String): String {

@@ -198,6 +198,32 @@ class OnboardingScreenTest {
         )
     }
 
+    // The two ways of choosing a source are the difference this step exists to explain. The
+    // copy has to name both buttons as they are labelled on the Dashboard, or a new user is
+    // left matching prose to controls.
+    @Test
+    fun theFoldersStepExplainsFolderVersusSeveralZips() {
+        runComposeUiTest {
+            setContent {
+                SnapVaultTheme(darkMode = true) {
+                    OnboardingScreen(
+                        onFinish = {},
+                        onSkip = {},
+                        dropFolderSuggestion = null,
+                        onCreateDropFolder = { DropFolderOutcome.Created },
+                        canRevealFolder = false,
+                        onOpenUrl = { _, _ -> },
+                    )
+                }
+            }
+            repeat(2) { onNodeWithText(stringResource("onb_next")).performClick() }
+            onNodeWithText(stringResource("onb_folders_source_folder_title")).assertIsDisplayed()
+            onNodeWithText(stringResource("onb_folders_source_files_title")).assertIsDisplayed()
+        }
+        assertEquals(stringResource("zip_folder_label"), stringResource("onb_folders_source_folder_title"))
+        assertEquals(stringResource("zip_files_label"), stringResource("onb_folders_source_files_title"))
+    }
+
     // The space advice promised SnapVault "offers a way through if the disk is tight". That
     // offer — deleting each ZIP as it is imported — is gated off for release, so a user who
     // trusted the promise met a plain refusal. The copy may only promise it while it ships.

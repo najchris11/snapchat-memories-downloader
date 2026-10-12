@@ -257,7 +257,7 @@ class ZipFolderEndToEndTest {
             assertEquals(setOf(mediaName, overlayName), scanMediaFiles(library.path).map { File(it.id).name }.toSet())
 
             viewModel.importFolder()
-            assertTrue(viewModel.logs.any { "Extracted 0 new, 2 already existed" in it })
+            assertTrue(viewModel.logs.any { "Extracted 0 new files, 2 existing files" in it })
             assertContentEquals(bytes, File(library, mediaName).readBytes())
             assertContentEquals(overlayBytes, File(library, overlayName).readBytes())
         } finally {

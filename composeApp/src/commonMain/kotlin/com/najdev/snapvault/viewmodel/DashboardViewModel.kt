@@ -817,13 +817,13 @@ class DashboardViewModel(
                 val sorted = entries.map { it.date }.sorted()
                 "${sorted.first()} – ${sorted.last()}"
             } else "no entries"
-            log("[INFO] $zipName: ${entries.size} memories, $parsedFileCount files parsed ($dateRange)")
+            log("[INFO] $zipName: ${plural(Res.plurals.count_memories, entries.size)}, ${plural(Res.plurals.count_files, parsedFileCount)} parsed ($dateRange)")
             if (unmatchedCount > 0) {
                 log("[WARN] $zipName: skipped ${plural(Res.plurals.count_files, unmatchedCount)} in memories/ — unexpected filename format. Examples: ${unmatchedSamples.joinToString(", ")}")
                 pipelineWarningCount += unmatchedCount
             }
         }
-        log("[INFO] Indexed $totalMemoryCount memories across ${plural(Res.plurals.count_zip_files, itemsByZip.size)}.")
+        log("[INFO] Indexed ${plural(Res.plurals.count_memories, totalMemoryCount)} across ${plural(Res.plurals.count_zip_files, itemsByZip.size)}.")
 
         // Stop before touching the output folder. Carrying on ran metadata, combination and
         // dedupe over whatever the folder already held, saved an empty index, and finished at
@@ -935,8 +935,8 @@ class DashboardViewModel(
         speedText = "SPEED: --"
         etaText = "ETA: --"
         val extractSummary = buildString {
-            append("[INFO] Extracted $extractedCount new, $skippedCount already existed")
-            if (extractErrorCount > 0) append(", $extractErrorCount errors")
+            append("[INFO] Extracted ${plural(Res.plurals.count_new_files, extractedCount)}, ${plural(Res.plurals.count_existing_files, skippedCount)}")
+            if (extractErrorCount > 0) append(", ${plural(Res.plurals.count_errors, extractErrorCount)}")
             append(".")
         }
         log(extractSummary)
@@ -994,7 +994,7 @@ class DashboardViewModel(
             // this run and carry `favorited = false`, and a favorite toggled *during* the run
             // exists only on disk. Writing the run's own map would wipe both.
             VaultIndex.writeMerging(fileSystem, outDir, downloadedMeta, derived.favoritesFrom, derived.goneSources)
-            log("[INFO] Library badges saved (${downloadedMeta.size} files).")
+            log("[INFO] Library badges saved (${plural(Res.plurals.count_files, downloadedMeta.size)}).")
         }.onFailure { e ->
             // Every badge and favorite this run carried lives in that file; failing to save it
             // is a failed step, not a footnote under "Run complete!" (D10).
@@ -1003,13 +1003,13 @@ class DashboardViewModel(
         }
 
         val summary = buildString {
-            append("[SUCCESS] Done — $totalMemoryCount memories")
-            append(", ${extractedCount + skippedCount} files on disk")
+            append("[SUCCESS] Done — ${plural(Res.plurals.count_memories, totalMemoryCount)}")
+            append(", ${plural(Res.plurals.count_files, extractedCount + skippedCount)} on disk")
             if (runCombine && pipelineCombinedCount > 0) {
-                append(", $pipelineCombinedCount overlays combined")
-                if (pipelineCombineSkipped > 0) append(" ($pipelineCombineSkipped skipped)")
+                append(", ${plural(Res.plurals.count_overlays, pipelineCombinedCount)} combined")
+                if (pipelineCombineSkipped > 0) append(" (${plural(Res.plurals.count_overlay_pairs, pipelineCombineSkipped)} skipped)")
             }
-            if (pipelineCombineErrors > 0) append(", $pipelineCombineErrors combine errors")
+            if (pipelineCombineErrors > 0) append(", ${plural(Res.plurals.count_combine_errors, pipelineCombineErrors)}")
             append(".")
         }
         log(summary)
@@ -1034,7 +1034,7 @@ class DashboardViewModel(
         log("[INFO] Parsing memories history (${if (isJson) "JSON" else "HTML"})…")
 
         val parsed = if (isJson) HistoryParser.parseJson(fileContent) else HistoryParser.parse(fileContent)
-        log("[INFO] File size: ${fileContent.length / 1024}KB — parsed ${parsed.size} items")
+        log("[INFO] File size: ${fileContent.length / 1024}KB — parsed ${plural(Res.plurals.count_items, parsed.size)}")
         if (parsed.isEmpty() && isJson)
             log("[DEBUG] JSON parsed but 0 items — verify the file contains a 'Saved Media' array")
         if (parsed.isEmpty() && !isJson) log("[DEBUG] ${HistoryParser.diagnose(fileContent)}")
@@ -1112,7 +1112,7 @@ class DashboardViewModel(
             }
             speedText = "SPEED: --"
             etaText = "ETA: --"
-            log("[INFO] Downloads: $downloadedCount new, $skippedCount existing${if (errorCount > 0) ", $errorCount errors" else ""}.")
+            log("[INFO] Downloads: ${plural(Res.plurals.count_new_files, downloadedCount)}, ${plural(Res.plurals.count_existing_files, skippedCount)}${if (errorCount > 0) ", ${plural(Res.plurals.count_errors, errorCount)}" else ""}.")
         }
 
         currentStep = 2
@@ -1151,7 +1151,7 @@ class DashboardViewModel(
             // this run and carry `favorited = false`, and a favorite toggled *during* the run
             // exists only on disk. Writing the run's own map would wipe both.
             VaultIndex.writeMerging(fileSystem, outDir, downloadedMeta, derived.favoritesFrom, derived.goneSources)
-            log("[INFO] Library badges saved (${downloadedMeta.size} files).")
+            log("[INFO] Library badges saved (${plural(Res.plurals.count_files, downloadedMeta.size)}).")
         }.onFailure { e ->
             // Every badge and favorite this run carried lives in that file; failing to save it
             // is a failed step, not a footnote under "Run complete!" (D10).
@@ -1227,7 +1227,7 @@ class DashboardViewModel(
 
         speedText = "SPEED: --"
         etaText = "ETA: --"
-        log("[INFO] Metadata: $metaCount files tagged${if (metaFailCount > 0) ", $metaFailCount could not be tagged (see [WARN] lines above)" else ""}.")
+        log("[INFO] Metadata: ${plural(Res.plurals.count_files, metaCount)} tagged${if (metaFailCount > 0) ", ${plural(Res.plurals.count_files, metaFailCount)} could not be tagged (see [WARN] lines above)" else ""}.")
         pipelineFailureCount += metaFailCount
     }
 
@@ -1385,9 +1385,9 @@ class DashboardViewModel(
             if (summaryLogged) return
             summaryLogged = true
             val combineSummary = buildString {
-                append("[INFO] Combined $combinedCount overlay pairs")
-                if (combineSkippedCount > 0) append(", $combineSkippedCount skipped (see warnings above)")
-                if (combineErrorCount > 0) append(", $combineErrorCount errors")
+                append("[INFO] Combined ${progressStrings.overlayPairs(combinedCount)}")
+                if (combineSkippedCount > 0) append(", ${progressStrings.overlayPairs(combineSkippedCount)} skipped (see warnings above)")
+                if (combineErrorCount > 0) append(", ${progressStrings.errors(combineErrorCount)}")
                 append(".")
             }
             log(combineSummary)
@@ -1397,7 +1397,7 @@ class DashboardViewModel(
                     log("[INFO] Video encodes: ${stats.hardware} hardware, ${stats.software} software.")
                     // A hardware encoder was active at start but some files still went software.
                     if (combineEncoder != null && stats.software > 0) {
-                        log("[WARN] Videos that fell back to software encoding: ${stats.software}.")
+                        log("[WARN] ${progressStrings.videoEncodes(stats.software)} fell back to software encoding.")
                     }
                 }
             }
@@ -1418,7 +1418,7 @@ class DashboardViewModel(
                 // Probe-backed: names an encoder only if a real test encode succeeded.
                 combineEncoder = mediaProcessor.activeVideoEncoder()
                 val encoderLabel = combineEncoder?.let { "hardware ($it)" } ?: "software (libx264)"
-                log("[INFO] Found $actual overlay pairs. Combining… [video encoder: $encoderLabel]")
+                log("[INFO] Found ${progressStrings.overlayPairs(actual)}. Combining… [video encoder: $encoderLabel]")
                 progressText = progressStrings.combining(0, actual)
                 // Nothing to combine — no onProgress callback will ever fire to close this out.
                 if (actual == 0) {
@@ -1431,7 +1431,7 @@ class DashboardViewModel(
                 // of a precise-looking 0% (BUG-04) — and reset stale combine-phase metrics
                 // (BUG-04's "stale ETA/pairs-per-sec" complaint) the moment this sub-phase
                 // starts, not whenever the whole combine phase eventually returns.
-                log("[INFO] Tagging combined files with date metadata… ($total)")
+                log("[INFO] Tagging combined ${progressStrings.files(total)} with date metadata…")
                 progressText = progressStrings.taggingCombined
                 progress = 0f
                 indeterminate = true
@@ -1643,7 +1643,7 @@ class DashboardViewModel(
                 log("[INFO] Preview complete — ${plural(Res.plurals.count_duplicate_files, totalDeleted)} would be deleted. Turn off Preview duplicate removal to delete them.")
             } else if (totalFailed > 0) {
                 pipelineFailureCount += totalFailed
-                log("[WARN] Deduplication: deleted ${plural(Res.plurals.count_files, totalDeleted)}; $totalFailed could not be deleted.")
+                log("[WARN] Deduplication: deleted ${plural(Res.plurals.count_files, totalDeleted)}; ${plural(Res.plurals.count_files, totalFailed)} could not be deleted.")
             }
         }
     }

@@ -77,6 +77,19 @@
     <!-- Dashboard banners -->
     <string name="banner_android_preview_title">Android preview</string>
     <string name="banner_android_preview_body">SnapVault on Android is an early preview. Importing does not work yet, so nothing will appear in your Library.</string>
+    <string name="banner_capabilities_title">Limited media support</string>
+    <string name="banner_capability_image_metadata_full">Date and location metadata are written to photos.</string>
+    <string name="banner_capability_image_metadata_partial">Some image metadata cannot be written on this build.</string>
+    <string name="banner_capability_image_metadata_unavailable">Image date and location metadata cannot be written on this build.</string>
+    <string name="banner_capability_video_metadata_full">Date and location metadata are written to videos.</string>
+    <string name="banner_capability_video_metadata_partial">Videos receive a file date, but embedded date and location metadata are unavailable.</string>
+    <string name="banner_capability_video_metadata_unavailable">Video date and location metadata cannot be written on this build.</string>
+    <string name="banner_capability_image_overlay_full">Photo overlays are combined on this build.</string>
+    <string name="banner_capability_image_overlay_partial">Some photo overlays cannot be combined on this build.</string>
+    <string name="banner_capability_image_overlay_unavailable">Photo overlays are not combined on this build.</string>
+    <string name="banner_capability_video_overlay_full">Video overlays are combined on this build.</string>
+    <string name="banner_capability_video_overlay_partial">Some video overlays cannot be combined on this build.</string>
+    <string name="banner_capability_video_overlay_unavailable">Video overlays are not combined on this build.</string>
     <!-- The count is of failed files and writes, not of the four steps: it once read
          "47 steps failed" for a four-step run. -->
     <plurals name="warn_run_failures_title">
@@ -221,6 +234,18 @@
     <string name="set_output_path_edit">Change</string>
     <string name="set_licence_footer">SnapVault %1$s — GPL-3.0 License</string>
     <string name="set_deps_title">Helper tools</string>
+    <string name="set_capabilities_title">Media capabilities</string>
+    <string name="set_capability_image_metadata">Image metadata</string>
+    <string name="set_capability_image_metadata_description">Date and location tags in photos</string>
+    <string name="set_capability_video_metadata">Video metadata</string>
+    <string name="set_capability_video_metadata_description">Date and location tags in videos</string>
+    <string name="set_capability_image_overlay">Combine photo overlays</string>
+    <string name="set_capability_image_overlay_description">Burns overlays into photos</string>
+    <string name="set_capability_video_overlay">Combine video overlays</string>
+    <string name="set_capability_video_overlay_description">Burns overlays into videos</string>
+    <string name="set_capability_full">Available</string>
+    <string name="set_capability_partial">Limited</string>
+    <string name="set_capability_unavailable">Unavailable</string>
     <string name="set_deps_refresh">Check again</string>
     <string name="set_dep_detected">Found</string>
     <string name="set_dep_missing">Not found</string>

@@ -82,8 +82,8 @@ before claiming done, and do not add to `config/detekt/baseline.xml` to silence 
 ## Strings
 
 User-facing text goes in `composeApp/src/commonMain/composeResources/values/strings.xml`,
-including `contentDescription`s. Roughly half the UI still has hardcoded literals; when you
-touch a line with one, extract it. Do not add new ones.
+including `contentDescription`s. `StringResourceHygieneTest` enforces both directions across
+`ui/`: zero hardcoded display literals and zero unreferenced string keys in `strings.xml`.
 
 Avoid `"item${if (n == 1) "" else "s"}"` — use a plural resource.
 
@@ -100,8 +100,6 @@ Avoid `"item${if (n == 1) "" else "s"}"` — use a plural resource.
   `./gradlew clean` still clears it.
 - The debug build caps imports at 2,500 items. Never diagnose "missing memories" without
   checking `IS_DEBUG` first.
-- `iosMain`'s `VideoPlayer` builds its `AVPlayer` outside `remember`, so it is recreated on
-  every recomposition. Known, unfixed.
 
 ## Commits
 

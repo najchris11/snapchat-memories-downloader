@@ -114,6 +114,9 @@ Items that cannot be completed autonomously from code alone:
   - Submit SnapVault to **AlternativeTo**, **SaaSHub**, and **OpenAlternative** as a free open-source alternative to *FixMyExport*, *SnapEasy*, *KeepMySnaps*, and *MemoriesExport*.
 
 
+- [ ] **Replace the Snapchat-ghost app icon (owner decision).** It risks Play Store and App Store trademark rejection, and iOS needs an opaque 1024px master. Stitch concepts are in `docs/growth-assets/icon-concepts/`.
+- [ ] **Promote native CI jobs to required** once `native-tests.yml` has been reliably green on PRs (added 2026-11-14, not yet run).
+
 ## Iteration 3 delivery notes
 
 - Section 3 changes are in the clean-start local companion checkout at `~/Documents/GitHub/snapvault-web`; they are built and tested but uncommitted and not deployed.

@@ -1,0 +1,305 @@
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.AndroidVideoOverlayExporterTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=
+com.najdev.snapvault.AndroidVideoOverlayExporterTest:
+INSTRUMENTATION_STATUS: test=aRotatedClipGetsTheOverlayAcrossItsDisplayedFrame
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.AndroidVideoOverlayExporterTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=aRotatedClipGetsTheOverlayAcrossItsDisplayedFrame
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.AndroidVideoOverlayExporterTest
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=hdrSourcesAreNotSilentlyDowngraded
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: hdr=hdr-hlg.mp4 completed=false source=(video/hevc, 7) output=null | hdr-pq.mp4 completed=false source=(video/hevc, 6) output=null
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.AndroidVideoOverlayExporterTest
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=hdrSourcesAreNotSilentlyDowngraded
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.AndroidVideoOverlayExporterTest
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=theZipPipelineBurnsAVideoOverlayAndKeepsTheOriginals
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.AndroidVideoOverlayExporterTest
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=theZipPipelineBurnsAVideoOverlayAndKeepsTheOriginals
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.AndroidVideoOverlayExporterTest
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=anOverlayIsBurnedIntoTheVideoAndAudioIsKept
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.AndroidVideoOverlayExporterTest
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=anOverlayIsBurnedIntoTheVideoAndAudioIsKept
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.AndroidVideoOverlayExporterTest
+INSTRUMENTATION_STATUS: current=5
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=cancellingStopsTheEncoderBeforeReturning
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.AndroidVideoOverlayExporterTest
+INSTRUMENTATION_STATUS: current=5
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=cancellingStopsTheEncoderBeforeReturning
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.NonSeekableDocumentTest
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=
+com.najdev.snapvault.NonSeekableDocumentTest:
+INSTRUMENTATION_STATUS: test=aPipeOnlyZipFallsBackToReopenableStreamingWithoutCachingTheArchive
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.NonSeekableDocumentTest
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=aPipeOnlyZipFallsBackToReopenableStreamingWithoutCachingTheArchive
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.PersistedDocumentAccessTest
+INSTRUMENTATION_STATUS: current=7
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=
+com.najdev.snapvault.PersistedDocumentAccessTest:
+INSTRUMENTATION_STATUS: test=aSourceOutsideThePersistedTreeIsNotReadable
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.PersistedDocumentAccessTest
+INSTRUMENTATION_STATUS: current=7
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stack=java.lang.IllegalArgumentException: Supply an existing synthetic document outside the selected tree as nativeOutsideDocument
+	at com.najdev.snapvault.PersistedDocumentAccessTest.aSourceOutsideThePersistedTreeIsNotReadable(PersistedDocumentAccessTest.kt:40)
+
+INSTRUMENTATION_STATUS: stream=
+Error in aSourceOutsideThePersistedTreeIsNotReadable(com.najdev.snapvault.PersistedDocumentAccessTest):
+java.lang.IllegalArgumentException: Supply an existing synthetic document outside the selected tree as nativeOutsideDocument
+	at com.najdev.snapvault.PersistedDocumentAccessTest.aSourceOutsideThePersistedTreeIsNotReadable(PersistedDocumentAccessTest.kt:40)
+
+INSTRUMENTATION_STATUS: test=aSourceOutsideThePersistedTreeIsNotReadable
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.PersistedDocumentAccessTest
+INSTRUMENTATION_STATUS: current=8
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=aPersistedReadGrantReopensArchivesWithoutAnActivityOrNewPickerGrant
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.PersistedDocumentAccessTest
+INSTRUMENTATION_STATUS: current=8
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stack=java.lang.IllegalArgumentException: Select the synthetic two-archive folder first; supply its content URI as nativeFixtureTree
+	at com.najdev.snapvault.PersistedDocumentAccessTest.aPersistedReadGrantReopensArchivesWithoutAnActivityOrNewPickerGrant(PersistedDocumentAccessTest.kt:17)
+
+INSTRUMENTATION_STATUS: stream=
+Error in aPersistedReadGrantReopensArchivesWithoutAnActivityOrNewPickerGrant(com.najdev.snapvault.PersistedDocumentAccessTest):
+java.lang.IllegalArgumentException: Select the synthetic two-archive folder first; supply its content URI as nativeFixtureTree
+	at com.najdev.snapvault.PersistedDocumentAccessTest.aPersistedReadGrantReopensArchivesWithoutAnActivityOrNewPickerGrant(PersistedDocumentAccessTest.kt:17)
+
+INSTRUMENTATION_STATUS: test=aPersistedReadGrantReopensArchivesWithoutAnActivityOrNewPickerGrant
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=9
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=
+com.najdev.snapvault.StreamingExtractionFailureTest:
+INSTRUMENTATION_STATUS: test=aProviderThatReportsAnErrorMidEntryNeverPublishesTheStalledEntry
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=9
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=aProviderThatReportsAnErrorMidEntryNeverPublishesTheStalledEntry
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=10
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=aDocumentTheProviderCannotOpenFailsEveryRequestedEntryAndWritesNothing
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=10
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=aDocumentTheProviderCannotOpenFailsEveryRequestedEntryAndWritesNothing
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=11
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=cancellingBetweenEntriesNeverStartsAStageForTheNextEntry
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=11
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=cancellingBetweenEntriesNeverStartsAStageForTheNextEntry
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=12
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=cancellingWhileTheProviderIsStalledIsHonouredAfterTheBlockedReadReturns
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: cancelLatencyMillisWhileProviderStalled=2713
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=12
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=cancellingWhileTheProviderIsStalledIsHonouredAfterTheBlockedReadReturns
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=13
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=aProviderThatClosesMidEntryFailsThatEntryAndLeavesNoStageOrPartialFile
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=13
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=aProviderThatClosesMidEntryFailsThatEntryAndLeavesNoStageOrPartialFile
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=14
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=aCompleteProviderDocumentPublishesEveryEntryWithoutAStageOrACachedArchive
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=14
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=aCompleteProviderDocumentPublishesEveryEntryWithoutAStageOrACachedArchive
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=15
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=cancellingWhileAnEntryIsBeingStagedStopsAtTheNextReadAndRemovesTheStage
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=15
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=cancellingWhileAnEntryIsBeingStagedStopsAtTheNextReadAndRemovesTheStage
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.Zip64PipeDocumentTest
+INSTRUMENTATION_STATUS: current=16
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=
+com.najdev.snapvault.Zip64PipeDocumentTest:
+INSTRUMENTATION_STATUS: test=listingEntriesPastTheOverFourGibEntryStillFindsThem
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.Zip64PipeDocumentTest
+INSTRUMENTATION_STATUS: current=16
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=listingEntriesPastTheOverFourGibEntryStillFindsThem
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.Zip64PipeDocumentTest
+INSTRUMENTATION_STATUS: current=17
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=historyAfterTheOverFourGibEntryIsReadAndAMissingEntryIsNull
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.Zip64PipeDocumentTest
+INSTRUMENTATION_STATUS: current=17
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=historyAfterTheOverFourGibEntryIsReadAndAMissingEntryIsNull
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.Zip64PipeDocumentTest
+INSTRUMENTATION_STATUS: current=18
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=everyEntryStreamsWithTheExactByteCountAndContent
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.Zip64PipeDocumentTest
+INSTRUMENTATION_STATUS: current=18
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=everyEntryStreamsWithTheExactByteCountAndContent
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.Zip64PipeDocumentTest
+INSTRUMENTATION_STATUS: current=19
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=theServedArchiveIsGenuineZip64WithAnOverFourGibEntry
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.Zip64PipeDocumentTest
+INSTRUMENTATION_STATUS: current=19
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=19
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=theServedArchiveIsGenuineZip64WithAnOverFourGibEntry
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_RESULT: stream=
+
+Time: 35.702
+There were 2 failures:
+1) aSourceOutsideThePersistedTreeIsNotReadable(com.najdev.snapvault.PersistedDocumentAccessTest)
+java.lang.IllegalArgumentException: Supply an existing synthetic document outside the selected tree as nativeOutsideDocument
+	at com.najdev.snapvault.PersistedDocumentAccessTest.aSourceOutsideThePersistedTreeIsNotReadable(PersistedDocumentAccessTest.kt:40)
+2) aPersistedReadGrantReopensArchivesWithoutAnActivityOrNewPickerGrant(com.najdev.snapvault.PersistedDocumentAccessTest)
+java.lang.IllegalArgumentException: Select the synthetic two-archive folder first; supply its content URI as nativeFixtureTree
+	at com.najdev.snapvault.PersistedDocumentAccessTest.aPersistedReadGrantReopensArchivesWithoutAnActivityOrNewPickerGrant(PersistedDocumentAccessTest.kt:17)
+
+FAILURES!!!
+Tests run: 19,  Failures: 2
+
+
+INSTRUMENTATION_CODE: -1

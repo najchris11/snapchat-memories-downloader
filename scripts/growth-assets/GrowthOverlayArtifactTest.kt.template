@@ -1,0 +1,66 @@
+package com.najdev.snapvault.ui
+
+import com.najdev.snapvault.viewmodel.FakeMediaProcessor
+import com.najdev.snapvault.downloader.MetadataCopy
+import com.najdev.snapvault.downloader.OverlayCombiner
+import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.*
+import java.awt.Color
+import java.awt.Font
+import java.awt.GradientPaint
+import java.awt.image.BufferedImage
+import java.io.File
+import javax.imageio.ImageIO
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
+/** Explicit artifact export, copied into desktopTest only by render-growth-assets.sh. */
+class GrowthOverlayArtifactTest {
+    @Test fun exportOverlayAndMetadataDemo() = runBlocking {
+        val folder = File(requireNotNull(System.getenv("SNAPVAULT_GROWTH_OUTPUT"))).apply { mkdirs() }
+        val exiftool = requireNotNull(System.getenv("SNAPVAULT_GROWTH_EXIFTOOL"))
+        fun tags(vararg args: String): String {
+            val process = ProcessBuilder(listOf("perl", exiftool) + args).redirectErrorStream(true).start()
+            val output = process.inputStream.bufferedReader().readText()
+            assertEquals(0, process.waitFor(), output)
+            return output
+        }
+        val main = File(folder, "2024-01-14_demo-main.jpg")
+        val image = BufferedImage(800, 600, BufferedImage.TYPE_INT_RGB)
+        image.createGraphics().apply {
+            paint = GradientPaint(0f, 0f, Color(25, 50, 110), 800f, 600f, Color(150, 65, 130))
+            fillRect(0, 0, 800, 600)
+            color = Color(240, 180, 100); fillOval(480, 80, 150, 150)
+            color = Color(30, 80, 90); fillPolygon(intArrayOf(0, 300, 600), intArrayOf(600, 240, 600), 3)
+            color = Color(45, 100, 105); fillPolygon(intArrayOf(250, 600, 800), intArrayOf(600, 300, 600), 3)
+            dispose()
+        }
+        ImageIO.write(image, "jpg", main)
+        main.copyTo(File(folder, "before.jpg"), overwrite = true)
+        val overlay = BufferedImage(800, 600, BufferedImage.TYPE_INT_ARGB)
+        overlay.createGraphics().apply {
+            color = Color(0, 0, 0, 165); fillRect(0, 380, 800, 100)
+            color = Color.WHITE; font = Font("SansSerif", Font.BOLD, 36)
+            drawString("A weekend worth keeping", 145, 442)
+            dispose()
+        }
+        ImageIO.write(overlay, "png", File(folder, "2024-01-14_demo-overlay.png"))
+        tags("-overwrite_original", "-DateTimeOriginal=2024:01:14 22:00:00", "-OffsetTimeOriginal=-05:00", "-GPSLatitude=40.7128", "-GPSLatitudeRef=N", "-GPSLongitude=74.0060", "-GPSLongitudeRef=W", main.path)
+        val results = mutableListOf<com.najdev.snapvault.downloader.CombineResult>()
+        OverlayCombiner(FakeMediaProcessor(), copyMetadata = { source, dest ->
+            tags("-overwrite_original", "-TagsFromFile", source, "-all:all", dest)
+            MetadataCopy.Copied
+        }).combineAll(folder.path, deleteOriginals = false, workerCount = 1, onProgress = results::add)
+        assertEquals("combined", results.single().status)
+        val after = File(folder, "2024-01-14_demo.jpg")
+        val metadata = tags("-j", "-n", "-DateTimeOriginal", "-OffsetTimeOriginal", "-GPSLatitude", "-GPSLongitude", after.path)
+        val values = Json.parseToJsonElement(metadata).jsonArray.single().jsonObject
+        assertEquals("2024:01:14 22:00:00", values.getValue("DateTimeOriginal").jsonPrimitive.content)
+        assertEquals("-05:00", values.getValue("OffsetTimeOriginal").jsonPrimitive.content)
+        assertEquals(40.7128, values.getValue("GPSLatitude").jsonPrimitive.double)
+        assertEquals(-74.006, values.getValue("GPSLongitude").jsonPrimitive.double)
+        assertTrue(main.exists(), "artifact generation must keep the source")
+        File(folder, "after-metadata.json").writeText(metadata)
+    }
+}

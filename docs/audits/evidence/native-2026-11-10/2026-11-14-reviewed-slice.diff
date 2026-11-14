@@ -1,0 +1,385 @@
+--- a/composeApp/src/iosMain/kotlin/com/najdev/snapvault/metadata/IosVideoOverlayExporter.kt
++++ b/composeApp/src/iosMain/kotlin/com/najdev/snapvault/metadata/IosVideoOverlayExporter.kt
+@@ -50,7 +50,14 @@
+                 request.finishWithImage(scaled.imageByCompositingOverImage(frame).imageByCroppingToRect(extent) as AVFoundationCIImage, null)
+             }
+         })
+-        val exporter = AVAssetExportSession(asset, AVAssetExportPresetHighestQuality)
++        // AVAssetExportPresetHighestQuality re-encodes HLG/PQ as 8-bit H.264 tagged Rec.709, silently
++        // discarding HDR. The HEVC preset keeps the 10-bit transfer function. There is deliberately no
++        // fallback to the SDR preset: a session that cannot be created fails the export instead.
++        val hdr = asset.tracksWithMediaType(AVMediaTypeVideo).any {
++            (it as AVAssetTrack).hasMediaCharacteristic(AVMediaCharacteristicContainsHDRVideo)
++        }
++        val preset = if (hdr) AVAssetExportPresetHEVCHighestQuality else AVAssetExportPresetHighestQuality
++        val exporter = AVAssetExportSession.exportSessionWithAsset(asset, preset) ?: return@exportVideoOverlay false
+         val type = if (output.endsWith(".mov", ignoreCase = true)) AVFileTypeQuickTimeMovie else AVFileTypeMPEG4
+         if (type !in exporter.supportedFileTypes) return@exportVideoOverlay false
+         exporter.outputURL = NSURL.fileURLWithPath(stage)
+--- /dev/null
++++ b/composeApp/src/iosTest/kotlin/com/najdev/snapvault/metadata/IosVideoOverlayExporterTest.kt
+@@ -0,0 +1,244 @@
++package com.najdev.snapvault.metadata
++
++import kotlinx.cinterop.ExperimentalForeignApi
++import kotlinx.coroutines.test.runTest
++import kotlinx.coroutines.CoroutineStart
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.cancelAndJoin
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.withContext
++import kotlinx.coroutines.withTimeout
++import platform.AVFoundation.*
++import kotlinx.cinterop.reinterpret
++import kotlinx.cinterop.useContents
++import platform.Foundation.*
++import platform.CoreMedia.*
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertTrue
++import kotlin.test.assertFalse
++import kotlin.test.assertNotNull
++
++@OptIn(ExperimentalForeignApi::class)
++class IosVideoOverlayExporterTest {
++    // Regression: the Core Animation compositor trapped in IOSurface/XPC during export,
++    // quitting the app before any output could be published. Exercise the real native encoder.
++    // These standalone tests assert export structure; displayed pixels are verified in app-hosted QA.
++    @Test
++    fun nativeExportCompletesWithoutCrashingAndRetainsAudioAndSources() = runTest {
++        verifyExport("source.mp4", 120.0, 160.0)
++    }
++
++    @Test
++    fun aRotatedClipExportsInItsDisplayOrientation() = runTest {
++        verifyExport("rotated.mp4", 160.0, 120.0)
++    }
++
++    @Test
++    fun cancellationDrainsTheEncoderAndKeepsOnlyTheSources() = runTest {
++        val fixture = fixture("source.mp4")
++        try {
++            withContext(Dispatchers.Default) {
++                val job = launch(start = CoroutineStart.UNDISPATCHED) {
++                    exportIosVideoOverlay(fixture.source, fixture.overlay, fixture.output)
++                }
++                try {
++                    withTimeout(10_000) {
++                        while (job.isActive && fixture.names().none { it.endsWith(".stage") }) delay(1)
++                    }
++                    assertTrue(job.isActive, "The test must cancel an active encoder, not an already completed export")
++                    assertTrue(fixture.names().any { it.endsWith(".stage") }, "A real native output must exist before cancellation")
++                    job.cancelAndJoin()
++                    assertTrue(job.isCancelled)
++                    assertEquals(setOf("source.mp4", "overlay.png"), fixture.names())
++                    delay(100)
++                    assertEquals(setOf("source.mp4", "overlay.png"), fixture.names(), "No late encoder output may reappear")
++                } finally {
++                    job.cancelAndJoin()
++                }
++            }
++        } finally {
++            fixture.cleanup()
++        }
++    }
++
++    @Test
++    fun anExistingOutputIsNeverOverwrittenOrTreatedAsThisRunsResult() = runTest {
++        val fixture = fixture("source.mp4")
++        val manager = NSFileManager.defaultManager
++        try {
++            assertTrue(manager.copyItemAtPath(fixture.source, fixture.output, null))
++            val original = assertNotNull(manager.contentsAtPath(fixture.output))
++            assertFalse(exportIosVideoOverlay(fixture.source, fixture.overlay, fixture.output))
++            assertTrue(original.isEqualToData(assertNotNull(manager.contentsAtPath(fixture.output))))
++            assertTrue(manager.fileExistsAtPath(fixture.source))
++            assertTrue(manager.fileExistsAtPath(fixture.overlay))
++            assertTrue(fixture.names().none { it.endsWith(".stage") })
++        } finally {
++            fixture.cleanup()
++        }
++    }
++
++    // The probe must see HDR in the source or the export assertions below prove nothing.
++    @Test
++    fun theProbeSeesHdrInTheSourceFixturesAndNotInTheSdrOne() {
++        for ((name, transfer) in HDR_FIXTURES) {
++            val fixture = fixture(name)
++            try {
++                val probe = probe(fixture.source)
++                println("HDR-PROBE source $name -> codec=${probe.codec} transfer=${probe.transfer} primaries=${probe.primaries} matrix=${probe.matrix} hdr=${probe.hdrCharacteristic}")
++                assertEquals(HEVC, probe.codec, name)
++                assertEquals(transfer, probe.transfer, name)
++                assertEquals("ITU_R_2020", probe.primaries, name)
++                assertTrue(probe.hdrCharacteristic, "$name source must report the HDR characteristic")
++            } finally { fixture.cleanup() }
++        }
++        val sdr = fixture("source.mp4")
++        try {
++            assertFalse(probe(sdr.source).hdrCharacteristic)
++        } finally { sdr.cleanup() }
++    }
++
++    // Regression (found 2026-11-14 on the iPhone 17 Pro simulator): with AVAssetExportPresetHighestQuality
++    // an HLG source exported as H.264 ('avc1') tagged ITU_R_709_2 for transfer, primaries and matrix, with no
++    // HDR characteristic: a silent HDR -> SDR downgrade. HLG/PQ must keep their transfer function, BT.2020
++    // primaries, HEVC codec and HDR characteristic. A refused export also fails (no vacuous pass).
++    // Every fixture is exported and probed before any assertion, so one failure cannot hide another.
++    // Standalone frames are not rendered faithfully here, so this checks stream tags, not pixels.
++    @Test
++    fun hdrSourcesKeepTheirTransferFunctionThroughExport() = runTest {
++        class Result(
++            val name: String, val transfer: String, val completed: Boolean, val sourceRetained: Boolean,
++            val stageLeft: Boolean, val out: StreamProbe?, val width: Double?, val height: Double?, val audio: Int?,
++        )
++        val results = HDR_FIXTURES.map { (name, transfer) ->
++            val fixture = fixture(name)
++            try {
++                val completed = exportIosVideoOverlay(fixture.source, fixture.overlay, fixture.output)
++                val written = NSFileManager.defaultManager.fileExistsAtPath(fixture.output)
++                val exported = if (written) AVURLAsset(NSURL.fileURLWithPath(fixture.output), null) else null
++                val size = exported?.let { (it.tracksWithMediaType(AVMediaTypeVideo).single() as AVAssetTrack).naturalSize }
++                Result(
++                    name, transfer, completed,
++                    sourceRetained = NSFileManager.defaultManager.fileExistsAtPath(fixture.source),
++                    stageLeft = fixture.names().any { it.endsWith(".stage") },
++                    out = if (written) probe(fixture.output) else null,
++                    width = size?.useContents { width }, height = size?.useContents { height },
++                    audio = exported?.tracksWithMediaType(AVMediaTypeAudio)?.size,
++                ).also { r ->
++                    val o = r.out
++                    println("HDR-PROBE $name -> completed=$completed codec=${o?.codec} transfer=${o?.transfer} primaries=${o?.primaries} matrix=${o?.matrix} hdr=${o?.hdrCharacteristic}")
++                }
++            } finally {
++                archiveOutput(fixture, name)
++                fixture.cleanup()
++            }
++        }
++        for (r in results) {
++            assertTrue(r.completed, "${r.name} export must complete")
++            assertTrue(r.sourceRetained, "${r.name} source retained")
++            assertFalse(r.stageLeft, "${r.name} left staged output")
++            val out = assertNotNull(r.out, "${r.name} produced no output")
++            assertEquals(r.transfer, out.transfer, "${r.name} exported with a different transfer function (silent HDR downgrade)")
++            assertTrue(out.hdrCharacteristic, "${r.name} export lost the HDR characteristic")
++            assertEquals(HEVC, out.codec, "${r.name} must stay HEVC (10-bit capable), not be re-encoded as H.264")
++            assertEquals("ITU_R_2020", out.primaries, "${r.name} lost its BT.2020 primaries")
++            assertEquals(120.0, r.width)
++            assertEquals(160.0, r.height)
++            assertEquals(1, r.audio)
++        }
++    }
++
++    @Test
++    fun anSdrSourceStaysSdrAfterExport() = runTest {
++        val fixture = fixture("source.mp4")
++        try {
++            assertTrue(exportIosVideoOverlay(fixture.source, fixture.overlay, fixture.output))
++            val out = probe(fixture.output)
++            println("HDR-PROBE source.mp4 -> codec=${out.codec} transfer=${out.transfer} primaries=${out.primaries} matrix=${out.matrix} hdr=${out.hdrCharacteristic}")
++            assertFalse(out.hdrCharacteristic, "an SDR clip must not be tagged HDR")
++        } finally { fixture.cleanup() }
++    }
++
++    private class StreamProbe(val codec: UInt, val transfer: String?, val primaries: String?, val matrix: String?, val hdrCharacteristic: Boolean)
++
++    private fun probe(path: String): StreamProbe {
++        val track = AVURLAsset(NSURL.fileURLWithPath(path), null).tracksWithMediaType(AVMediaTypeVideo).single() as AVAssetTrack
++        // formatDescriptions holds bridged Objective-C objects (__NSCFType), not CPointers: a plain
++        // cast throws ClassCastException. Bridge with an owned reference and release it afterwards.
++        val retained = CFBridgingRetain(track.formatDescriptions.single()) ?: error("no format description")
++        try {
++            val description: CMFormatDescriptionRef = retained.reinterpret()
++            // The "Get" rule returns an unowned reference: retain before the bridge takes ownership.
++            // An absent key (SDR clips, untagged output) returns NULL; CFRetain(NULL) would abort the runner.
++            fun extension(key: platform.CoreFoundation.CFStringRef?): String? {
++                val value = CMFormatDescriptionGetExtension(description, key) ?: return null
++                return CFBridgingRelease(platform.CoreFoundation.CFRetain(value)) as? String
++            }
++            return StreamProbe(
++                codec = CMFormatDescriptionGetMediaSubType(description),
++                transfer = extension(kCMFormatDescriptionExtension_TransferFunction),
++                primaries = extension(kCMFormatDescriptionExtension_ColorPrimaries),
++                matrix = extension(kCMFormatDescriptionExtension_YCbCrMatrix),
++                hdrCharacteristic = track.hasMediaCharacteristic(AVMediaCharacteristicContainsHDRVideo),
++            )
++        } finally {
++            platform.CoreFoundation.CFRelease(retained)
++        }
++    }
++
++    private companion object {
++        const val HEVC = 0x68766331u // 'hvc1'
++        val HDR_FIXTURES = listOf("hdr-hlg.mp4" to "ITU_R_2100_HLG", "hdr-pq.mp4" to "SMPTE_ST_2084_PQ")
++    }
++
++    private class Fixture(val directory: String) {
++        val source = "$directory/source.mp4"
++        val overlay = "$directory/overlay.png"
++        val output = "$directory/export.mp4"
++        fun names(): Set<String> = NSFileManager.defaultManager.contentsOfDirectoryAtPath(directory, null)
++            .orEmpty().filterIsInstance<String>().toSet()
++        fun cleanup() { NSFileManager.defaultManager.removeItemAtPath(directory, null) }
++    }
++
++    private fun fixture(fileName: String): Fixture {
++        val resources = NSProcessInfo.processInfo.environment["SNAPVAULT_TEST_RESOURCES"] as? String
++            ?: error("Native test resources were not configured")
++        val manager = NSFileManager.defaultManager
++        val fixture = Fixture(NSTemporaryDirectory() + NSUUID().UUIDString)
++        assertTrue(manager.createDirectoryAtPath(fixture.directory, true, null, null))
++        assertTrue(manager.copyItemAtPath("$resources/video-overlay/$fileName", fixture.source, null))
++        assertTrue(manager.copyItemAtPath("$resources/video-overlay/overlay.png", fixture.overlay, null))
++        return fixture
++    }
++
++    private suspend fun verifyExport(fileName: String, width: Double, height: Double) {
++        val fixture = fixture(fileName)
++        val manager = NSFileManager.defaultManager
++        try {
++            assertTrue(exportIosVideoOverlay(fixture.source, fixture.overlay, fixture.output))
++            assertTrue(manager.fileExistsAtPath(fixture.source))
++            assertTrue(manager.fileExistsAtPath(fixture.overlay))
++            val exported = AVURLAsset(NSURL.fileURLWithPath(fixture.output), null)
++            val video = exported.tracksWithMediaType(AVMediaTypeVideo).single() as AVAssetTrack
++            assertEquals(width, video.naturalSize.useContents { this.width })
++            assertEquals(height, video.naturalSize.useContents { this.height })
++            assertEquals(1, exported.tracksWithMediaType(AVMediaTypeAudio).size)
++        } finally {
++            archiveOutput(fixture, fileName)
++            fixture.cleanup()
++        }
++    }
++
++    private fun archiveOutput(fixture: Fixture, fileName: String) {
++        val manager = NSFileManager.defaultManager
++        val artifacts = NSProcessInfo.processInfo.environment["SNAPVAULT_TEST_OUTPUTS"] as? String
++        if (artifacts != null && manager.fileExistsAtPath(fixture.output)) {
++            manager.createDirectoryAtPath(artifacts, true, null, null)
++            val artifact = "$artifacts/$fileName"
++            manager.removeItemAtPath(artifact, null)
++            manager.copyItemAtPath(fixture.output, artifact, null)
++        }
++    }
++}
+--- /dev/null
++++ b/docs/audits/evidence/native-2026-11-10/README.md
+@@ -0,0 +1,44 @@
++# Synthetic HDR exporter validation — 2026-11-10, completed 2026-11-14
++
++## 2026-11-14 result (supersedes the "blocked" status below)
++
++**Finding: the iOS video overlay exporter silently downgraded HDR to SDR. Fixed; verified on the simulator only.**
++
++The Mac SSH route worked on 2026-11-14 (the tree was rsynced to `/tmp/snapvault-hdr-20261114`, JDK `jbr-21.0.7`, simulator iPhone 17 Pro `CF9A84A0-…`, `:composeApp:iosSimulatorArm64Test --tests "*IosVideoOverlayExporterTest*"`). The revised plan was re-reviewed first: `agent-verify --plan` **PASS**.
++
++| Run | Log | Result |
++|---|---|---|
++| 1 | `2026-11-14-run-initial.log` | 3 HDR tests failed with `ClassCastException: __NSCFType cannot be cast to CPointer` at the probe. **Test-harness bug, not a finding**: `formatDescriptions` holds bridged ObjC objects; fixed with `CFBridgingRetain` + `reinterpret` + `CFRelease`. |
++| 2 | `2026-11-14-run-2.log`, `-run-2-junit.xml` | First real run. Control passed. HLG export: `avc1`, transfer/primaries/matrix `ITU_R_709_2`, `hdr=false`. The PQ case was hidden by the first assertion. |
++| 3 | `2026-11-14-run-3-failing-first.log`, `-run-3.xml` | Test restructured to probe every fixture before asserting (nothing weakened), control also pins `ITU_R_2020` primaries. **Unchanged production fails 1/7**: both HLG and PQ export as `avc1` / `ITU_R_709_2` / `hdr=false`. Sources: `hvc1`, `ITU_R_2100_HLG` / `SMPTE_ST_2084_PQ`, `ITU_R_2020`, `hdr=true`. |
++| 4 | `2026-11-14-run-4-fixed.log`, `-run-4.xml` | Fix applied: **7/7 pass**, 0 failures/errors/skips. HLG and PQ exports are `hvc1` with their source transfer function, `ITU_R_2020` primaries/matrix and `hdr=true`. SDR `source.mp4` stays `avc1` / 709 / `hdr=false`. |
++
++Fix (`IosVideoOverlayExporter.kt`): when any source video track has `AVMediaCharacteristicContainsHDRVideo`, use `AVAssetExportPresetHEVCHighestQuality` instead of `AVAssetExportPresetHighestQuality`. SDR sources keep the old preset, so the existing four tests still cover unchanged behaviour. No fallback to the SDR preset: if the session cannot be created, the export fails (the constructor became `exportSessionWithAsset(...) ?: return false`). Run 3 is the failing-first proof, against the exact pre-fix production code. Its original logs were deleted by an `rsync --delete` before run 4, so it was re-run after the fix with only the exporter swapped back to the pre-fix file (sha256 `ddfa406c23e27c888cacd4534c5f0e42c9dc484aceeb620d067e9317455b19fe`): same 1/7 failure and identical probe values; the archived run-3 files are that reproduction. The fixed exporter was then restored on the Mac (sha256 matches run 4). Local checks after the fix: detekt clean, 549/549 desktop tests, desktop/Android/iOS compiles succeeded. Source hashes after the fix: `2026-11-14-source-sha256.txt`.
++
++The CoreMedia string constants that were "unverified guesses" on 2026-11-10 are now verified by the control test against the ffprobe-tagged fixtures.
++
++Still unverified: physical devices (HEVC hardware encoder availability, older devices without one), how the SDR caption PNG looks composited over HDR frames (the standalone runner renders green frames, so no pixel claim), HDR10+/Dolby Vision metadata, and `.mov` HDR output. HDR bit depth is still inferred from codec + characteristic.
++
++---
++
++## Original 2026-11-10 notes (historical)
++
++
++**Result: no HDR finding. Nothing was run on the simulator.** Whether `exportIosVideoOverlay` preserves HLG/PQ is unknown.
++
++## What exists
++- `hdr-hlg-ffprobe.json`, `hdr-pq-ffprobe.json`, `fixture-sha256.txt`: the generated fixtures (HEVC Main 10, yuv420p10le, bt2020nc/bt2020; HLG `arib-std-b67`, PQ `smpte2084`), verified with ffprobe.
++- New test cases in `IosVideoOverlayExporterTest.kt` (original hash `test-original-sha256.txt`, current `test-current-sha256.txt`): probe-sees-HDR control, HDR export keeps transfer/codec/primaries/size/audio (completion required; refusal or downgrade fails), SDR stays SDR. `ios-test-compile-linux.log`: they compile for iosSimulatorArm64 on Linux. They have **never executed**, so nothing is proven about them: the expected strings (`ITU_R_2100_HLG`, `SMPTE_ST_2084_PQ`, `ITU_R_2020`) are unverified guesses at CoreMedia's values, and the CFRetain/CFBridgingRelease probe is untested at runtime. No failing-first run and no mutant exist.
++- `plan-review-1-fail.log`, `plan-review-2-fail.log`: `agent-verify --plan` FAILED twice (vacuous "or refused" branch, CFRetain(NULL) abort, missing asserts/hashes). Those defects were fixed in the test afterwards; the revised plan has NOT been re-reviewed. The first test draft was written before the first review returned, against the requested order.
++
++## Blocker
++A reachability check `ssh -o BatchMode=yes najchris11@<mac tailscale ip> echo ok` was refused by the Claude auto-mode permission classifier ("Auto-Mode Bypass"). No retry, no alternative route. The simulator CF9A84A0-… was opened with `device_open` only. A Mac Gradle run needs the owner's explicit approval of that transport (as on 2026-11-09).
++
++## Resume
++`./gradlew :composeApp:iosSimulatorArm64Test --device CF9A84A0-8CDC-4801-BC70-10EF197CA895 --tests "*IosVideoOverlayExporterTest*"` on the Mac with JDK 21; read `HDR-PROBE` lines. If HDR tests fail, that is the finding: record exact values, then decide a minimal fix (full lint, desktop tests, three-target compile). If they pass first time, mutate the exporter (e.g. force SDR output) to prove they can fail, then restore.
++
++## Limits
++Standalone runner frames are green, so no pixel/visual claim is possible. Physical devices and real cloud providers remain unverified. HDR bit depth is inferred from HEVC codec + HDR characteristic, not read directly.
++
++## Final `agent-verify --jev-only`
++Run twice (`--spec spec.md --jev-only`): both produced no output and exit 141 (SIGPIPE). Treated as an **error, not a pass**; not retried further (Jev was already reported unavailable by the routing step). `final-agent-verify-jev-only.log` holds the captured output. No source review result exists for this slice. No Gradle lint/desktop/Android checks were run: production code is unchanged and only the iOS test klib compile was verified (it passed).
+--- /dev/null
++++ b/composeApp/src/iosTest/resources/video-overlay/README.md
+@@ -0,0 +1,46 @@
++Synthetic native export regression fixtures; no user media.
++
++`source.mp4` is a two-second, 120×160, 24fps FFmpeg test pattern with a 440Hz sine audio track:
++
++```sh
++ffmpeg -f lavfi -i testsrc2=size=120x160:rate=24 -f lavfi -i sine=frequency=440:sample_rate=44100 -t 2 -c:v libx264 -pix_fmt yuv420p -c:a aac source.mp4
++```
++
++`rotated.mp4` retains the same encoded frames/audio and has a verified 90° display matrix. Generate it with a FFmpeg version supporting `-display_rotation` (the older `-metadata rotate=90` command did not add a matrix on this machine):
++
++```sh
++ffmpeg -display_rotation:v:0 90 -i source.mp4 -map 0 -c copy rotated.mp4
++ffprobe -v error -select_streams v:0 -show_entries stream_side_data=rotation -of json rotated.mp4
++```
++
++The probe must report `rotation: 90`. Do not assume the command created a rotated fixture without inspecting the result.
++
++`overlay.png` is a generated RGBA 120×160 image: its top 24 rows are red (255,0,0,230); the remainder is transparent. Both fixtures were authored for this repository's tests.
++
++On an Apple Silicon Mac with a booted simulator, run:
++
++```sh
++./gradlew :composeApp:iosSimulatorArm64Test --device <simulator-UDID> --tests '*IosVideoOverlayExporterTest*'
++```
++
++The Gradle task forwards the host resource directory via `SIMCTL_CHILD_SNAPVAULT_TEST_RESOURCES`. The test exercises the real encoder; Linux cross-compilation cannot run it.
++
++Standalone native tests assert successful export, dimensions, audio tracks and retained sources. They do not assert rendered pixels: the standalone simulator executable produced green frames in this environment, unlike the app-hosted UI export. In-app output was checked separately with FFprobe/FFmpeg, including 90° rotation and a red-overlay negative control. Do not treat a standalone test pass as visual proof.
++
++## HDR fixtures (added 2026-11-10)
++
++`hdr-hlg.mp4` and `hdr-pq.mp4` are synthetic 120×160, 24fps, 2 s HEVC Main 10 clips (`yuv420p10le`, BT.2020 primaries/matrix, limited range) with the same 440Hz AAC track. HLG uses transfer `arib-std-b67`; PQ uses `smpte2084`. They carry no mastering-display/MaxCLL metadata. Generate and inspect (zsh users: use `${var}` braces):
++
++```sh
++ffmpeg -f lavfi -i testsrc2=size=120x160:rate=24 -f lavfi -i sine=frequency=440:sample_rate=44100 -t 2 \
++  -vf "format=yuv420p10le,setparams=colorspace=bt2020nc:color_primaries=bt2020:color_trc=<arib-std-b67|smpte2084>:range=tv" \
++  -c:v libx265 -tag:v hvc1 -pix_fmt yuv420p10le \
++  -x265-params "log-level=error:colorprim=bt2020:transfer=<arib-std-b67|smpte2084>:colormatrix=bt2020nc:range=limited:repeat-headers=1" -c:a aac <name>.mp4
++ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,profile,pix_fmt,color_space,color_transfer,color_primaries,color_range -of json <name>.mp4
++```
++
++SHA-256 (also `docs/audits/evidence/native-2026-11-10/fixture-sha256.txt`):
++- `hdr-hlg.mp4` `57e2c0a9bddaa5423c54e8567112a5838e1b038639186c61852e63de73b5a489`
++- `hdr-pq.mp4` `9108eb1fbe9fe557b5a46c96cca0eb0058381dd56a55b820ecb6a1378ccb28f9`
++
+diff --git a/docs/MOBILE_PLAN.md b/docs/MOBILE_PLAN.md
+--- a/docs/MOBILE_PLAN.md
++++ b/docs/MOBILE_PLAN.md
+@@ -15,59 +15,34 @@ Status legend: ✅ works · 🟡 partial / has issues · ❌ stub or missing
++| Video overlay combine | ✅ FFmpeg | ❌ skipped; originals retained | ✅ simulator import/rotation/audio/safety/synthetic HLG+PQ HDR; device QA pending |
++The initial iOS ZIP run quit inside Core Animation/IOSurface. A real native regression reproduced export failure. Core Image filtering replaced the layer postprocessor; the native regression and rebuilt app's ordinary import then passed. Actual output contained H.264 video, AAC audio and the expected overlay pixels. Add-only Photos publication succeeded after its explicit permission prompt. These are simulator smoke results, not blanket provider, HDR or physical-device validation. Rotation, Photos denial and active exporter cancellation were subsequently verified. See `PROGRESS_LOG.md` for precise evidence.
+@@ -453,20 +428,16 @@ convincing false negative. Apple's `strings` has no `-e` flag.
++- **Video overlay combine:** Android still skips videos. The iOS ZIP pipeline now uses an asynchronous AVFoundation exporter, source-derived video composition and audio, staged publication and cancellation drain. Video originals are retained and metadata fidelity is not claimed. A native exporter regression and synthetic UI import/pixel/audio/Photos smoke passed on 2026-11-08 after replacing the crashing Core Animation renderer with Core Image. A verified 90° fixture now passes native dimension/audio tests and actual UI pixel checks. On 2026-11-14 a native HDR test found HLG/PQ sources silently exported as H.264 Rec.709 SDR; HDR sources now use `AVAssetExportPresetHEVCHighestQuality` and keep HEVC, BT.2020 and their transfer function (simulator, stream tags only). Physical-device coverage and caption appearance over HDR frames remain pending.
++- **Native safety follow-up (2026-11-08):** the real iOS exporter suite now has four passing cases, including active cancellation/drain and byte-preserving output conflict handling. Fresh-process Android provider instrumentation has two passing cases on a dedicated QA AVD. Both suites were proven sensitive with deliberate mutations, then restored. HDR/physical devices and broader cloud-provider/error matrices remain pending.
+diff --git a/docs/GROWTH_CHECKLIST.md b/docs/GROWTH_CHECKLIST.md
+--- a/docs/GROWTH_CHECKLIST.md
++++ b/docs/GROWTH_CHECKLIST.md
+@@ -1,0 +1,2 @@
++    - [x] Synthetic HDR (simulator): HLG and PQ sources were silently exported as 8-bit H.264 Rec.709 SDR under `AVAssetExportPresetHighestQuality`. HDR sources now use `AVAssetExportPresetHEVCHighestQuality` (no SDR fallback); failing-first run 1/7 failed, fixed run 7/7 passed, SDR unchanged. See [HDR evidence](audits/evidence/native-2026-11-10/README.md).
++    - [ ] Remaining native matrix: physical-device behavior (HEVC encoder availability, caption appearance over HDR frames) and provider variants remain unverified.
+diff --git a/docs/PROGRESS_LOG.md b/docs/PROGRESS_LOG.md
+--- a/docs/PROGRESS_LOG.md
++++ b/docs/PROGRESS_LOG.md
+@@ -1,0 +1,6 @@
++## iOS HDR exporter finding fixed (2026-11-14)
++
++- Re-reviewed the revised HDR plan (`agent-verify --plan` PASS), then ran the native exporter suite on the Mac simulator over the documented SSH route. The first run exposed a test-harness bug (a bridged `CMFormatDescription` cast directly to `CPointer`); after fixing it the control test verified the source tags (`hvc1`, `ITU_R_2100_HLG`/`SMPTE_ST_2084_PQ`, `ITU_R_2020`, HDR characteristic).
++- **Finding:** against unchanged production, both HLG and PQ exports came out as H.264 (`avc1`) tagged `ITU_R_709_2` with no HDR characteristic: a silent HDR→SDR downgrade caused by `AVAssetExportPresetHighestQuality`. The test was restructured to probe every fixture before asserting so PQ could not hide behind HLG.
++- **Fix:** `exportIosVideoOverlay` selects `AVAssetExportPresetHEVCHighestQuality` when a source video track reports `AVMediaCharacteristicContainsHDRVideo`; SDR keeps the old preset. No silent fallback; a session that cannot be created fails the export. Native exporter suite 7/7 after the fix; SDR still `avc1`/709; the full unfiltered iOS simulator suite passed 141/141. The no-session failure branch is untested (cannot be forced on the simulator).
++- Logs, JUnit XML and source hashes are archived in `docs/audits/evidence/native-2026-11-10/` (`2026-11-14-*`). Local checks: detekt clean, 549/549 desktop tests, desktop/Android/iOS compiles. `agent-verify --jev-only` did not pass (SIGPIPE on the full tree; FAIL on c06 docs over a partial slice diff), so the slice is not independently source-reviewed. Simulator only: physical-device HEVC encoding, caption appearance over HDR frames, and `.mov`/Dolby Vision output remain unverified. Nothing was committed, pushed or released.

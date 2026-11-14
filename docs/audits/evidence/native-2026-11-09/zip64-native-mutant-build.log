@@ -1,0 +1,105 @@
+Starting a Gradle Daemon, 4 busy and 1 incompatible Daemons could not be reused, use --status for details
+Warning: SDK processing. This version only understands SDK XML versions up to 3 but an SDK XML file of version 4 was encountered. This can happen if you use versions of Android Studio and the command-line tools that were released at different times.
+> Task :composeApp:kmpPartiallyResolvedDependenciesChecker
+> Task :composeApp:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :composeApp:convertXmlValueResourcesForAndroidMain NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForAndroidMain NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForAndroidMain NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForAndroidMain NO-SOURCE
+> Task :composeApp:convertXmlValueResourcesForCommonMain UP-TO-DATE
+> Task :composeApp:copyNonXmlValueResourcesForCommonMain UP-TO-DATE
+> Task :composeApp:prepareComposeResourcesTaskForCommonMain UP-TO-DATE
+> Task :composeApp:generateResourceAccessorsForCommonMain UP-TO-DATE
+> Task :composeApp:convertXmlValueResourcesForJvmSharedMain NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForJvmSharedMain NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForJvmSharedMain NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForJvmSharedMain NO-SOURCE
+> Task :composeApp:generateActualResourceCollectorsForAndroidMain UP-TO-DATE
+> Task :composeApp:generateBuildConfig UP-TO-DATE
+> Task :composeApp:generateComposeResClass UP-TO-DATE
+> Task :composeApp:generateExpectResourceCollectorsForCommonMain UP-TO-DATE
+> Task :composeApp:convertXmlValueResourcesForAndroidDebug NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForAndroidDebug NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForAndroidDebug NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForAndroidDebug NO-SOURCE
+> Task :composeApp:preBuild UP-TO-DATE
+> Task :composeApp:preDebugBuild UP-TO-DATE
+> Task :composeApp:checkDebugAarMetadata UP-TO-DATE
+> Task :composeApp:processDebugNavigationResources UP-TO-DATE
+> Task :composeApp:compileDebugNavigationResources UP-TO-DATE
+> Task :composeApp:generateDebugResValues UP-TO-DATE
+> Task :composeApp:mapDebugSourceSetPaths UP-TO-DATE
+> Task :composeApp:generateDebugResources UP-TO-DATE
+> Task :composeApp:mergeDebugResources UP-TO-DATE
+> Task :composeApp:copyDebugComposeResourcesToAndroidAssets UP-TO-DATE
+> Task :composeApp:packageDebugResources UP-TO-DATE
+> Task :composeApp:parseDebugLocalResources UP-TO-DATE
+> Task :composeApp:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :composeApp:extractDeepLinksDebug UP-TO-DATE
+> Task :composeApp:processDebugMainManifest UP-TO-DATE
+> Task :composeApp:processDebugManifest UP-TO-DATE
+> Task :composeApp:processDebugManifestForPackage UP-TO-DATE
+> Task :composeApp:processDebugResources UP-TO-DATE
+> Task :composeApp:compileDebugKotlinAndroid UP-TO-DATE
+> Task :composeApp:javaPreCompileDebug UP-TO-DATE
+> Task :composeApp:compileDebugJavaWithJavac NO-SOURCE
+> Task :composeApp:bundleDebugClassesToCompileJar UP-TO-DATE
+> Task :composeApp:convertXmlValueResourcesForAndroidInstrumentedTest NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForAndroidInstrumentedTest NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForAndroidInstrumentedTest NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForAndroidInstrumentedTest NO-SOURCE
+> Task :composeApp:convertXmlValueResourcesForAndroidInstrumentedTestDebug NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForAndroidInstrumentedTestDebug NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForAndroidInstrumentedTestDebug NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForAndroidInstrumentedTestDebug NO-SOURCE
+> Task :composeApp:preDebugAndroidTestBuild SKIPPED
+> Task :composeApp:checkDebugAndroidTestAarMetadata UP-TO-DATE
+> Task :composeApp:processDebugAndroidTestNavigationResources UP-TO-DATE
+> Task :composeApp:compileDebugAndroidTestNavigationResources UP-TO-DATE
+> Task :composeApp:generateDebugAndroidTestResValues UP-TO-DATE
+> Task :composeApp:mapDebugAndroidTestSourceSetPaths UP-TO-DATE
+> Task :composeApp:generateDebugAndroidTestResources UP-TO-DATE
+> Task :composeApp:mergeDebugAndroidTestResources UP-TO-DATE
+> Task :composeApp:processDebugAndroidTestManifest UP-TO-DATE
+> Task :composeApp:processDebugAndroidTestResources UP-TO-DATE
+> Task :composeApp:javaPreCompileDebugAndroidTest UP-TO-DATE
+> Task :composeApp:mergeDebugAndroidTestShaders UP-TO-DATE
+> Task :composeApp:compileDebugAndroidTestShaders NO-SOURCE
+> Task :composeApp:copyDebugAndroidTestComposeResourcesToAndroidAssets UP-TO-DATE
+> Task :composeApp:generateDebugAndroidTestAssets UP-TO-DATE
+> Task :composeApp:mergeDebugAndroidTestAssets UP-TO-DATE
+> Task :composeApp:compressDebugAndroidTestAssets UP-TO-DATE
+> Task :composeApp:checkDebugAndroidTestDuplicateClasses UP-TO-DATE
+> Task :composeApp:desugarDebugAndroidTestFileDependencies UP-TO-DATE
+> Task :composeApp:mergeExtDexDebugAndroidTest UP-TO-DATE
+> Task :composeApp:mergeLibDexDebugAndroidTest UP-TO-DATE
+> Task :composeApp:mergeDebugAndroidTestJniLibFolders UP-TO-DATE
+> Task :composeApp:mergeDebugJniLibFolders UP-TO-DATE
+> Task :composeApp:mergeDebugNativeLibs UP-TO-DATE
+> Task :composeApp:mergeDebugAndroidTestNativeLibs NO-SOURCE
+> Task :composeApp:stripDebugAndroidTestDebugSymbols NO-SOURCE
+> Task :composeApp:validateSigningDebugAndroidTest UP-TO-DATE
+> Task :composeApp:writeDebugAndroidTestSigningConfigVersions UP-TO-DATE
+> Task :composeApp:compileDebugAndroidTestKotlinAndroid
+> Task :composeApp:compileDebugAndroidTestJavaWithJavac
+> Task :composeApp:processDebugAndroidTestJavaRes UP-TO-DATE
+> Task :composeApp:mergeDebugAndroidTestJavaResource UP-TO-DATE
+> Task :composeApp:dexBuilderDebugAndroidTest
+> Task :composeApp:mergeProjectDexDebugAndroidTest
+> Task :composeApp:packageDebugAndroidTest
+> Task :composeApp:createDebugAndroidTestApkListingFileRedirect UP-TO-DATE
+> Task :composeApp:assembleDebugAndroidTest
+
+[Incubating] Problems report is available at: file://<worktree>/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.4.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 16s
+59 actionable tasks: 6 executed, 53 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.4.1/userguide/configuration_cache_enabling.html
+
+transport_exit=0 elapsed_seconds=17.339

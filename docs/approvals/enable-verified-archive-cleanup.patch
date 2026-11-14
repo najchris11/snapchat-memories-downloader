@@ -1,0 +1,50 @@
+--- a/composeApp/src/commonMain/kotlin/com/najdev/snapvault/viewmodel/DashboardViewModel.kt
++++ b/composeApp/src/commonMain/kotlin/com/najdev/snapvault/viewmodel/DashboardViewModel.kt
+@@ -34,9 +34,8 @@
+ 
+ internal const val EXTRACTION_SPACE_RESERVE_BYTES = 1L * 1024 * 1024 * 1024
+ 
+-// The verification gaps are covered, but the production deletion offer remains gated
+-// pending explicit owner approval to enable irreversible source-archive cleanup.
+-internal const val LOW_SPACE_DELETE_ENABLED = false
++// Only an explicit confirmation after a space refusal authorizes verified archive cleanup.
++internal const val LOW_SPACE_DELETE_ENABLED = true
+ 
+ internal fun formatBytes(bytes: Long): String {
+     val gib = bytes / (1024.0 * 1024.0 * 1024.0)
+--- a/composeApp/src/desktopTest/kotlin/com/najdev/snapvault/ui/LowSpaceOfferTest.kt
++++ b/composeApp/src/desktopTest/kotlin/com/najdev/snapvault/ui/LowSpaceOfferTest.kt
+@@ -28,6 +28,7 @@
+ import kotlin.test.Test
+ import kotlin.test.assertEquals
+ import kotlin.test.assertFalse
++import kotlin.test.assertNotNull
+ import kotlin.test.assertNull
+ import kotlin.test.assertTrue
+ 
+@@ -170,7 +171,7 @@
+     // D20 is available only as a confirmation after a space refusal. Merely starting
+     // a normal run must leave the ZIP untouched, even when the verified mode would fit.
+     @Test
+-    fun theOfferIsDisabledByDefault() = runComposeUiTest {
++    fun verifiedCleanupRequiresConfirmationByDefault() = runComposeUiTest {
+         val zip = exportZip("part1.zip", "2024-01-01_aaa-main.jpg")
+         val gb = 1024L * 1024 * 1024
+         val real = DesktopZipPipelineRunner(DesktopMediaProcessor())
+@@ -208,12 +209,10 @@
+         waitUntil(timeoutMillis = 20_000) { !viewModel.isRunning }
+         waitForIdle()
+ 
+-        assertFalse(com.najdev.snapvault.viewmodel.LOW_SPACE_DELETE_ENABLED)
+-        assertNull(viewModel.lowSpaceOffer, "enabling irreversible cleanup still requires owner approval")
+-        onAllNodes(hasText("Import and delete each ZIP")).fetchSemanticsNodes().let {
+-            assertTrue(it.isEmpty(), "no dialog offering deletion may appear")
+-        }
+-        assertTrue(zip.exists(), "nothing may be deleted when the offer never happened")
++        assertTrue(com.najdev.snapvault.viewmodel.LOW_SPACE_DELETE_ENABLED)
++        assertNotNull(viewModel.lowSpaceOffer)
++        onNodeWithText("Import and delete each ZIP").assertExists()
++        assertTrue(zip.exists(), "offering cleanup must not authorize deletion")
+         viewModel.dispose()
+     }
+ 

@@ -14,61 +14,36 @@ Status legend: ✅ works · 🟡 partial / has issues · ❌ stub or missing
 
 ## 1. Current state audit
 
-Last verified against the tree on 2026-09-25 (branch `feat/ios-overlay-combine`).
+Last verified against the working tree on 2026-11-08. Implementation and compilation are distinguished from native runtime QA below.
 
 | Subsystem | Desktop | Android | iOS |
 |---|---|---|---|
-| App shell / navigation | ✅ sidebar | ✅ bottom nav (`PhoneRoot`) | ✅ bottom nav |
-| Theme + layout persistence | ✅ | ✅ | ✅ |
-| File/folder pickers | ✅ | ✅ `AndroidPickers` | ✅ `IosPickers` |
-| ZIP entry reading (`listZipEntries` / `readZipEntryText` / `listZipEntryTimestamps`) | ✅ `java.util.zip` | ❌ **still stubs** — return empty | ✅ okio `openZip` |
-| ZIP extraction | ✅ `ZipExtractEngine` (jvmShared) | ✅ same engine | ✅ own okio path |
-| ZIP pipeline runner | ✅ | ✅ `AndroidZipPipelineRunner` | ✅ `IosZipPipelineRunner` |
-| GPS metadata write | ✅ exiftool | ✅ `ExifInterface` | ✅ ImageIO |
-| Date metadata write | ✅ exiftool | ✅ `ExifInterface` | ✅ ImageIO |
-| Image overlay combine | ✅ ImageIO (`OverlayCombiner`) | ✅ `android.graphics` | ✅ CoreGraphics |
-| Video overlay combine | ✅ ffmpeg | ❌ returns false, reported as skipped | ❌ returns false, reported as skipped |
-| Animated GIF handling | ✅ skipped, original kept | ✅ skipped | ✅ skipped |
-| Library scan + thumbnails | ✅ | ❌ **still stubs** → Library always empty | ✅ `MediaScanner` (180 lines) |
-| Video playback | ✅ | 🟡 `VideoView` (F6) | 🟡 AVPlayer rebuilt per recomposition |
-| App icon | ✅ | ❌ default | ❌ default |
+| Shell, navigation and preferences | ✅ | ✅ | ✅ |
+| Source pickers | ✅ auto-detection | ✅ SAF file/tree smoke; cloud QA pending | ✅ existing pickers |
+| ZIP reading | ✅ shared JVM | ✅ seekable and pipe provider tests; cloud QA pending | ✅ okio |
+| Extraction | ✅ shared engine | ✅ native streaming import; synthetic provider error/cancellation tests pass; cloud QA pending | ✅ okio |
+| Image metadata and overlays | ✅ | ✅ synthetic native photo-combine smoke | ✅ existing ImageIO/CoreGraphics |
+| Library scan and thumbnails | ✅ | 🟡 implemented shared scanner plus native decoding | ✅ existing scanner |
+| Video overlay combine | ✅ FFmpeg | ✅ Media3 MP4 burn-in (emulator, synthetic clips); originals retained; `.mov` skipped | ✅ simulator import/rotation/audio/safety/synthetic HLG+PQ HDR; device QA pending |
+| Gallery publishing | — | ✅ image/video copy smoke on API 29+ | ✅ image/video copy and allow/deny smoke |
+| Video playback | ✅ | 🟡 existing VideoView | 🟡 existing AVPlayer |
+| App icons | ✅ | ❌ default | ❌ default |
 
-### The two real gaps, both on Android
+### Android storage implementation
 
-Android is now **behind iOS** on exactly two subsystems, which is the opposite of
-the order this plan assumed:
+The former `ZipReader` and `MediaScanner` stubs are removed. Seekable document descriptors expose central-directory metadata without scanning payloads; non-seekable providers fall back to streaming ZIP reads. Extraction streams selected entries into staged, non-overwriting library outputs. Read grants are persisted where supported, and source ZIP documents are never copied wholesale or deleted through SAF. Small legacy history documents have a bounded app-private copy.
 
-- **`ZipReader` is three one-line stubs** returning `emptyList`/`null`/`emptyMap`.
-  This breaks the ZIP-import mode outright: `ZipImportParser` (the precise
-  time + GPS matcher) sees no entries, and `DashboardViewModel`'s
-  `memories_history.json` read returns null. Extraction itself is fine — it goes
-  through `ZipExtractEngine`, not these.
-- **`MediaScanner` is three one-line stubs**, so `LibraryScreen` always renders an
-  empty Library on Android.
+`rememberPlatformPickers()` is now the single Android picker implementation. Native source inspection distinguishes ZIP documents, ZIP-containing trees and extracted history. Dashboard, empty Library and Settings disclose the app-owned working library and its uninstall lifecycle rather than offering a fake output folder choice.
 
-Both are cheap to close: iOS implements all six with okio, and **okio is available
-on Android**, so the iOS file is very nearly a drop-in. One caveat before copying
-it — see §8's note on timestamp precision.
+Gallery publication is explicit and unavailable during imports. Android 10+ inserts a new pending MediaStore image/video, copies bytes, and publishes only after success; errors/cancellation discard only that operation's pending row. Source library media is unchanged. Earlier Android versions do not offer gallery export. No broad media/storage permissions are requested.
 
-Key structural facts (unchanged and still true):
+### Test reality and remaining QA
 
-- The precise time + GPS matcher (`ExperimentalZipMetadataMatcher`,
-  `ZipImportParser`) is common code and lights up as soon as a platform has real
-  `ZipReader` actuals. This is still the highest-leverage move left for Android.
-- `jvmSharedMain` serves desktop + Android from one file; `ZipExtractEngine` lives
-  there and is how Android extraction already works.
-- `DashboardViewModel` is fully common. Nothing in it blocks either mobile target.
+Common/JVM tests exercise streaming reads, bounded history, central-directory timestamps, safe extraction, gallery publication and cancellation, native-source view-model selection, and Compose UI behavior. Those JVM tests do not execute Android framework/provider adapters. Separate Android instrumentation now verifies real persisted read-only tree access, fresh-process ZIP reopening and rejection outside the grant (10 passing tests in the latest run: 2 persisted-grant, 1 pipe-only streaming and 7 provider failure/cancellation cases, each group with mutation proof; the earlier 3-test run is archived history). The failure/cancellation cases use a synthetic test provider only; real cloud providers, multi-gigabyte documents and cancellation latency against them are untested, and cancellation is cooperative (a read already blocked in the provider is not interrupted). The instrumentation sources are outside the detekt source set. All 549 desktop tests pass, as do required lint and desktop/Android/iOS simulator compilation; see `PROGRESS_LOG.md` for details.
 
-### Test reality
+Isolated Android/iOS packages were built and installed on 2026-11-08 after the Mac reboot restored SSH. Android SAF ZIP selection, streaming import, photo combine, Library and explicit image/video MediaStore copies passed with synthetic fixtures; published rows had `is_pending=0` and the source ZIP hash was unchanged. No other workspace's session or production app data was used.
 
-`androidTest`, `iosTest` and `jvmSharedTest` have **no files**. All 469 Kotlin tests run in
-`commonTest` (13 files) or `desktopTest` (59). Mobile behaviour is covered only
-through common seams (`findOverlayPairNames`, `mayDeleteOriginals`,
-`showsDependencySection`) or by tests that read platform source as text
-(`IosUrlOpeningTest`, `StringResourceHygieneTest`). Mobile code is not executed by
-the test suites. Android APK assembly and iOS framework linking plus the complete
-unsigned simulator app build are required PR checks, alongside desktop. CI also
-verifies the generated iOS launch plist; it does not launch the app on a device.
+The initial iOS ZIP run quit inside Core Animation/IOSurface. A real native regression reproduced export failure. Core Image filtering replaced the layer postprocessor; the native regression and rebuilt app's ordinary import then passed. Actual output contained H.264 video, AAC audio and the expected overlay pixels. Add-only Photos publication succeeded after its explicit permission prompt. These are simulator smoke results, not blanket provider, HDR or physical-device validation. Rotation, Photos denial and active exporter cancellation were subsequently verified. See `PROGRESS_LOG.md` for precise evidence.
 
 ## 2. Code review findings (correctness)
 
@@ -452,21 +427,17 @@ convincing false negative. Apple's `strings` has no `-e` flag.
 
 ### Open, carried forward
 
-- **Android `ZipReader` + `MediaScanner` stubs** (§1). The two largest functional
-  gaps on either platform now.
-  *Caveat before porting the iOS file:* desktop reads the Info-ZIP `0x5455`
-  extended timestamp (UTC, 1s precision); okio's `lastModifiedAtMillis` reads the
-  DOS timestamp (local time, 2s, no zone). iOS therefore already feeds the
-  precise-time matcher slightly different values than desktop does. Worth
-  settling deliberately rather than inheriting by accident.
-- **Video overlay combine on mobile.** Neither platform ships an encoder. Both
-  report `SkippedVideo` and leave originals untouched, so this is a missing
-  feature, not a correctness bug. Media3 `Transformer` (Android) and
-  `AVMutableVideoComposition` (iOS) are the routes.
-- **No mobile test execution anywhere.** All platform builds now block PRs,
+- **Android stubs resolved (2026-11-06).** ZIP reading and media scanning now share real JVM implementations. SAF streaming, unified pickers and explicit MediaStore publication are implemented with common/JVM regression tests; native provider/gallery QA remains pending (§1). JVM ZIP reads preserve Info-ZIP `0x5455` UTC timestamps; iOS okio timestamp precision remains a separate follow-up.
+- **Video overlay combine:** Since 2026-11-14 Android burns overlays into `.mp4`/`.m4v` with Media3 Transformer, staged and published without overwriting; video originals are kept and metadata fidelity is not claimed (emulator-verified with synthetic clips; physical devices pending). The iOS ZIP pipeline now uses an asynchronous AVFoundation exporter, source-derived video composition and audio, staged publication and cancellation drain. Video originals are retained and metadata fidelity is not claimed. A native exporter regression and synthetic UI import/pixel/audio/Photos smoke passed on 2026-11-08 after replacing the crashing Core Animation renderer with Core Image. A verified 90° fixture now passes native dimension/audio tests and actual UI pixel checks. On 2026-11-14 a native HDR test found HLG/PQ sources silently exported as H.264 Rec.709 SDR; HDR sources now use `AVAssetExportPresetHEVCHighestQuality` and keep HEVC, BT.2020 and their transfer function (simulator, stream tags only). Physical-device coverage and caption appearance over HDR frames remain pending.
+- **No mobile test execution in CI.** All platform builds now block PRs,
   including the complete iOS simulator app and its generated launch plist, but
-  device or simulator runtime tests remain a separate gap.
+  device or simulator runtime tests remain a separate gap. The 2026-11-08
+  native iOS (4 tests) and Android (10 tests) suites were run manually on a
+  simulator/emulator; neither is wired into `check.yml` or `release.yml`.
 - **App icons** are still the platform defaults on both mobile targets.
 - `feat/platform-capability-honesty` (unmerged) surfaces the ❌ column above to
   users. Its Dashboard banner is still wanted; its Settings half now conflicts
   with the dependency card removal above.
+
+- **Native safety follow-up (2026-11-08):** the real iOS exporter suite now has four passing cases, including active cancellation/drain and byte-preserving output conflict handling. Fresh-process Android provider instrumentation has two passing cases on a dedicated QA AVD. Both suites were proven sensitive with deliberate mutations, then restored. HDR/physical devices and broader cloud-provider/error matrices remain pending.
+- **Android provider failure/cancellation follow-up (2026-11-08):** seven synthetic native cases (complete, truncated, faulty, unopenable, and three cancellation points) now cover the production streaming extractor through a real `ContentResolver` pipe; with the two persisted-grant tests and the pipe test the Android suite is 10/10. Four production mutants failed 4, 2, 3 and 3 of the 7 cases and were restored. Cancellation is cooperative, not immediate. Still open: real cloud/multi-gigabyte providers, a process killed mid-entry (leaves a `.snapvault-stream-*.part`) and physical devices. Synthetic ZIP64 coverage is separate work and is not claimed here.

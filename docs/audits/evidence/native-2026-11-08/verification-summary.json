@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-08",
+  "desktopJUnitTotals": {
+    "tests": 549,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "requiredGradleCheckResult": "BUILD SUCCESSFUL",
+  "requiredGradleTasks": [
+    "detekt",
+    ":composeApp:desktopTest",
+    ":composeApp:compileKotlinDesktop",
+    ":composeApp:compileDebugKotlinAndroid",
+    ":composeApp:compileKotlinIosSimulatorArm64"
+  ],
+  "androidEnvironment": "ANDROID_HOME=/opt/android-sdk",
+  "iosNativeTests": 4,
+  "androidNativeTests": 3,
+  "currentSourceHashesAtArchival": {
+    "composeApp/src/iosMain/kotlin/com/najdev/snapvault/metadata/IosVideoOverlayExporter.kt": "ddfa406c23e27c888cacd4534c5f0e42c9dc484aceeb620d067e9317455b19fe",
+    "composeApp/src/iosTest/kotlin/com/najdev/snapvault/metadata/IosVideoOverlayExporterTest.kt": "b42e4483bfd03416584cf87320b84e323f5dbbb2f9dcbcc6b68b859713db5595",
+    "composeApp/src/androidMain/kotlin/com/najdev/snapvault/AndroidDocumentAccess.kt": "03bfc8fb5674d71e23d5a36050da8961acca85f63b35e6575567e267e704b55b",
+    "composeApp/src/jvmSharedMain/kotlin/com/najdev/snapvault/ZipReader.kt": "b74562163668ea715ba69ff63aae754b90281417a384a8324bd5582ce46a044f",
+    "composeApp/src/androidInstrumentedTest/kotlin/com/najdev/snapvault/NonSeekableDocumentTest.kt": "f4f2f66cc604ee662011904e886fb61007bc0499db941e763dcec35e51660898",
+    "composeApp/src/androidTest/java/com/najdev/snapvault/PipeZipTestProvider.java": "a3c24aae9abfe932fc1bf901e0a61ed55078ad83240e0fb1d323f898016c22af"
+  },
+  "limits": [
+    "Source hashes describe the tree at archival; no commit was created.",
+    "Standalone iOS tests cover structure, audio, rotation dimensions and safety; app-hosted pixel evidence is separate.",
+    "Synthetic pipe coverage does not prove cloud-service, multi-gigabyte or physical-device behavior."
+  ]
+}

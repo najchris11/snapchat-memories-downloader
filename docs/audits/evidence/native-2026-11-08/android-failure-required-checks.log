@@ -1,0 +1,98 @@
+> Task :detekt NO-SOURCE
+> Task :composeApp:detekt UP-TO-DATE
+> Task :composeApp:checkDesktopMainComposeLibrariesCompatibility
+> Task :composeApp:kmpPartiallyResolvedDependenciesChecker
+> Task :composeApp:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :composeApp:convertXmlValueResourcesForCommonMain UP-TO-DATE
+> Task :composeApp:copyNonXmlValueResourcesForCommonMain UP-TO-DATE
+> Task :composeApp:prepareComposeResourcesTaskForCommonMain UP-TO-DATE
+> Task :composeApp:generateResourceAccessorsForCommonMain UP-TO-DATE
+> Task :composeApp:convertXmlValueResourcesForDesktopMain NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForDesktopMain NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForDesktopMain NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForDesktopMain NO-SOURCE
+> Task :composeApp:convertXmlValueResourcesForJvmSharedMain NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForJvmSharedMain NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForJvmSharedMain NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForJvmSharedMain NO-SOURCE
+> Task :composeApp:generateActualResourceCollectorsForDesktopMain UP-TO-DATE
+> Task :composeApp:generateBuildConfig UP-TO-DATE
+> Task :composeApp:generateComposeResClass UP-TO-DATE
+> Task :composeApp:generateExpectResourceCollectorsForCommonMain UP-TO-DATE
+> Task :composeApp:installGitHooks
+> Task :composeApp:compileKotlinDesktop UP-TO-DATE
+> Task :composeApp:compileDesktopMainJava NO-SOURCE
+> Task :composeApp:checkDesktopTestComposeLibrariesCompatibility
+> Task :composeApp:assembleDesktopMainResources UP-TO-DATE
+> Task :composeApp:desktopProcessResources UP-TO-DATE
+> Task :composeApp:processDesktopMainResources SKIPPED
+> Task :composeApp:desktopMainClasses UP-TO-DATE
+> Task :composeApp:desktopJar UP-TO-DATE
+> Task :composeApp:convertXmlValueResourcesForCommonTest NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForCommonTest NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForCommonTest NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForCommonTest NO-SOURCE
+> Task :composeApp:convertXmlValueResourcesForDesktopTest NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForDesktopTest NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForDesktopTest NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForDesktopTest NO-SOURCE
+> Task :composeApp:compileTestKotlinDesktop UP-TO-DATE
+> Task :composeApp:compileDesktopTestJava NO-SOURCE
+> Task :composeApp:assembleDesktopTestResources UP-TO-DATE
+> Task :composeApp:desktopTestProcessResources UP-TO-DATE
+> Task :composeApp:processDesktopTestResources SKIPPED
+> Task :composeApp:desktopTestClasses UP-TO-DATE
+> Task :composeApp:desktopTest UP-TO-DATE
+> Task :composeApp:convertXmlValueResourcesForAndroidMain NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForAndroidMain NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForAndroidMain NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForAndroidMain NO-SOURCE
+> Task :composeApp:generateActualResourceCollectorsForAndroidMain UP-TO-DATE
+> Task :composeApp:convertXmlValueResourcesForAndroidDebug NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForAndroidDebug NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForAndroidDebug NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForAndroidDebug NO-SOURCE
+> Task :composeApp:preBuild UP-TO-DATE
+> Task :composeApp:preDebugBuild UP-TO-DATE
+> Task :composeApp:checkDebugAarMetadata UP-TO-DATE
+> Task :composeApp:processDebugNavigationResources
+> Task :composeApp:compileDebugNavigationResources UP-TO-DATE
+> Task :composeApp:generateDebugResValues UP-TO-DATE
+> Task :composeApp:mapDebugSourceSetPaths UP-TO-DATE
+> Task :composeApp:generateDebugResources UP-TO-DATE
+> Task :composeApp:mergeDebugResources UP-TO-DATE
+> Task :composeApp:copyDebugComposeResourcesToAndroidAssets UP-TO-DATE
+> Task :composeApp:packageDebugResources UP-TO-DATE
+> Task :composeApp:parseDebugLocalResources UP-TO-DATE
+> Task :composeApp:createDebugCompatibleScreenManifests
+> Task :composeApp:extractDeepLinksDebug
+> Task :composeApp:processDebugMainManifest
+> Task :composeApp:processDebugManifest
+> Task :composeApp:checkIosSimulatorArm64MainComposeLibrariesCompatibility
+> Task :composeApp:downloadKotlinNativeDistribution UP-TO-DATE
+> Task :composeApp:convertXmlValueResourcesForIosMain NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForIosMain NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForIosMain NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForIosMain NO-SOURCE
+> Task :composeApp:convertXmlValueResourcesForIosSimulatorArm64Main NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForIosSimulatorArm64Main NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForIosSimulatorArm64Main NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForIosSimulatorArm64Main NO-SOURCE
+> Task :composeApp:generateActualResourceCollectorsForIosSimulatorArm64Main UP-TO-DATE
+> Task :composeApp:compileKotlinIosSimulatorArm64 UP-TO-DATE
+> Task :composeApp:processDebugManifestForPackage
+> Task :composeApp:processDebugResources
+> Task :composeApp:compileDebugKotlinAndroid UP-TO-DATE
+
+[Incubating] Problems report is available at: file://<worktree>/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.4.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 4s
+43 actionable tasks: 12 executed, 31 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.4.1/userguide/configuration_cache_enabling.html
+exit 0

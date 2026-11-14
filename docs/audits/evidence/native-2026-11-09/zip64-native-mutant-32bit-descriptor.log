@@ -1,0 +1,193 @@
+/tmp/snapvault-roadmap-20261108/zip64-test.apk: 1 file pushed, 0 skipped. 746.9 MB/s (496707 bytes in 0.001s)
+Performing Push Install
+Success
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.Zip64PipeDocumentTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=4
+INSTRUMENTATION_STATUS: stream=
+com.najdev.snapvault.Zip64PipeDocumentTest:
+INSTRUMENTATION_STATUS: test=listingEntriesPastTheOverFourGibEntryStillFindsThem
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.Zip64PipeDocumentTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=4
+INSTRUMENTATION_STATUS: stack=java.lang.AssertionError: expected:<[memories/huge.bin, memories/after.jpg, memories_history.json]> but was:<[]>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at org.junit.Assert.assertEquals(Assert.java:146)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.listingEntriesPastTheOverFourGibEntryStillFindsThem(Zip64PipeDocumentTest.kt:167)
+
+INSTRUMENTATION_STATUS: stream=
+Error in listingEntriesPastTheOverFourGibEntryStillFindsThem(com.najdev.snapvault.Zip64PipeDocumentTest):
+java.lang.AssertionError: expected:<[memories/huge.bin, memories/after.jpg, memories_history.json]> but was:<[]>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at org.junit.Assert.assertEquals(Assert.java:146)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.listingEntriesPastTheOverFourGibEntryStillFindsThem(Zip64PipeDocumentTest.kt:167)
+
+INSTRUMENTATION_STATUS: test=listingEntriesPastTheOverFourGibEntryStillFindsThem
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.Zip64PipeDocumentTest
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=4
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=historyAfterTheOverFourGibEntryIsReadAndAMissingEntryIsNull
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.Zip64PipeDocumentTest
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=4
+INSTRUMENTATION_STATUS: stack=java.lang.AssertionError: expected:<{"Saved Media":[]}> but was:<null>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at org.junit.Assert.assertEquals(Assert.java:146)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.historyAfterTheOverFourGibEntryIsReadAndAMissingEntryIsNull$lambda$0(Zip64PipeDocumentTest.kt:173)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.$r8$lambda$D80-0I6TKWqShg9yNHJPTSAyPsk(Unknown Source:0)
+	at com.najdev.snapvault.Zip64PipeDocumentTest$$ExternalSyntheticLambda2.invoke(D8$$SyntheticClass:0)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.withProductionReader(Zip64PipeDocumentTest.kt:157)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.historyAfterTheOverFourGibEntryIsReadAndAMissingEntryIsNull(Zip64PipeDocumentTest.kt:172)
+
+INSTRUMENTATION_STATUS: stream=
+Error in historyAfterTheOverFourGibEntryIsReadAndAMissingEntryIsNull(com.najdev.snapvault.Zip64PipeDocumentTest):
+java.lang.AssertionError: expected:<{"Saved Media":[]}> but was:<null>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at org.junit.Assert.assertEquals(Assert.java:146)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.historyAfterTheOverFourGibEntryIsReadAndAMissingEntryIsNull$lambda$0(Zip64PipeDocumentTest.kt:173)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.$r8$lambda$D80-0I6TKWqShg9yNHJPTSAyPsk(Unknown Source:0)
+	at com.najdev.snapvault.Zip64PipeDocumentTest$$ExternalSyntheticLambda2.invoke(D8$$SyntheticClass:0)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.withProductionReader(Zip64PipeDocumentTest.kt:157)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.historyAfterTheOverFourGibEntryIsReadAndAMissingEntryIsNull(Zip64PipeDocumentTest.kt:172)
+
+INSTRUMENTATION_STATUS: test=historyAfterTheOverFourGibEntryIsReadAndAMissingEntryIsNull
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.Zip64PipeDocumentTest
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=4
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=everyEntryStreamsWithTheExactByteCountAndContent
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.Zip64PipeDocumentTest
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=4
+INSTRUMENTATION_STATUS: stack=java.util.zip.ZipException: invalid entry size (expected 576460838270094160 but got 4294979641 bytes)
+	at java.util.zip.ZipInputStream.readEnd(ZipInputStream.java:436)
+	at java.util.zip.ZipInputStream.read(ZipInputStream.java:223)
+	at java.io.FilterInputStream.read(FilterInputStream.java:107)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.everyEntryStreamsWithTheExactByteCountAndContent$lambda$0$0(Zip64PipeDocumentTest.kt:197)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.$r8$lambda$laBsufbdAGxQkWiMaUSwUgqCtC0(Unknown Source:0)
+	at com.najdev.snapvault.Zip64PipeDocumentTest$$ExternalSyntheticLambda6.invoke(D8$$SyntheticClass:0)
+	at com.najdev.snapvault.StreamingZipReader.forEachEntry$lambda$0(StreamingZipReader.kt:57)
+	at com.najdev.snapvault.StreamingZipReader.$r8$lambda$YoTuD_YUjchUNUIPWKAkQTGWpxE(Unknown Source:0)
+	at com.najdev.snapvault.StreamingZipReader$$ExternalSyntheticLambda2.invoke(D8$$SyntheticClass:0)
+	at com.najdev.snapvault.StreamingZipReader.withZip(StreamingZipReader.kt:71)
+	at com.najdev.snapvault.StreamingZipReader.forEachEntry(StreamingZipReader.kt:54)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.everyEntryStreamsWithTheExactByteCountAndContent$lambda$0(Zip64PipeDocumentTest.kt:190)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.$r8$lambda$uobqlRt-NPWUPMg86XQF_g2xnoo(Unknown Source:0)
+	at com.najdev.snapvault.Zip64PipeDocumentTest$$ExternalSyntheticLambda4.invoke(D8$$SyntheticClass:0)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.withProductionReader(Zip64PipeDocumentTest.kt:157)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.everyEntryStreamsWithTheExactByteCountAndContent(Zip64PipeDocumentTest.kt:189)
+
+INSTRUMENTATION_STATUS: stream=
+Error in everyEntryStreamsWithTheExactByteCountAndContent(com.najdev.snapvault.Zip64PipeDocumentTest):
+java.util.zip.ZipException: invalid entry size (expected 576460838270094160 but got 4294979641 bytes)
+	at java.util.zip.ZipInputStream.readEnd(ZipInputStream.java:436)
+	at java.util.zip.ZipInputStream.read(ZipInputStream.java:223)
+	at java.io.FilterInputStream.read(FilterInputStream.java:107)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.everyEntryStreamsWithTheExactByteCountAndContent$lambda$0$0(Zip64PipeDocumentTest.kt:197)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.$r8$lambda$laBsufbdAGxQkWiMaUSwUgqCtC0(Unknown Source:0)
+	at com.najdev.snapvault.Zip64PipeDocumentTest$$ExternalSyntheticLambda6.invoke(D8$$SyntheticClass:0)
+	at com.najdev.snapvault.StreamingZipReader.forEachEntry$lambda$0(StreamingZipReader.kt:57)
+	at com.najdev.snapvault.StreamingZipReader.$r8$lambda$YoTuD_YUjchUNUIPWKAkQTGWpxE(Unknown Source:0)
+	at com.najdev.snapvault.StreamingZipReader$$ExternalSyntheticLambda2.invoke(D8$$SyntheticClass:0)
+	at com.najdev.snapvault.StreamingZipReader.withZip(StreamingZipReader.kt:71)
+	at com.najdev.snapvault.StreamingZipReader.forEachEntry(StreamingZipReader.kt:54)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.everyEntryStreamsWithTheExactByteCountAndContent$lambda$0(Zip64PipeDocumentTest.kt:190)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.$r8$lambda$uobqlRt-NPWUPMg86XQF_g2xnoo(Unknown Source:0)
+	at com.najdev.snapvault.Zip64PipeDocumentTest$$ExternalSyntheticLambda4.invoke(D8$$SyntheticClass:0)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.withProductionReader(Zip64PipeDocumentTest.kt:157)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.everyEntryStreamsWithTheExactByteCountAndContent(Zip64PipeDocumentTest.kt:189)
+
+INSTRUMENTATION_STATUS: test=everyEntryStreamsWithTheExactByteCountAndContent
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.Zip64PipeDocumentTest
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=4
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=theServedArchiveIsGenuineZip64WithAnOverFourGibEntry
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.Zip64PipeDocumentTest
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=4
+INSTRUMENTATION_STATUS: stack=java.lang.IllegalArgumentException: no ZIP64 data descriptor followed by a local header
+	at com.najdev.snapvault.Zip64PipeDocumentTest.theServedArchiveIsGenuineZip64WithAnOverFourGibEntry(Zip64PipeDocumentTest.kt:87)
+
+INSTRUMENTATION_STATUS: stream=
+Error in theServedArchiveIsGenuineZip64WithAnOverFourGibEntry(com.najdev.snapvault.Zip64PipeDocumentTest):
+java.lang.IllegalArgumentException: no ZIP64 data descriptor followed by a local header
+	at com.najdev.snapvault.Zip64PipeDocumentTest.theServedArchiveIsGenuineZip64WithAnOverFourGibEntry(Zip64PipeDocumentTest.kt:87)
+
+INSTRUMENTATION_STATUS: test=theServedArchiveIsGenuineZip64WithAnOverFourGibEntry
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_RESULT: stream=
+
+Time: 22.028
+There were 4 failures:
+1) listingEntriesPastTheOverFourGibEntryStillFindsThem(com.najdev.snapvault.Zip64PipeDocumentTest)
+java.lang.AssertionError: expected:<[memories/huge.bin, memories/after.jpg, memories_history.json]> but was:<[]>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at org.junit.Assert.assertEquals(Assert.java:146)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.listingEntriesPastTheOverFourGibEntryStillFindsThem(Zip64PipeDocumentTest.kt:167)
+2) historyAfterTheOverFourGibEntryIsReadAndAMissingEntryIsNull(com.najdev.snapvault.Zip64PipeDocumentTest)
+java.lang.AssertionError: expected:<{"Saved Media":[]}> but was:<null>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at org.junit.Assert.assertEquals(Assert.java:146)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.historyAfterTheOverFourGibEntryIsReadAndAMissingEntryIsNull$lambda$0(Zip64PipeDocumentTest.kt:173)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.$r8$lambda$D80-0I6TKWqShg9yNHJPTSAyPsk(Unknown Source:0)
+	at com.najdev.snapvault.Zip64PipeDocumentTest$$ExternalSyntheticLambda2.invoke(D8$$SyntheticClass:0)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.withProductionReader(Zip64PipeDocumentTest.kt:157)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.historyAfterTheOverFourGibEntryIsReadAndAMissingEntryIsNull(Zip64PipeDocumentTest.kt:172)
+3) everyEntryStreamsWithTheExactByteCountAndContent(com.najdev.snapvault.Zip64PipeDocumentTest)
+java.util.zip.ZipException: invalid entry size (expected 576460838270094160 but got 4294979641 bytes)
+	at java.util.zip.ZipInputStream.readEnd(ZipInputStream.java:436)
+	at java.util.zip.ZipInputStream.read(ZipInputStream.java:223)
+	at java.io.FilterInputStream.read(FilterInputStream.java:107)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.everyEntryStreamsWithTheExactByteCountAndContent$lambda$0$0(Zip64PipeDocumentTest.kt:197)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.$r8$lambda$laBsufbdAGxQkWiMaUSwUgqCtC0(Unknown Source:0)
+	at com.najdev.snapvault.Zip64PipeDocumentTest$$ExternalSyntheticLambda6.invoke(D8$$SyntheticClass:0)
+	at com.najdev.snapvault.StreamingZipReader.forEachEntry$lambda$0(StreamingZipReader.kt:57)
+	at com.najdev.snapvault.StreamingZipReader.$r8$lambda$YoTuD_YUjchUNUIPWKAkQTGWpxE(Unknown Source:0)
+	at com.najdev.snapvault.StreamingZipReader$$ExternalSyntheticLambda2.invoke(D8$$SyntheticClass:0)
+	at com.najdev.snapvault.StreamingZipReader.withZip(StreamingZipReader.kt:71)
+	at com.najdev.snapvault.StreamingZipReader.forEachEntry(StreamingZipReader.kt:54)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.everyEntryStreamsWithTheExactByteCountAndContent$lambda$0(Zip64PipeDocumentTest.kt:190)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.$r8$lambda$uobqlRt-NPWUPMg86XQF_g2xnoo(Unknown Source:0)
+	at com.najdev.snapvault.Zip64PipeDocumentTest$$ExternalSyntheticLambda4.invoke(D8$$SyntheticClass:0)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.withProductionReader(Zip64PipeDocumentTest.kt:157)
+	at com.najdev.snapvault.Zip64PipeDocumentTest.everyEntryStreamsWithTheExactByteCountAndContent(Zip64PipeDocumentTest.kt:189)
+4) theServedArchiveIsGenuineZip64WithAnOverFourGibEntry(com.najdev.snapvault.Zip64PipeDocumentTest)
+java.lang.IllegalArgumentException: no ZIP64 data descriptor followed by a local header
+	at com.najdev.snapvault.Zip64PipeDocumentTest.theServedArchiveIsGenuineZip64WithAnOverFourGibEntry(Zip64PipeDocumentTest.kt:87)
+
+FAILURES!!!
+Tests run: 4,  Failures: 4
+
+
+INSTRUMENTATION_CODE: -1
+
+transport_exit=0 elapsed_seconds=23.835

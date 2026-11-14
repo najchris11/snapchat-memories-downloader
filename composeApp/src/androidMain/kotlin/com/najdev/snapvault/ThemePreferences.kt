@@ -30,7 +30,7 @@ actual fun saveLayoutOverride(override: LayoutOverride) {
     prefs?.edit()?.putString("layoutOverride", override.name)?.apply()
 }
 
-actual fun loadLastOutputFolderPreference(): String? = prefs?.getString("lastOutputFolder", null)
+actual fun loadLastOutputFolderPreference(): String? = prefs?.getString("lastOutputFolder", null)?.takeUnless { it.startsWith("content://") }
 
 actual fun saveLastOutputFolderPreference(path: String?) {
     prefs?.edit()?.apply {

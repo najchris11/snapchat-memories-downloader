@@ -120,8 +120,7 @@ class PipelineOptionsNavigationTest {
             }
         }
 
-        onNodeWithText(LEGACY).performClick()
-        onNodeWithText(HISTORY_PLACEHOLDER).performScrollTo().performClick()
+        onNodeWithText(CHOOSE_EXPORT).performScrollTo().performClick()
         onNodeWithText(OUTPUT_PLACEHOLDER).performScrollTo().performClick()
         toggleOff(DOWNLOAD)
         toggleOff(METADATA)
@@ -157,21 +156,21 @@ class PipelineOptionsNavigationTest {
     fun aFreshStartStillOffersTheDefaults() = runComposeUiTest {
         setContent {
             Box(Modifier.width(1280.dp).height(900.dp)) {
-                App(pickers = Pickers(), mediaProcessor = Tools(), zipPipelineRunner = RecordingRunner(), fileSystem = FakeFileSystem(), outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None, onboardingMemory = com.najdev.snapvault.onboarding.OnboardingMemory.None)
+                App(pickers = Pickers(), mediaProcessor = Tools(), zipPipelineRunner = RecordingRunner(), fileSystem = FakeFileSystem().apply { write("/history.json".toPath()) { writeUtf8("{}") } }, outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None, onboardingMemory = com.najdev.snapvault.onboarding.OnboardingMemory.None)
             }
         }
-        onNodeWithText(LEGACY).performClick()
+        onNodeWithText(CHOOSE_EXPORT).performClick()
 
         onNode(switch(DOWNLOAD)).assertIsOn()
         onNode(switch(METADATA)).assertIsOn()
         onNode(switch(COMBINE)).assertIsOn()
         onNode(switch(DEDUPE)).assertIsOn()
         onNode(switch(DRY_RUN)).assertIsOn()
+        onNode(switch("Keep original unmerged files")).assertIsOff()
     }
 
     private companion object {
-        const val LEGACY = "Legacy (HTML/JSON)"
-        const val HISTORY_PLACEHOLDER = "memories_history.json or .html"
+        const val CHOOSE_EXPORT = "Choose export file"
         const val OUTPUT_PLACEHOLDER = "Choose an output folder"
         const val DOWNLOAD = "Download memories"
         const val METADATA = "Write date and location metadata"

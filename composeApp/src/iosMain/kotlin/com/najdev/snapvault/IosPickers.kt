@@ -24,6 +24,12 @@ class IosPickers : PlatformPickers {
     // stay concurrently accessible during sync execution without revoking each other.
     private val accessedUrlsBySlot = mutableMapOf<PickerSlot, List<NSURL>>()
 
+    override fun pickExportFile(onResult: (String?) -> Unit) {
+        presentPicker(slot = PickerSlot.HTML, types = listOf("public.zip-archive", "public.json", "public.html", "public.plain-text"), multiple = false) { urls ->
+            onResult(urls.firstOrNull()?.path)
+        }
+    }
+
     override fun pickHtmlFile(onResult: (String?) -> Unit) {
         presentPicker(slot = PickerSlot.HTML, types = listOf("public.html", "public.plain-text"), multiple = false) { urls ->
             onResult(urls.firstOrNull()?.path)

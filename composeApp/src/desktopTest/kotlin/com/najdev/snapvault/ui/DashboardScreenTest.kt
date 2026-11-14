@@ -22,6 +22,7 @@ import com.najdev.snapvault.viewmodel.DEFAULT_DRY_RUN
 import com.najdev.snapvault.viewmodel.DEFAULT_PIPELINE_EXPANDED
 import com.najdev.snapvault.ui.theme.SnapVaultColors
 import com.najdev.snapvault.ui.theme.SnapVaultTheme
+import okio.Path.Companion.toPath
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -31,6 +32,46 @@ import kotlin.test.assertTrue
 // destructive default, and a failure state that used to be invisible.
 @OptIn(ExperimentalTestApi::class)
 class DashboardScreenTest {
+
+    @Test
+    fun keepingOriginalsIsOptInAndChangesTheCombineDisclosure() = runComposeUiTest {
+        val viewModel = idleDashboardViewModel()
+        setContent {
+            SnapVaultTheme(darkMode = true) { DashboardScreen(viewModel, {}) }
+        }
+        onNodeWithText("Keep original unmerged files").performClick()
+        onNodeWithText(stringResource("opt_combine_keep_helper")).assertExists()
+        onNodeWithText(stringResource("opt_combine_cleanup_helper")).assertDoesNotExist()
+        viewModel.dispose()
+    }
+
+    @Test
+    fun sourcePickerDetectsHistoryAndExplainsTheDownloadMode() = runComposeUiTest {
+        val fs = okio.fakefilesystem.FakeFileSystem()
+        fs.write("/history.json".toPath()) { writeUtf8("{}") }
+        val viewModel = com.najdev.snapvault.viewmodel.DashboardViewModel(
+            zipPipelineRunner = com.najdev.snapvault.downloader.NoOpZipPipelineRunner,
+            mediaProcessor = com.najdev.snapvault.viewmodel.FakeMediaProcessor(),
+            fileSystem = fs,
+            pickers = com.najdev.snapvault.viewmodel.FakePlatformPickers("/history.json", "/out"),
+            outputDirectoryLocker = com.najdev.snapvault.UnenforcedOutputDirectoryLocker,
+            outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
+        )
+        setContent { SnapVaultTheme(darkMode = true) { DashboardScreen(viewModel, {}) } }
+        onNodeWithText(stringResource("source_choose_file")).performClick()
+        waitForIdle()
+        onNodeWithText(stringResource("source_detected_history")).assertExists()
+        onNodeWithText("/history.json").assertExists()
+        viewModel.dispose()
+    }
+
+    @Test
+    fun diskPlanningIsUnavailableUntilASourceAndDestinationAreSelected() = runComposeUiTest {
+        val viewModel = idleDashboardViewModel()
+        setContent { SnapVaultTheme(darkMode = true) { DashboardScreen(viewModel, {}) } }
+        onNodeWithText("Check disk space").assertIsNotEnabled()
+        viewModel.dispose()
+    }
 
     // Regression for N3. Medium keeps the 220dp sidebar, leaving too little room for the
     // Dashboard's two-column layout and four-circle stepper. The original responsive change

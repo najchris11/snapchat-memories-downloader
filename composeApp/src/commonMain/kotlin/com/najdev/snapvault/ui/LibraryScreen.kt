@@ -51,6 +51,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.najdev.snapvault.supportsVideoStitching
+import com.najdev.snapvault.isAndroidBuild
 import com.najdev.snapvault.WindowSize
 import com.najdev.snapvault.getCachedThumbnail
 import com.najdev.snapvault.loadFullImage
@@ -219,6 +221,7 @@ internal fun LibraryEmptyState(
     onClearFilters: () -> Unit,
     modifier: Modifier = Modifier,
     folderChangeable: Boolean = true,
+    usesDeviceLibrary: Boolean = isAndroidBuild,
 ) {
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         Column(
@@ -232,7 +235,9 @@ internal fun LibraryEmptyState(
                 modifier = Modifier.size(48.dp)
             )
             Text(
-                libraryEmptyMessage(reason),
+                if (usesDeviceLibrary && reason != LibraryEmptyReason.FilteredOut)
+                    stringResource(if (reason == LibraryEmptyReason.NoFolder) Res.string.android_library_prompt else Res.string.android_library_empty)
+                else libraryEmptyMessage(reason),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -242,7 +247,7 @@ internal fun LibraryEmptyState(
             // gave no way to tell a wrong folder from an empty one.
             if (reason != LibraryEmptyReason.NoFolder && downloadFolder != null) {
                 Text(
-                    downloadFolder,
+                    if (usesDeviceLibrary) stringResource(Res.string.android_library_selected) else downloadFolder,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -254,12 +259,12 @@ internal fun LibraryEmptyState(
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 when (reason) {
                     LibraryEmptyReason.NoFolder -> EmptyStateAction(
-                        label = stringResource(Res.string.lib_select_folder),
+                        label = stringResource(if (usesDeviceLibrary) Res.string.android_use_library else Res.string.lib_select_folder),
                         onClick = onOpenFolder,
                         enabled = folderChangeable,
                     )
                     LibraryEmptyReason.NoMedia -> {
-                        EmptyStateAction(stringResource(Res.string.lib_change_folder), onOpenFolder, enabled = folderChangeable)
+                        if (!usesDeviceLibrary) EmptyStateAction(stringResource(Res.string.lib_change_folder), onOpenFolder, enabled = folderChangeable)
                         EmptyStateAction(stringResource(Res.string.lib_refresh_action), onRefresh)
                     }
                     LibraryEmptyReason.FilteredOut ->
@@ -346,7 +351,9 @@ data class LibraryItem(
     // Scanners fill it from FileMeta.combined, not FileMeta.hasOverlay (D11).
     val hasOverlay: Boolean,
     val favorited: Boolean = false,
-    val fileSizeBytes: Long = 0L
+    val fileSizeBytes: Long = 0L,
+    val latitude: Double? = null,
+    val longitude: Double? = null
 )
 
 @Composable
@@ -399,6 +406,9 @@ fun LibraryScreen(
     // and "the item after this one" is not a question a LibraryItem can answer.
     var selectedIndex by remember { mutableStateOf(LIBRARY_NO_SELECTION) }
     var showPreview by remember { mutableStateOf(false) }
+    var showMap by remember { mutableStateOf(false) }
+    var showStitch by remember { mutableStateOf(false) }
+    var stitchNotice by remember { mutableStateOf(false) }
 
     val gridFocus = remember { FocusRequester() }
     val searchFocus = remember { FocusRequester() }
@@ -414,6 +424,22 @@ fun LibraryScreen(
         )
     }
     val selectedItem = filteredItems.getOrNull(selectedIndex)
+
+    if (showMap) {
+        GpsMapDialog(filteredItems, onOpenItem = { item ->
+            selectedIndex = filteredItems.indexOfFirst { it.id == item.id }
+            showMap = false
+            showPreview = true
+        }, onDismiss = { showMap = false })
+    }
+
+    if (showStitch && downloadFolder != null) {
+        VideoStitchDialog(items.filter { it.type == "video" }, downloadFolder, onSuccess = {
+            showStitch = false
+            stitchNotice = true
+            refreshKey++
+        }, onDismiss = { showStitch = false })
+    }
 
     // Filtering re-indexes everything, so a held index would point at a different memory —
     // or past the end. Dropping it is the only honest answer.
@@ -480,6 +506,14 @@ fun LibraryScreen(
                 }
                 if (downloadFolder != null) {
                     LibraryHeaderActions(downloadFolder = downloadFolder)
+                    IconButton(onClick = { showMap = true }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Outlined.Map, contentDescription = stringResource(Res.string.map_title))
+                    }
+                    if (supportsVideoStitching) {
+                        IconButton(enabled = folderChangeable && videoCount >= 2, onClick = { showStitch = true }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Outlined.Movie, contentDescription = stringResource(Res.string.stitch_title))
+                        }
+                    }
                     LibrarySortMenu(selected = selectedSort, onSelect = { selectedSort = it })
                     IconButton(onClick = { refreshKey++ }, modifier = Modifier.size(32.dp)) {
                         Icon(
@@ -491,6 +525,8 @@ fun LibraryScreen(
                     }
                 }
             }
+
+            if (stitchNotice) Text(stringResource(Res.string.stitch_complete), style = MaterialTheme.typography.bodySmall)
 
             // Filter tabs plus search. Side by side these need about 384dp — roughly 184dp
             // of tabs and a fixed 200dp field — which is more than Compact (~328dp) or the
@@ -565,6 +601,7 @@ fun LibraryScreen(
                 item = selectedItem,
                 onDismiss = { showPreview = false },
                 onToggleFavorite = { onToggleFavorite(selectedItem, it) },
+                galleryExportEnabled = folderChangeable,
             )
         }
 
@@ -987,6 +1024,7 @@ fun MediaPreviewDialog(
     // The dialog is the only surface reachable at every width: the inspector renders at
     // Expanded only, so without this there is no way to favorite anything on a phone.
     onToggleFavorite: ((Boolean) -> Unit)? = null,
+    galleryExportEnabled: Boolean = true,
 ) {
     val isVideo = item.type == "video"
     val thumbnail by produceState<ImageBitmap?>(null, item.id) {
@@ -1160,6 +1198,7 @@ fun MediaPreviewDialog(
                             }
                         }
                     }
+                    GalleryExportButton(item.id, enabled = galleryExportEnabled)
                 }
             }
         }

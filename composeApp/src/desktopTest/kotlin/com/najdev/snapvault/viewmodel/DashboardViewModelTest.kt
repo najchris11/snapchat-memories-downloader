@@ -47,6 +47,7 @@ private class FakeZipPipelineRunner(
     // onMetaStart fires only after every onProgress call has been delivered, matching the
     // real ordering the BUG-14 fix depends on.
     private val metaStartTotal: Int? = null,
+    private val onDeleteOriginals: (Boolean) -> Unit = {},
     private val onAfterMetaStart: (suspend () -> Unit)? = null,
 ) : ZipPipelineRunner {
     override fun listZipFiles(folderPath: String): List<String> = emptyList()
@@ -67,6 +68,7 @@ private class FakeZipPipelineRunner(
         onMetaError: ((String) -> Unit)?,
         onProgress: (CombineResult) -> Unit,
     ) {
+        onDeleteOriginals(deleteOriginals)
         onStart(combineResults.size)
         combineResults.forEach(onProgress)
         metaStartTotal?.let {
@@ -171,7 +173,7 @@ class DashboardViewModelTest {
         fs.createDirectories("/out".toPath())
         fs.write("/history.json".toPath()) { writeUtf8(historyJson) }
         val viewModel = DashboardViewModel(
-            zipPipelineRunner = FakeZipPipelineRunner(combineResults, metaStartTotal, onAfterMetaStart),
+            zipPipelineRunner = FakeZipPipelineRunner(combineResults, metaStartTotal, onAfterMetaStart = onAfterMetaStart),
             mediaProcessor = FakeMediaProcessor(),
             fileSystem = fs,
             pickers = FakePlatformPickers(htmlPath = "/history.json", outputDir = "/out"),
@@ -1039,6 +1041,94 @@ class DashboardViewModelTest {
             dryRun = false,
         )
         awaitCompletion(this)
+    }
+
+    @Test
+    fun keepOriginalsReachesTheRunnerAndRetainsBothIndexEntries() {
+        val disk = pairOnDisk(favorited = true)
+        combined().sourcePaths.forEach { path -> disk.write(path.toPath()) { writeUtf8("source") } }
+        var deletes: Boolean? = null
+        val viewModel = DashboardViewModel(
+            zipPipelineRunner = FakeZipPipelineRunner(listOf(combined()), onDeleteOriginals = { deletes = it }),
+            mediaProcessor = FakeMediaProcessor(), fileSystem = disk,
+            pickers = FakePlatformPickers("/history.json", "/out"),
+            outputDirectoryLocker = UnenforcedOutputDirectoryLocker,
+            outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
+        )
+        viewModel.changeImportMode(ImportMode.Legacy)
+        viewModel.pickHtmlFile()
+        viewModel.pickOutputFolder()
+        assertFalse(DEFAULT_KEEP_ORIGINALS)
+        with(viewModel.pipelineOptions) {
+            keepOriginals = true
+            runDownload = false
+            runMetadata = false
+            runDedupe = false
+        }
+        viewModel.startSync()
+        awaitCompletion(viewModel)
+        assertEquals(false, deletes)
+        val index = VaultIndex.read(disk, "/out")
+        assertEquals(true, index["2023-10-12_AAA-main.jpg"]?.favorited)
+        assertEquals(true, index["2023-10-12_AAA.jpg"]?.favorited)
+        assertEquals(true, index["2023-10-12_AAA.jpg"]?.combined)
+        assertEquals(false, index["2023-10-12_AAA-main.jpg"]?.combined)
+    }
+
+    @Test
+    fun selectingAnExportAutomaticallyConfiguresModeAndRejectsUnsupportedSources() {
+        val disk = pairOnDisk(favorited = false)
+        disk.createDirectories("/export/json".toPath())
+        disk.write("/export/json/memories_history.json".toPath()) { writeUtf8(historyJson) }
+        val viewModel = combineViewModel(disk, combined())
+        viewModel.selectExportSource("/export")
+        assertEquals(ImportMode.Legacy, viewModel.importMode)
+        assertEquals("/export/json/memories_history.json", viewModel.htmlFile)
+        disk.write("/export/part.zip".toPath()) { writeUtf8("zip") }
+        viewModel.selectExportSource("/export")
+        assertEquals(ImportMode.Zip, viewModel.importMode)
+        assertEquals("/export", viewModel.zipFolder)
+        viewModel.selectExportSource("/export/part.zip")
+        assertEquals(listOf("/export/part.zip"), viewModel.selectedZipFiles)
+        viewModel.selectExportSource("/missing")
+        assertEquals(listOf("/export/part.zip"), viewModel.selectedZipFiles)
+        assertTrue(viewModel.sourceSelectionFailed)
+        viewModel.dispose()
+    }
+
+    @Test
+    fun combinedFilesCarryKnownCoordinatesOnlyWhenMetadataWasCarried() {
+        for (carried in listOf(true, false)) {
+            val disk = pairOnDisk(favorited = true)
+            val indexPath = "/out/vault_index.json".toPath()
+            val original = disk.read(indexPath) { readUtf8() }
+            disk.write(indexPath) { writeUtf8(original.replace("\"hasGps\":true", "\"hasGps\":true,\"latitude\":51.5,\"longitude\":-0.1")) }
+            val vm = combineViewModel(disk, combined(metadataCarried = carried))
+            vm.runCombineOnly()
+            val result = VaultIndex.read(disk, "/out")["2023-10-12_AAA.jpg"]
+            assertEquals(if (carried) 51.5 else null, result?.latitude)
+            assertEquals(if (carried) -0.1 else null, result?.longitude)
+            vm.dispose()
+        }
+    }
+
+    @Test
+    fun documentSourcesUseNativeInspectionInsteadOfFilesystemPathProbing() {
+        val uri = "content://documents/export/42"
+        val nativePickers = object : PlatformPickers by FakePlatformPickers("/history.json", "/out") {
+            override fun inspectExportSource(path: String): com.najdev.snapvault.ExportSource? =
+                if (path == uri) com.najdev.snapvault.ExportSource.ZipFile(uri) else null
+            override fun pickMultipleZips(onResult: (List<String>) -> Unit) = onResult(listOf(uri, "content://documents/unreadable"))
+        }
+        val vm = DashboardViewModel(NoOpZipPipelineRunner, FakeMediaProcessor(), FakeFileSystem(), nativePickers,
+            outputDirectoryLocker = UnenforcedOutputDirectoryLocker, outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None)
+        vm.selectExportSource(uri)
+        assertEquals(listOf(uri), vm.selectedZipFiles)
+        assertFalse(vm.sourceSelectionFailed)
+        vm.pickMultipleZips()
+        assertEquals(listOf(uri), vm.selectedZipFiles, "an unreadable document must not cause a partial selection")
+        assertTrue(vm.sourceSelectionFailed)
+        vm.dispose()
     }
 
     // D11: the index is keyed by file name, and the combine step never moved anything to the

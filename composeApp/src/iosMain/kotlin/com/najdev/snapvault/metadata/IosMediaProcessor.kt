@@ -133,9 +133,9 @@ class IosMediaProcessor : MediaProcessor {
         return writeImageMetadata(filePath) { properties -> applyExifDate(properties, dateTimeUtc) }
     }
 
-    // Video overlay compositing needs an AVAssetExportSession re-encode with a
-    // AVVideoCompositionCoreAnimationTool overlay layer; not implemented yet, and
-    // IosZipPipelineRunner reports it to the user as skipped rather than failed.
+    // The ZIP runner uses the suspend AVFoundation exporter directly so cancellation can
+    // cancel and drain the native session before staging cleanup. This synchronous legacy
+    // interface cannot safely wait for an asynchronous export on the UI thread.
     override fun combineVideoWithOverlay(videoPath: String, overlayPath: String, outputPath: String): Boolean = false
 
     /**

@@ -34,11 +34,8 @@ internal const val CLOSE_SAVE_TIMEOUT_MS = 5_000L
 
 internal const val EXTRACTION_SPACE_RESERVE_BYTES = 1L * 1024 * 1024 * 1024
 
-// The offer to delete each archive as its contents are imported (D20) has three known safety
-// gaps — same-sized-different-content verification, unrecognized media, and an unguarded
-// history-backup failure — none fixed yet. Disabled for release; the deletion mechanics stay
-// covered by tests so re-enabling later only means flipping this back.
-internal const val LOW_SPACE_DELETE_ENABLED = false
+// Only an explicit confirmation after a space refusal authorizes verified archive cleanup.
+internal const val LOW_SPACE_DELETE_ENABLED = true
 
 internal fun formatBytes(bytes: Long): String {
     val gib = bytes / (1024.0 * 1024.0 * 1024.0)
@@ -63,8 +60,7 @@ class DashboardViewModel(
     // A parameter so a test can restore a folder, and watch what gets written, without
     // touching the machine's real preferences.
     private val outputFolderMemory: OutputFolderMemory = OutputFolderMemory.Platform,
-    // See LOW_SPACE_DELETE_ENABLED. A parameter so the offer's own mechanics stay under test
-    // while it ships off.
+    // A parameter so tests can exercise both availability and refusal independently.
     private val lowSpaceDeleteEnabled: Boolean = LOW_SPACE_DELETE_ENABLED,
 ) {
     // ── Input selection state ────────────────────────────────────────────────
@@ -289,6 +285,69 @@ class DashboardViewModel(
     }
 
     // ── Picker actions ───────────────────────────────────────────────────────
+    var detectedSource by mutableStateOf<ExportSource?>(null)
+        private set
+    val sourceLabel: String? get() = detectedSource?.let { pickers.sourceLabel(it.path) ?: it.path }
+    var sourceSelectionFailed by mutableStateOf(false)
+        private set
+
+    fun pickExportFile() = pickers.pickExportFile { it?.let(::selectExportSource) }
+    fun pickExportFolder() = pickers.pickZipFolder { it?.let(::selectExportSource) }
+
+    fun selectExportSource(path: String) {
+        if (isRunning) return
+        val source = try { pickers.inspectExportSource(path) ?: detectExportSource(fileSystem, path) } catch (_: Exception) { null }
+        sourceSelectionFailed = source == null
+        if (source == null) return
+        detectedSource = source
+        htmlFile = null
+        zipFolder = null
+        selectedZipFiles = emptyList()
+        when (source) {
+            is ExportSource.History -> {
+                importMode = ImportMode.Legacy
+                htmlFile = source.path
+            }
+            is ExportSource.ZipFolder -> {
+                importMode = ImportMode.Zip
+                zipSourceMode = ZipSourceMode.Folder
+                zipFolder = source.path
+            }
+            is ExportSource.ZipFile -> {
+                importMode = ImportMode.Zip
+                zipSourceMode = ZipSourceMode.MultipleFiles
+                selectedZipFiles = listOf(source.path)
+            }
+        }
+    }
+
+    /** Reads ZIP directories and free space; never extracts, writes metadata, or deletes. */
+    internal suspend fun estimateImportSpace(): ImportSpaceEstimate? {
+        if (isRunning || importMode != ImportMode.Zip) return null
+        val output = downloadFolder ?: return null
+        val folder = zipFolder
+        val selected = selectedZipFiles
+        val mode = zipSourceMode
+        return withContext(ioDispatcher) {
+            try {
+                val paths = when (mode) {
+                    ZipSourceMode.Folder -> folder?.let(zipPipelineRunner::listZipFiles).orEmpty()
+                    ZipSourceMode.MultipleFiles -> selected
+                }
+                if (paths.isEmpty()) return@withContext null
+                val entries = paths.associateWith { ZipImportParser.parseMemoriesFromZip(it) }
+                if (entries.values.all { it.isEmpty() }) return@withContext null
+                zipPipelineRunner.extractionBudget(entries, output)?.let {
+                    ImportSpaceEstimate(it.requiredBytes, it.availableBytes, paths.size)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
     fun pickHtmlFile() = pickers.pickHtmlFile { it?.let { path -> htmlFile = path } }
     /**
      * Whether the output folder may change right now.
@@ -311,7 +370,21 @@ class DashboardViewModel(
         }
     }
     fun pickZipFolder() = pickers.pickZipFolder { it?.let { path -> zipFolder = path; selectedZipFiles = emptyList() } }
-    fun pickMultipleZips() = pickers.pickMultipleZips { paths -> if (paths.isNotEmpty()) { selectedZipFiles = paths; zipFolder = null } }
+    fun pickMultipleZips() = pickers.pickMultipleZips { paths ->
+        if (isRunning) return@pickMultipleZips
+        if (paths.any { it.startsWith("content://") && pickers.inspectExportSource(it) !is ExportSource.ZipFile }) {
+            sourceSelectionFailed = true
+            return@pickMultipleZips
+        }
+        if (paths.isNotEmpty()) {
+            selectedZipFiles = paths
+            zipFolder = null
+            importMode = ImportMode.Zip
+            zipSourceMode = ZipSourceMode.MultipleFiles
+            detectedSource = ExportSource.ZipFile(paths.first())
+            sourceSelectionFailed = false
+        }
+    }
 
     fun changeImportMode(mode: ImportMode) { importMode = mode }
 
@@ -320,7 +393,7 @@ class DashboardViewModel(
         if (lowSpaceOffer == null) return
         lowSpaceOffer = null
         with(pipelineOptions) {
-            startSync(runDownload, runMetadata, preciseMatching, runCombine, runDedupe, dryRun, lowSpaceMode = true)
+            startSync(runDownload, runMetadata, preciseMatching, runCombine, runDedupe, dryRun, lowSpaceMode = true, keepOriginals = keepOriginals)
         }
     }
 
@@ -341,7 +414,7 @@ class DashboardViewModel(
 
     /** Starts a run with the current [pipelineOptions], captured now. */
     fun startSync() = with(pipelineOptions) {
-        startSync(runDownload, runMetadata, preciseMatching, runCombine, runDedupe, dryRun)
+        startSync(runDownload, runMetadata, preciseMatching, runCombine, runDedupe, dryRun, keepOriginals = keepOriginals)
     }
 
     fun startSync(
@@ -354,6 +427,7 @@ class DashboardViewModel(
         // Deletes each source ZIP once its contents are verified on disk. Never a stored
         // option: it only ever arrives from a user accepting the offer below, for one run (D20).
         lowSpaceMode: Boolean = false,
+        keepOriginals: Boolean = DEFAULT_KEEP_ORIGINALS,
     ) {
         // A double-click racing recomposition (before isRunning disables the button)
         // must not launch a second concurrent pipeline.
@@ -406,9 +480,10 @@ class DashboardViewModel(
                             dryRun,
                             workerCount,
                             lowSpaceMode,
+                            keepOriginals,
                         )
                     } else {
-                        runLegacyPipeline(outDir, runDownload, runMetadata, runCombine, runDedupe, dryRun, workerCount)
+                        runLegacyPipeline(outDir, runDownload, runMetadata, runCombine, runDedupe, dryRun, workerCount, keepOriginals)
                     }
                 } finally {
                     // A lock held past the end of a run is a library that can never be synced
@@ -513,6 +588,8 @@ class DashboardViewModel(
             hasGps = result.metadataCarried && source?.hasGps == true,
             hasOverlay = true,
             combined = true,
+            latitude = source?.latitude.takeIf { result.metadataCarried },
+            longitude = source?.longitude.takeIf { result.metadataCarried },
         )
         if (mainName != null) derived.favoritesFrom[mainName] = outputName
         result.sourcePaths.forEach { path ->
@@ -654,7 +731,7 @@ class DashboardViewModel(
      * Archives arrive smallest first, from the plan that decided this fits: the tightest moment
      * is the first one, before anything has been deleted. Every deletion is permanent, so an
      * archive goes only when the extractor confirms every file it should have produced is
-     * present at the size the archive says — and only after the deletion is recorded, since a
+     * byte-for-byte verified against the archive — and only after the deletion is recorded, since a
      * deletion nothing accounts for is the one outcome no rerun can explain.
      */
     private suspend fun importArchivesOneAtATime(
@@ -759,7 +836,11 @@ class DashboardViewModel(
                 runCatching {
                     val target = "$outDir/${ImportManifest.DIR_NAME}/history/$name.json".toPath()
                     fileSystem.createDirectories(target.parent!!)
-                    fileSystem.write(target) { writeUtf8(history) }
+                    if (fileSystem.exists(target)) {
+                        check(fileSystem.read(target) { readUtf8() } == history) { "existing history backup differs; keeping both exports" }
+                    } else {
+                        fileSystem.sink(target, mustCreate = true).buffer().use { it.writeUtf8(history) }
+                    }
                 }.onFailure { log("[WARN] Could not keep $name's memories_history.json: ${it.message}") }
             }
         }
@@ -784,6 +865,7 @@ class DashboardViewModel(
         dryRun: Boolean,
         workerCount: Int,
         lowSpaceMode: Boolean = false,
+        keepOriginals: Boolean,
     ) {
         log("[INFO] Scanning for ZIP files…")
         val zipFiles: List<String> = when (zipSourceMode) {
@@ -869,8 +951,7 @@ class DashboardViewModel(
                     "${formatBytes(budget.availableBytes)} is available."
                 // Refusing used to be the whole answer. Where the archives sit on the output
                 // drive and the import would fit one at a time, there is something the user
-                // can do about it, and only they can decide to do it (D20). Gated off for
-                // release — see LOW_SPACE_DELETE_ENABLED.
+                // can do about it, and only they can decide to do it (D20).
                 if (lowSpaceDeleteEnabled && plan.fits) {
                     lowSpaceOffer = LowSpaceOffer(
                         archiveNames = plan.archives.map { it.path.substringAfterLast('/').substringAfterLast('\\') },
@@ -981,7 +1062,7 @@ class DashboardViewModel(
 
         val derived = CombineDerivatives()
         if (runCombine) {
-            val (combined, skipped, errors) = runCombinePhase(outDir, downloadedMeta, derived)
+            val (combined, skipped, errors) = runCombinePhase(outDir, downloadedMeta, derived, keepOriginals)
             pipelineCombinedCount = combined
             pipelineCombineSkipped = skipped
             pipelineCombineErrors = errors
@@ -1024,6 +1105,7 @@ class DashboardViewModel(
         runDedupe: Boolean,
         dryRun: Boolean,
         workerCount: Int,
+        keepOriginals: Boolean,
     ) {
         progressText = progressStrings.readingMemories
         log("[INFO] Starting run…")
@@ -1141,7 +1223,7 @@ class DashboardViewModel(
 
         val derived = CombineDerivatives()
         if (runCombine) {
-            runCombinePhase(outDir, downloadedMeta, derived)
+            runCombinePhase(outDir, downloadedMeta, derived, keepOriginals)
         }
 
         if (runDedupe) runDeduplication(outDir, dryRun)
@@ -1280,7 +1362,7 @@ class DashboardViewModel(
                     when (result.outcome) {
                         "gps" -> {
                             gpsCount++
-                            downloadedMeta[result.target.fileName] = FileMeta(hasGps = true, hasOverlay = result.target.hasOverlay)
+                            downloadedMeta[result.target.fileName] = FileMeta(hasGps = true, hasOverlay = result.target.hasOverlay, latitude = result.target.latitude, longitude = result.target.longitude)
                         }
                         "date" -> {
                             dateCount++
@@ -1364,6 +1446,7 @@ class DashboardViewModel(
         outDir: String,
         meta: MutableMap<String, FileMeta>,
         derived: CombineDerivatives,
+        keepOriginals: Boolean,
     ): Triple<Int, Int, Int> {
         var combinedCount = 0
         var combineErrorCount = 0
@@ -1405,7 +1488,7 @@ class DashboardViewModel(
 
         zipPipelineRunner.combineAll(
             outDir,
-            deleteOriginals = true,
+            deleteOriginals = !keepOriginals,
             workerCount = workerCount,
             onMetaError = { msg ->
                 // A combined file left without its date — a failed write, not a remark.
@@ -1547,7 +1630,7 @@ class DashboardViewModel(
                     when (outcome) {
                         "gps" -> {
                             gpsCount++
-                            downloadedMeta[leafName(target.path)] = FileMeta(hasGps = true, hasOverlay = false)
+                            downloadedMeta[leafName(target.path)] = FileMeta(hasGps = true, hasOverlay = false, latitude = target.lat, longitude = target.lon)
                         }
                         "date" -> dateCount++
                         "fail" -> failCount++

@@ -13,5 +13,7 @@
 	     name, scene manifest, launch screen, orientations) into this file. -->
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Save a copy of a selected memory to Photos. Your SnapVault original stays unchanged.</string>
 </dict>
 </plist>

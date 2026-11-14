@@ -80,7 +80,7 @@ class LowSpaceImportTest {
     private fun viewModel(
         zips: List<File>,
         runner: ZipPipelineRunner? = null,
-        // The offer ships disabled by default (LOW_SPACE_DELETE_ENABLED); tests that exercise
+        // Availability is injected explicitly here; tests that exercise
         // the offer itself (rather than the deletion mechanics via lowSpaceMode = true directly)
         // opt in explicitly.
         lowSpaceDeleteEnabled: Boolean = false,
@@ -116,6 +116,35 @@ class LowSpaceImportTest {
 
     private fun await(viewModel: DashboardViewModel) = runBlocking {
         withTimeout(20_000) { while (viewModel.isRunning) delay(10) }
+    }
+
+    @Test
+    fun diskSpaceCanBeEstimatedWithoutStartingOrWritingAnImport() = runBlocking {
+        val zip = exportZip("part1.zip", listOf("2024-01-01_aaa-main.jpg"))
+        val viewModel = viewModel(listOf(zip))
+        val estimate = viewModel.estimateImportSpace()
+        assertNotNull(estimate)
+        assertEquals(2048L, estimate.requiredBytes)
+        assertTrue(estimate.availableBytes >= 0)
+        assertEquals(1, estimate.archiveCount)
+        assertFalse(viewModel.isRunning)
+        assertTrue(zip.exists())
+        assertTrue(outDir.listFiles()!!.isEmpty(), "planning must not create library files")
+        viewModel.dispose()
+    }
+
+    @Test
+    fun conflictingHistoryBackupsAreNeverOverwrittenToAuthorizeDeletion() {
+        val zip = exportZip("part1.zip", listOf("2024-01-01_aaa-main.jpg"), "new history")
+        val backup = File(outDir, "${ImportManifest.DIR_NAME}/history/part1.zip.json")
+        backup.parentFile.mkdirs()
+        backup.writeText("previous export history")
+        val viewModel = viewModel(listOf(zip))
+        viewModel.startImport(lowSpaceMode = true)
+        await(viewModel)
+        assertEquals("previous export history", backup.readText())
+        assertTrue(zip.exists(), "the new history must remain recoverable in its archive")
+        viewModel.dispose()
     }
 
     @Test

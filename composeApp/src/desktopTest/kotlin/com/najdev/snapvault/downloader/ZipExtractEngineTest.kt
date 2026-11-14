@@ -479,6 +479,29 @@ class ZipExtractEngineTest {
         assertEquals(2, missing.size, missing.toString())
     }
 
+    // D20: size-only verification authorized deleting the only archive when a resumed
+    // destination had the same byte count but different contents.
+    @Test
+    fun verificationRejectsSameSizedDifferentContent() {
+        val zip = createZip("part1.zip", mapOf("memories/a-main.jpg" to byteArrayOf(1, 2, 3)))
+        File(outDir, "a-main.jpg").writeBytes(byteArrayOf(3, 2, 1))
+        val problems = ZipExtractEngine().verifyExtraction(zip.path, listOf(entry("a-main.jpg")), outDir.path)
+        assertTrue(problems.any { "a-main.jpg" in it }, problems.toString())
+        assertTrue(zip.exists())
+    }
+
+    // D20: deleting a ZIP after checking only recognized memories loses every extra entry.
+    @Test
+    fun verificationKeepsArchivesContainingUnpreservedFiles() {
+        val zip = createZip("part1.zip", mapOf(
+            "memories/a-main.jpg" to byteArrayOf(1, 2, 3),
+            "memories/unknown.bin" to byteArrayOf(4, 5),
+        ))
+        runExtract(zip, listOf(entry("a-main.jpg")))
+        val problems = ZipExtractEngine().verifyExtraction(zip.path, listOf(entry("a-main.jpg")), outDir.path)
+        assertTrue(problems.any { "unknown.bin" in it }, problems.toString())
+    }
+
     // An entry the archive does not actually contain cannot be checked against it; the
     // extraction already reported it as an error, and the archive must not be deleted on the
     // strength of a file that came from somewhere else.

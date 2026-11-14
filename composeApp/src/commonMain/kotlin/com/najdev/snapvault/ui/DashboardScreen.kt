@@ -281,7 +281,13 @@ private fun DashboardControls(
                         Icons.Outlined.Layers,
                         stringResource(Res.string.opt_combine_overlays),
                         options.runCombine,
-                        helperText = stringResource(if (options.keepOriginals) Res.string.opt_combine_keep_helper else Res.string.opt_combine_cleanup_helper).takeIf { options.runCombine },
+                        helperText = stringResource(
+                            when {
+                                options.keepOriginals -> Res.string.opt_combine_keep_helper
+                                usesDeviceLibrary -> Res.string.opt_combine_cleanup_helper_device
+                                else -> Res.string.opt_combine_cleanup_helper
+                            },
+                        ).takeIf { options.runCombine },
                         enabled = editable,
                     ) { options.runCombine = it }
                     AnimatedVisibility(visible = options.runCombine) {

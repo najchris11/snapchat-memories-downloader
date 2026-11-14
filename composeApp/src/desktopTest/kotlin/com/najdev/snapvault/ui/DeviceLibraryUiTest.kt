@@ -17,6 +17,10 @@ class DeviceLibraryUiTest {
         onNodeWithText("ZIP imports and photo and video overlays are available in this preview.", substring = true).assertExists()
         onNodeWithText("Combined videos keep their originals", substring = true).assertExists()
         onNodeWithText("remain separate", substring = true).assertDoesNotExist()
+        // Regression: the cleanup helper said "the original photo or video ... permanently
+        // deleted", but the on-device pipeline never deletes a video's originals.
+        onNodeWithText("Videos always keep their originals.", substring = true).assertExists()
+        onNodeWithText("the original photo or video and its overlay are permanently deleted", substring = true).assertDoesNotExist()
         onNodeWithText("Choose an output folder").assertDoesNotExist()
         onNodeWithText("Imports are processed in SnapVault’s own on-device library.", substring = true).assertExists()
         vm.dispose()

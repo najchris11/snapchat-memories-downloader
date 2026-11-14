@@ -1,0 +1,109 @@
+name: Native Tests
+
+# The Android instrumentation and iOS simulator suites exercise the real platform code
+# (SAF provider pipes, Media3 and AVFoundation export, HDR handling) that desktopTest cannot
+# reach. Until 2026-11 they only ever ran by hand on a developer Mac.
+#
+# Deliberately NOT a required check: emulator and simulator boots are the flakiest step in
+# CI, and a new workflow should prove itself before it can block merges. Promote these jobs
+# into check.yml's required set once they have been reliably green.
+on:
+  pull_request:
+    branches: [ main, develop ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-instrumented:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (JetBrains Runtime)
+        uses: actions/setup-java@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          java-version: '21.0.7'
+          distribution: 'jetbrains'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      # Hardware acceleration for the x86_64 emulator; without it the boot takes ~10 minutes.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # PersistedDocumentAccessTest is excluded: it needs a folder granted through the system
+      # picker beforehand (see composeApp/src/androidInstrumentedTest/README.md), which a fresh
+      # emulator does not have. Everything else is self-contained: the provider tests serve
+      # their fixtures from the test APK, and the video tests carry their own clips.
+      - name: Run Android instrumentation tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: ./gradlew :composeApp:connectedDebugAndroidTest -Pandroid.suppressUnsupportedCompileSdk=37.0 -Pandroid.testInstrumentationRunnerArguments.notClass=com.najdev.snapvault.PersistedDocumentAccessTest
+
+      - name: Upload Android test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-instrumented-reports
+          path: composeApp/build/reports/androidTests/
+          if-no-files-found: ignore
+
+  ios-simulator:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (JetBrains Runtime)
+        uses: actions/setup-java@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          java-version: '21.0.7'
+          distribution: 'jetbrains'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      # The Kotlin test task otherwise asks for a fixed default device name that a runner
+      # image may not have. Pick any available iPhone simulator instead.
+      - name: Pick an iPhone simulator
+        id: sim
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for r in d.values() for x in r if x["name"].startswith("iPhone")))')
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+
+      # Includes the AVFoundation exporter suite: HDR preservation, rotation, cancellation
+      # drain and the no-overwrite rule, run against the real encoder.
+      - name: Run iOS simulator tests
+        run: ./gradlew :composeApp:iosSimulatorArm64Test --device "${{ steps.sim.outputs.udid }}"
+
+      - name: Upload iOS test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-reports
+          path: |
+            composeApp/build/reports/tests/iosSimulatorArm64Test/
+            composeApp/build/native-test-artifacts/
+          if-no-files-found: ignore

@@ -317,7 +317,7 @@ Historical access state: the 2026-11-08 GitHub growth settings section below sup
 
 ## Duo layout, chrome borders, CI native jobs, icon concepts (2026-11-14)
 
-- **iPhone Duo unfolded:** the ~890dp inner panel got the desktop layout at the old 840dp breakpoint, so the Library search field wrapped "Sea / rch" and the stat chips were clipped next to the Inspector. Expanded now starts at 1100dp (`EXPANDED_MIN_WIDTH`), still below the 1280dp desktop default. Checked on a Duo simulator in both poses: the closed panel is unchanged, and the open panel now shows the sidebar plus a full-width Library with no Inspector.
+- **iPhone Duo unfolded:** the ~890dp inner panel got the desktop layout at the old 840dp breakpoint, so the Library search field wrapped "Sea / rch" and the stat chips were clipped next to the Inspector. Expanded now starts at 1100dp (`EXPANDED_MIN_WIDTH`), still below the 1280dp desktop default. Checked on a Duo simulator in both poses: the closed panel keeps the phone layout (now with only a bottom divider), and the open panel now shows the sidebar plus a full-width Library with no Inspector.
 - **Top bar and sidebar borders:** both drew a 1dp box border on all four sides. They now draw a single divider (bottom and right respectively). `ChromeEdgeTest` checks the edge pixels and failed before the change.
 - **On-device helper copy:** the "delete originals" helper no longer says videos are deleted on mobile, where they never are (`DeviceLibraryUiTest` failed first).
 - **CI:** new non-required `native-tests.yml` runs `connectedDebugAndroidTest` (API 34 emulator, persisted-grant test excluded) and `iosSimulatorArm64Test` on macOS. Covered by a contract test, and the YAML parses. It has **not run yet**: it needs a push or PR.

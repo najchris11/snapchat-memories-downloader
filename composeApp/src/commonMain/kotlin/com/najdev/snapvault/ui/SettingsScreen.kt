@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.*
 import com.najdev.snapvault.viewmodel.DashboardViewModel
 import androidx.compose.foundation.rememberScrollState
@@ -451,30 +452,49 @@ fun SettingsRow(
     descriptionMaxLines: Int = Int.MAX_VALUE,
     trailing: @Composable () -> Unit = {},
 ) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Icon(
-            icon,
-            null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(16.dp)
-        )
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium)
-            Text(
-                description,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = descriptionMaxLines,
-                overflow = TextOverflow.Ellipsis,
-            )
+    // Beside the text, a segmented control or button keeps its own width and the text column
+    // gets what is left: on a phone that was one word per line, and on the folded iPhone Duo
+    // "Layout" broke mid-word. Below this width the control moves under the text instead.
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        val stacked = maxWidth < SETTINGS_ROW_STACK_WIDTH
+        val text: @Composable (Modifier) -> Unit = { textModifier ->
+            Column(modifier = textModifier, verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text(title, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    description,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = descriptionMaxLines,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
-        trailing()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = if (stacked) Alignment.Top else Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                icon,
+                null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp)
+            )
+            if (stacked) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    text(Modifier.fillMaxWidth())
+                    trailing()
+                }
+            } else {
+                text(Modifier.weight(1f))
+                trailing()
+            }
+        }
     }
 }
+
+// Wide enough for a ~230dp segmented control beside a readable text column.
+internal val SETTINGS_ROW_STACK_WIDTH = 480.dp
 
 @Composable
 fun DependencyItem(

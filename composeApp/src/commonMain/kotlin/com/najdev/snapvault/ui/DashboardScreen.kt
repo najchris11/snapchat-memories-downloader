@@ -1,5 +1,7 @@
 package com.najdev.snapvault.ui
 
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
@@ -134,6 +136,7 @@ fun DashboardScreen(
 
 // ── Controls ─────────────────────────────────────────────────────────────────
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DashboardControls(
     viewModel: DashboardViewModel,
@@ -182,7 +185,9 @@ private fun DashboardControls(
                 text = stringResource(Res.string.dash_source_title)
             )
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Wraps: as a fixed Row, the folded iPhone Duo squeezed "Choose export folder" into a
+            // three-line pill beside its neighbour.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = viewModel::pickExportFile, enabled = !viewModel.isRunning) {
                     Text(stringResource(Res.string.source_choose_file))
                 }
@@ -193,16 +198,19 @@ private fun DashboardControls(
             TextButton(onClick = viewModel::pickMultipleZips, enabled = !viewModel.isRunning) {
                 Text(stringResource(Res.string.source_choose_multiple))
             }
-            viewModel.detectedSource?.let { source ->
+            val zips = viewModel.selectedZipFiles
+            if (zips.size > 1) {
+                // Every picked ZIP by name. It used to say "Detected ZIP archive" over the first
+                // one alone, which read as if the others would be ignored.
+                Text(pluralStringResource(Res.plurals.zip_files_selected, zips.size, zips.size), style = MaterialTheme.typography.bodySmall)
+                zips.forEach { Text(viewModel.displayNameOf(it), style = MaterialTheme.typography.labelSmall) }
+            } else viewModel.detectedSource?.let { source ->
                 Text(stringResource(when (source) {
                     is ExportSource.ZipFolder -> Res.string.source_detected_zip_folder
                     is ExportSource.ZipFile -> Res.string.source_detected_zip
                     is ExportSource.History -> Res.string.source_detected_history
                 }), style = MaterialTheme.typography.bodySmall)
                 Text(viewModel.sourceLabel ?: source.path, style = MaterialTheme.typography.labelSmall)
-                if (viewModel.selectedZipFiles.size > 1) {
-                    Text(pluralStringResource(Res.plurals.zip_files_selected, viewModel.selectedZipFiles.size, viewModel.selectedZipFiles.size))
-                }
             }
             if (viewModel.sourceSelectionFailed) {
                 Text(stringResource(Res.string.source_unsupported), color = MaterialTheme.colorScheme.error)

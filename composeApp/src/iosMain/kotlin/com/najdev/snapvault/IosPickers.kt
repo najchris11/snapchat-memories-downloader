@@ -24,6 +24,10 @@ class IosPickers : PlatformPickers {
     // stay concurrently accessible during sync execution without revoking each other.
     private val accessedUrlsBySlot = mutableMapOf<PickerSlot, List<NSURL>>()
 
+    // The picked path is a sandbox location (".../CoreSimulator/Devices/<id>/.../Documents/x.zip"
+    // on a simulator), which the Dashboard used to show in full.
+    override fun sourceLabel(path: String): String = sourceDisplayName(path)
+
     override fun pickExportFile(onResult: (String?) -> Unit) {
         presentPicker(slot = PickerSlot.HTML, types = listOf("public.zip-archive", "public.json", "public.html", "public.plain-text"), multiple = false) { urls ->
             onResult(urls.firstOrNull()?.path)

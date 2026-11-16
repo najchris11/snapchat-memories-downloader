@@ -32,3 +32,30 @@ class ExportSourceTest {
         assertEquals(ExportSource.History("/export/json/memories_history.json"), detectExportSource(fs, "/export/json/memories_history.json"))
     }
 }
+
+/**
+ * Regression from a real export: iOS showed the source as a full sandbox path
+ * ("/Users/…/CoreSimulator/Devices/…/Documents/Imports/mydata~….zip") and the Android log named
+ * each ZIP by its encoded document ID ("raw%3A%2Fstorage%2Femulated%2F0%2FDownload%2Fmydata….zip").
+ * People recognise a ZIP by its file name, which is all [sourceDisplayName] keeps.
+ */
+class SourceDisplayNameTest {
+    @Test
+    fun aFilesystemPathShowsOnlyItsFileName() {
+        assertEquals("mydata~1788374792646-28.zip", sourceDisplayName("/Users/me/Library/Developer/CoreSimulator/Devices/C59D/data/Documents/Imports/mydata~1788374792646-28.zip"))
+        assertEquals("export.zip", sourceDisplayName("C:\\Users\\me\\Downloads\\export.zip"))
+        assertEquals("export", sourceDisplayName("/home/me/export/"))
+    }
+
+    @Test
+    fun anEncodedDocumentIdShowsItsDecodedFileName() {
+        assertEquals("mydata~1788374792646-28.zip", sourceDisplayName("raw%3A%2Fstorage%2Femulated%2F0%2FDownload%2Fmydata~1788374792646-28.zip"))
+        assertEquals("mydata.zip", sourceDisplayName("content://com.android.providers.downloads.documents/document/raw%3A%2Fstorage%2Femulated%2F0%2FDownload%2Fmydata.zip"))
+        assertEquals("Snap export.zip", sourceDisplayName("content://com.android.externalstorage.documents/document/primary%3ADownload%2FSnap%20export.zip"))
+    }
+
+    @Test
+    fun malformedEscapesAreLeftAlone() {
+        assertEquals("100%done.zip", sourceDisplayName("/tmp/100%done.zip"))
+    }
+}

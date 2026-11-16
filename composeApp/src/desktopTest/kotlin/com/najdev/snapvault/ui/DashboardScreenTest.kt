@@ -15,6 +15,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.v2.runComposeUiTest
 import com.najdev.snapvault.ImportMode
 import com.najdev.snapvault.WindowSize
@@ -39,7 +40,9 @@ class DashboardScreenTest {
         setContent {
             SnapVaultTheme(darkMode = true) { DashboardScreen(viewModel, {}) }
         }
-        onNodeWithText("Keep original unmerged files").performClick()
+        // Scrolled to first: a click is dispatched at the node's position, and below the fold
+        // of the test window it lands on nothing.
+        onNodeWithText("Keep original unmerged files").performScrollTo().performClick()
         onNodeWithText(stringResource("opt_combine_keep_helper")).assertExists()
         onNodeWithText(stringResource("opt_combine_cleanup_helper")).assertDoesNotExist()
         viewModel.dispose()

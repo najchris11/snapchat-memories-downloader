@@ -287,7 +287,12 @@ class DashboardViewModel(
     // ── Picker actions ───────────────────────────────────────────────────────
     var detectedSource by mutableStateOf<ExportSource?>(null)
         private set
+    // Desktop keeps the full path (files come from anywhere there); the mobile pickers label
+    // sources by file name, because their paths are sandbox internals or document IDs.
     val sourceLabel: String? get() = detectedSource?.let { pickers.sourceLabel(it.path) ?: it.path }
+
+    /** One picked ZIP in a list of several, where a full path per line would be unreadable. */
+    fun displayNameOf(path: String): String = pickers.sourceLabel(path) ?: sourceDisplayName(path)
     var sourceSelectionFailed by mutableStateOf(false)
         private set
 
@@ -885,7 +890,8 @@ class DashboardViewModel(
         val itemsByZip = mutableMapOf<String, List<HtmlMemoryEntry>>()
         var totalMemoryCount = 0
         for (zipPath in zipFiles) {
-            val zipName = zipPath.substringAfterLast('/').substringAfterLast('\\')
+            // Android passes document IDs, whose slashes are percent-encoded; see sourceDisplayName.
+            val zipName = sourceDisplayName(zipPath)
             var unmatchedCount = 0
             val unmatchedSamples = mutableListOf<String>()
             val entries = ZipImportParser.parseMemoriesFromZip(zipPath) { filePath ->

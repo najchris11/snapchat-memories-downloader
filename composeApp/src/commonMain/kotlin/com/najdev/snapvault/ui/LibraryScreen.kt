@@ -13,6 +13,8 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -465,45 +467,19 @@ fun LibraryScreen(
             // Stats row
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.Top
             ) {
-                // Scrolls rather than overflowing: four chips need more width than a phone
-                // has, and the row sits next to the refresh button.
-                Row(
-                    modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    StatChip(
-                        icon = Icons.Outlined.PhotoLibrary,
-                        label = pluralStringResource(Res.plurals.lib_memory_count, items.size, items.size),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    StatChip(
-                        icon = Icons.Outlined.Image,
-                        label = photoCount.let { pluralStringResource(Res.plurals.lib_photo_count, it, it) },
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    StatChip(
-                        icon = Icons.Outlined.Videocam,
-                        label = videoCount.let { pluralStringResource(Res.plurals.lib_video_count, it, it) },
-                        tint = SnapVaultColors.info
-                    )
-                    StatChip(
-                        icon = Icons.Outlined.GpsFixed,
-                        label = gpsCount.let { pluralStringResource(Res.plurals.lib_gps_chip_count, it, it) },
-                        tint = SnapVaultColors.success
-                    )
+                LibraryStatChips(
+                    memories = items.size,
+                    photos = photoCount,
+                    videos = videoCount,
+                    withLocation = gpsCount,
                     // Total size otherwise only appears in the inspector, so without this it
                     // would simply vanish on narrower windows.
-                    if (!showInspector && items.isNotEmpty()) {
-                        StatChip(
-                            icon = Icons.Outlined.Storage,
-                            label = formatBytes(items.sumOf { it.fileSizeBytes }),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
+                    totalSize = if (!showInspector && items.isNotEmpty()) formatBytes(items.sumOf { it.fileSizeBytes }) else null,
+                    modifier = Modifier.weight(1f),
+                )
                 if (downloadFolder != null) {
                     LibraryHeaderActions(downloadFolder = downloadFolder)
                     IconButton(onClick = { showMap = true }, modifier = Modifier.size(32.dp)) {
@@ -966,6 +942,34 @@ private fun InspectorGlobalStats(items: List<LibraryItem>) {
     }
 }
 
+/**
+ * The Library's counts. They wrap onto a second line rather than scrolling sideways: as one
+ * scrolling row beside the toolbar icons, the last chips were cut off on phones, the folded
+ * iPhone Duo and 1024px desktop windows, with nothing to say the row scrolled.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun LibraryStatChips(
+    memories: Int,
+    photos: Int,
+    videos: Int,
+    withLocation: Int,
+    totalSize: String?,
+    modifier: Modifier = Modifier,
+) {
+    FlowRow(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        StatChip(Icons.Outlined.PhotoLibrary, pluralStringResource(Res.plurals.lib_memory_count, memories, memories), MaterialTheme.colorScheme.primary)
+        StatChip(Icons.Outlined.Image, pluralStringResource(Res.plurals.lib_photo_count, photos, photos), MaterialTheme.colorScheme.primary)
+        StatChip(Icons.Outlined.Videocam, pluralStringResource(Res.plurals.lib_video_count, videos, videos), SnapVaultColors.info)
+        StatChip(Icons.Outlined.GpsFixed, pluralStringResource(Res.plurals.lib_gps_chip_count, withLocation, withLocation), SnapVaultColors.success)
+        if (totalSize != null) StatChip(Icons.Outlined.Storage, totalSize, MaterialTheme.colorScheme.primary)
+    }
+}
+
 @Composable
 fun StatChip(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -1133,71 +1137,7 @@ fun MediaPreviewDialog(
                         }
                     }
 
-                    // Info bar
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                            .padding(horizontal = 20.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(item.title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(item.date, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            if (onToggleFavorite != null) {
-                                IconButton(onClick = { onToggleFavorite(!item.favorited) }) {
-                                    Icon(
-                                        if (item.favorited) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                                        contentDescription = stringResource(
-                                            if (item.favorited) Res.string.lib_favorite_remove
-                                            else Res.string.lib_favorite_add
-                                        ),
-                                        tint = if (item.favorited) {
-                                            MaterialTheme.colorScheme.error
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                }
-                            }
-                            if (item.fileSizeBytes > 0) {
-                                Text(formatBytes(item.fileSizeBytes), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                            }
-                            if (item.hasGps) {
-                                Row(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
-                                        .padding(horizontal = 7.dp, vertical = 3.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Outlined.GpsFixed, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(11.dp))
-                                    Text(stringResource(Res.string.lib_detail_gps), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                                }
-                            }
-                            if (item.hasOverlay) {
-                                Row(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(SnapVaultColors.info.copy(alpha = 0.1f))
-                                        .padding(horizontal = 7.dp, vertical = 3.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Outlined.Layers, null, tint = SnapVaultColors.info, modifier = Modifier.size(11.dp))
-                                    Text(stringResource(Res.string.lib_detail_overlay), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = SnapVaultColors.info)
-                                }
-                            }
-                        }
-                    }
+                    PreviewInfoBar(item, onToggleFavorite)
                     GalleryExportButton(item.id, enabled = galleryExportEnabled)
                 }
             }
@@ -1499,5 +1439,78 @@ private fun formatBytes(bytes: Long): String {
         bytes >= 1_048_576L     -> "${oneDecimal(bytes / 1_048_576.0)} MB"
         bytes >= 1_024L         -> "${bytes / 1_024L} KB"
         else                    -> "$bytes B"
+    }
+}
+
+/**
+ * Title, date, favorite, size and location under a preview. The title is a Snapchat file name
+ * (a date plus a 36-character ID), and without a weight on the title column it took the whole
+ * row: on a 412dp phone the size was left a one-character column, drawn "1 / . / 1 / M / B".
+ */
+@Composable
+internal fun PreviewInfoBar(item: LibraryItem, onToggleFavorite: ((Boolean) -> Unit)?) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(item.title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(item.date, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            if (onToggleFavorite != null) {
+                IconButton(onClick = { onToggleFavorite(!item.favorited) }) {
+                    Icon(
+                        if (item.favorited) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                        contentDescription = stringResource(
+                            if (item.favorited) Res.string.lib_favorite_remove
+                            else Res.string.lib_favorite_add
+                        ),
+                        tint = if (item.favorited) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+            if (item.fileSizeBytes > 0) {
+                Text(formatBytes(item.fileSizeBytes), maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            }
+            if (item.hasGps) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                        .padding(horizontal = 7.dp, vertical = 3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Outlined.GpsFixed, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(11.dp))
+                    Text(stringResource(Res.string.lib_detail_gps), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+            if (item.hasOverlay) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(SnapVaultColors.info.copy(alpha = 0.1f))
+                        .padding(horizontal = 7.dp, vertical = 3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Outlined.Layers, null, tint = SnapVaultColors.info, modifier = Modifier.size(11.dp))
+                    Text(stringResource(Res.string.lib_detail_overlay), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = SnapVaultColors.info)
+                }
+            }
+        }
     }
 }

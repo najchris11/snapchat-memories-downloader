@@ -342,7 +342,7 @@ Same shape, different actuals; the common pipeline and the §3 UI work carry ove
   minimal central-directory parser (we already parse the 0x5455 extra field on
   desktop — same format), or vendor libzip via cocoapods/SPM. The three
   `ZipReader` actuals + an extract engine are the whole surface.
-- **3.2 Pickers**: `UIDocumentPickerViewController` (zip + folder via
+- **3.2 Pickers** *(2026-11-15: the output folder is no longer picked. iOS uses an app-owned `Documents/SnapVault Library`, shown in the Files app, because a picked folder was never bookmarked and broke after relaunch. ZIP/history inputs still use the picker.)*: `UIDocumentPickerViewController` (zip + folder via
   security-scoped bookmarks), present from the root VC (`MainViewController`
   needs a hook to the top controller).
 - **3.3 Metadata**: images via ImageIO (`CGImageSourceCopyProperties` +

@@ -11,7 +11,7 @@ class DeviceLibraryUiTest {
     @Test
     fun dashboardExplainsTheOnDeviceLibraryInsteadOfPromisingAFolderPicker() = runComposeUiTest {
         val vm = idleDashboardViewModel()
-        setContent { SnapVaultTheme(darkMode = true) { DashboardScreen(vm, {}, usesDeviceLibrary = true) } }
+        setContent { SnapVaultTheme(darkMode = true) { DashboardScreen(vm, {}, usesDeviceLibrary = true, showsAndroidPreview = true) } }
         onNodeWithText("Use on-device library").assertExists()
         // Android now burns video overlays in (Media3); the banner used to say they stay separate.
         onNodeWithText("ZIP imports and photo and video overlays are available in this preview.", substring = true).assertExists()
@@ -23,6 +23,20 @@ class DeviceLibraryUiTest {
         onNodeWithText("the original photo or video and its overlay are permanently deleted", substring = true).assertDoesNotExist()
         onNodeWithText("Choose an output folder").assertDoesNotExist()
         onNodeWithText("Imports are processed in SnapVault’s own on-device library.", substring = true).assertExists()
+        vm.dispose()
+    }
+    // Regression: iOS treated itself as a folder-picker platform, so the Library said "No output
+    // folder set yet" and offered a Files folder the app never kept permission for, which broke
+    // after a relaunch. iOS now uses the app-owned library too, but it is not the Android preview.
+    @Test
+    fun iosDescribesTheOnDeviceLibraryWithoutTheAndroidPreviewBanner() = runComposeUiTest {
+        val vm = idleDashboardViewModel()
+        setContent { SnapVaultTheme(darkMode = true) { DashboardScreen(vm, {}, usesDeviceLibrary = true, showsAndroidPreview = false) } }
+        onNodeWithText("Use on-device library").assertExists()
+        onNodeWithText("Android preview").assertDoesNotExist()
+        onNodeWithText("Choose an output folder").assertDoesNotExist()
+        // "gallery" is Android's word; the shared helper must read right on iOS too.
+        onNodeWithText("Save copies to your photo library", substring = true).assertExists()
         vm.dispose()
     }
     @Test

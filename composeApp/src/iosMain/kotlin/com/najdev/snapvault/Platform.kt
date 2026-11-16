@@ -9,6 +9,7 @@ import platform.UIKit.UIApplication
 
 actual val isAndroidBuild: Boolean = false
 actual val isIosBuild: Boolean = true
+actual val usesAppOwnedLibrary: Boolean = true
 actual val platformSupportPageUrl: String? = null
 actual fun binaryInstallHint(): String = ""
 

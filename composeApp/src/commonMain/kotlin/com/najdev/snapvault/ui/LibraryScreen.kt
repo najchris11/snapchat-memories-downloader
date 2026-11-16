@@ -52,7 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.najdev.snapvault.supportsVideoStitching
-import com.najdev.snapvault.isAndroidBuild
+import com.najdev.snapvault.usesAppOwnedLibrary
 import com.najdev.snapvault.WindowSize
 import com.najdev.snapvault.getCachedThumbnail
 import com.najdev.snapvault.loadFullImage
@@ -221,7 +221,7 @@ internal fun LibraryEmptyState(
     onClearFilters: () -> Unit,
     modifier: Modifier = Modifier,
     folderChangeable: Boolean = true,
-    usesDeviceLibrary: Boolean = isAndroidBuild,
+    usesDeviceLibrary: Boolean = usesAppOwnedLibrary,
 ) {
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         Column(

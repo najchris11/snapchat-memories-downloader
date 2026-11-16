@@ -13,6 +13,10 @@ def verify_app(app: Path) -> None:
     if info.get("CFBundleDisplayName") != "SnapVault":
         raise ValueError("generated Info.plist must set CFBundleDisplayName to SnapVault, "
                          "or the home screen shows the Xcode target name")
+    for key in ("UIFileSharingEnabled", "LSSupportsOpeningDocumentsInPlace"):
+        if info.get(key) is not True:
+            raise ValueError(f"generated Info.plist must set {key} to true, or the Files app "
+                             "cannot show the SnapVault Library")
     executable = info.get("CFBundleExecutable")
     if not isinstance(executable, str) or not executable or Path(executable).name != executable:
         raise ValueError("generated Info.plist must name the app executable")

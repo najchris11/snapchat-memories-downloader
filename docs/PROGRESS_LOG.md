@@ -330,3 +330,11 @@ Historical access state: the 2026-11-08 GitHub growth settings section below sup
 - [`scripts/render_app_icons.py`](../scripts/render_app_icons.py) regenerates every output: the desktop `.png`/`.ico`/`.icns` and in-app `ic_launcher.png`, an Android adaptive icon whose foreground is only scaled (never shifted), so the centred card stack stays centred under every launcher mask while the badge still clears a round mask, legacy API 24-25 bitmaps, and an opaque 1024px iOS icon.
 - Android previously declared the system placeholder icon, and iOS had no asset catalog. The Xcode project now compiles `Assets.xcassets` with `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`.
 - **Tests:** [`scripts/test_app_icons.py`](../scripts/test_app_icons.py) failed on all five cases before the change. `aapt2 dump badging` on the debug APK resolves `mipmap-anydpi-v26/ic_launcher.xml`.
+
+## iOS working library and home-screen name (2026-11-15)
+
+- **Name:** the home screen showed "iosApp" (the Xcode target name). `CFBundleDisplayName` is now SnapVault, and `scripts/verify_ios_app.py` rejects a build without it.
+- **Library:** iOS asked for an output folder through the Files picker but never saved a security-scoped bookmark, so the folder stopped being readable after a relaunch and the Library said "No output folder set yet". iOS now uses an app-owned `Documents/SnapVault Library`, like Android's working library. `UIFileSharingEnabled` and `LSSupportsOpeningDocumentsInPlace` show it in the Files app under On My iPhone › SnapVault. The verifier checks both keys.
+- The Android preview banner is now its own flag (`showsAndroidPreview`), so iOS shares the device-library UI without claiming to be the Android preview. The shared helper says "photo library" rather than Android's "gallery".
+- **Tests:** a new `IosWorkingLibraryTest` (3 cases), a new `DeviceLibraryUiTest` case (mutation-checked against the old banner condition), and verifier cases. Results: 562 desktop tests and 144 iOS simulator tests pass.
+- **Native CI:** both `native-tests.yml` jobs passed on their first run (PR #71).

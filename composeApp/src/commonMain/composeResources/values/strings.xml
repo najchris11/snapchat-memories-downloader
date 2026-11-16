@@ -419,7 +419,7 @@
     <string name="stitch_failed">Could not create a verified stitched video. Originals were kept. Try another output folder or compatible clips.</string>
     <string name="android_use_library">Use on-device library</string>
     <string name="android_library_selected">On-device SnapVault library</string>
-    <string name="android_library_helper">Imports are processed in SnapVault’s own on-device library. Uninstalling the app removes it. Save copies to your gallery to keep them outside the app. Selected ZIP documents are streamed and kept unchanged.</string>
+    <string name="android_library_helper">Imports are processed in SnapVault’s own on-device library. Uninstalling the app removes it. Save copies to your photo library to keep them outside the app. Selected ZIP documents are streamed and kept unchanged.</string>
     <string name="gallery_save">Save to gallery</string>
     <string name="gallery_saving">Saving copy…</string>
     <string name="gallery_saved">Saved to gallery</string>

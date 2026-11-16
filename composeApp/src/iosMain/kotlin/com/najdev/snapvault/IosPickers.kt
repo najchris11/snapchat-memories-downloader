@@ -13,7 +13,7 @@ import platform.UIKit.UIWindow
 import platform.UIKit.UIWindowScene
 import platform.darwin.NSObject
 
-private enum class PickerSlot { HTML, OUTPUT_FOLDER, ZIP_FOLDER, ZIP_FILES }
+private enum class PickerSlot { HTML, ZIP_FOLDER, ZIP_FILES }
 
 class IosPickers : PlatformPickers {
     // Retain a strong reference to the active delegate while the picker is presented.
@@ -40,10 +40,11 @@ class IosPickers : PlatformPickers {
         pickOutputFolder(onResult)
     }
 
+    // No picker: a Files folder chosen here was never bookmarked, so it stopped being readable
+    // after a relaunch. The app-owned library in Documents is always reachable, and the Files
+    // app shows it under On My iPhone > SnapVault.
     override fun pickOutputFolder(onResult: (String?) -> Unit) {
-        presentPicker(slot = PickerSlot.OUTPUT_FOLDER, types = listOf("public.folder"), multiple = false) { urls ->
-            onResult(urls.firstOrNull()?.path)
-        }
+        onResult(iosWorkingLibrary())
     }
 
     override fun pickZipFolder(onResult: (String?) -> Unit) {

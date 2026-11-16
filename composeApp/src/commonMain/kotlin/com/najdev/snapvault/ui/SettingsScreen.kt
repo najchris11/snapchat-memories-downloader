@@ -31,6 +31,7 @@ import kotlinx.coroutines.launch
 import com.najdev.snapvault.AppBuildConfig
 import com.najdev.snapvault.binaryInstallHint
 import com.najdev.snapvault.isAndroidBuild
+import com.najdev.snapvault.usesAppOwnedLibrary
 import com.najdev.snapvault.isIosBuild
 import com.najdev.snapvault.platformSupportPageUrl
 import com.najdev.snapvault.ui.theme.SnapVaultColors
@@ -64,7 +65,7 @@ fun SettingsScreen(
     onShowOnboarding: (() -> Unit)? = null,
     showDependencySection: Boolean = showsDependencySection(isAndroidBuild, isIosBuild),
     checkForUpdates: suspend () -> UpdateCheckResult = { ReleaseUpdateChecker().check() },
-    usesDeviceLibrary: Boolean = isAndroidBuild,
+    usesDeviceLibrary: Boolean = usesAppOwnedLibrary,
 ) {
     Column(
         modifier = Modifier

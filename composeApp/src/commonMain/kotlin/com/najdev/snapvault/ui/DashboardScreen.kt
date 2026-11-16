@@ -43,6 +43,7 @@ import com.najdev.snapvault.ZipSourceMode
 import com.najdev.snapvault.WindowSize
 import com.najdev.snapvault.binaryInstallHint
 import com.najdev.snapvault.isAndroidBuild
+import com.najdev.snapvault.usesAppOwnedLibrary
 import com.najdev.snapvault.ui.theme.LogColors
 import com.najdev.snapvault.ui.theme.SnapVaultColors
 import com.najdev.snapvault.ui.components.LowSpaceOfferDialog
@@ -69,7 +70,8 @@ fun DashboardScreen(
     hasExifTool: Boolean = true,
     hasFFmpeg: Boolean = true,
     windowSize: WindowSize = WindowSize.Expanded,
-    usesDeviceLibrary: Boolean = isAndroidBuild,
+    usesDeviceLibrary: Boolean = usesAppOwnedLibrary,
+    showsAndroidPreview: Boolean = isAndroidBuild,
 ) {
     // Owned by the view model, not remembered here: this composable leaves composition every
     // time the user visits another screen or crosses a layout boundary, and remembered state
@@ -98,7 +100,7 @@ fun DashboardScreen(
                 modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                DashboardControls(viewModel, options, onNavigateToSettings, hasExifTool, hasFFmpeg, usesDeviceLibrary)
+                DashboardControls(viewModel, options, onNavigateToSettings, hasExifTool, hasFFmpeg, usesDeviceLibrary, showsAndroidPreview)
                 DashboardStatus(viewModel, compact = true)
             }
             Spacer(Modifier.height(16.dp))
@@ -116,7 +118,7 @@ fun DashboardScreen(
                     modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    DashboardControls(viewModel, options, onNavigateToSettings, hasExifTool, hasFFmpeg, usesDeviceLibrary)
+                    DashboardControls(viewModel, options, onNavigateToSettings, hasExifTool, hasFFmpeg, usesDeviceLibrary, showsAndroidPreview)
                 }
                 Spacer(Modifier.height(16.dp))
                 DashboardActions(viewModel)
@@ -140,9 +142,10 @@ private fun DashboardControls(
     hasExifTool: Boolean,
     hasFFmpeg: Boolean,
     usesDeviceLibrary: Boolean,
+    showsAndroidPreview: Boolean,
 ) {
-    // Android preview banner
-    if (usesDeviceLibrary) {
+    // Android preview banner. iOS shares the device library but is not this preview.
+    if (showsAndroidPreview) {
         InlineBanner(
             icon = Icons.Outlined.Info,
             accent = SnapVaultColors.warning,

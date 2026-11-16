@@ -10,6 +10,9 @@ def verify_app(app: Path) -> None:
         info = plistlib.load(file)
     if info.get("CADisableMinimumFrameDurationOnPhone") is not True:
         raise ValueError("generated Info.plist must set CADisableMinimumFrameDurationOnPhone to true")
+    if info.get("CFBundleDisplayName") != "SnapVault":
+        raise ValueError("generated Info.plist must set CFBundleDisplayName to SnapVault, "
+                         "or the home screen shows the Xcode target name")
     executable = info.get("CFBundleExecutable")
     if not isinstance(executable, str) or not executable or Path(executable).name != executable:
         raise ValueError("generated Info.plist must name the app executable")

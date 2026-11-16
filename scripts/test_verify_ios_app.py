@@ -16,7 +16,7 @@ class VerifyIosAppTest(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.app = Path(self.temp.name) / "iosApp.app"
         self.app.mkdir()
-        self.write_plist(CADisableMinimumFrameDurationOnPhone=True)
+        self.write_plist(CADisableMinimumFrameDurationOnPhone=True, CFBundleDisplayName="SnapVault")
         (self.app / "iosApp").write_bytes(b"executable")
 
     def write_plist(self, **values):
@@ -36,10 +36,20 @@ class VerifyIosAppTest(unittest.TestCase):
     def test_missing_or_false_launch_key_fails(self):
         for values in [{}, {"CADisableMinimumFrameDurationOnPhone": False}]:
             with self.subTest(values=values):
-                self.write_plist(**values)
+                self.write_plist(CFBundleDisplayName="SnapVault", **values)
                 result = self.verify()
                 self.assertNotEqual(0, result.returncode)
                 self.assertIn("CADisableMinimumFrameDurationOnPhone", result.stderr)
+
+    # The home screen showed "iosApp": with no display name, iOS falls back to CFBundleName,
+    # which is PRODUCT_NAME, which is the Xcode target name.
+    def test_app_not_named_snapvault_on_the_home_screen_fails(self):
+        for values in [{}, {"CFBundleDisplayName": "iosApp"}]:
+            with self.subTest(values=values):
+                self.write_plist(CADisableMinimumFrameDurationOnPhone=True, **values)
+                result = self.verify()
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("CFBundleDisplayName", result.stderr)
 
     def test_missing_or_empty_executable_fails(self):
         executable = self.app / "iosApp"

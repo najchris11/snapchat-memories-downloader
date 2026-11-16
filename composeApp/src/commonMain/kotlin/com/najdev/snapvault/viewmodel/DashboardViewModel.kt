@@ -62,6 +62,9 @@ class DashboardViewModel(
     private val outputFolderMemory: OutputFolderMemory = OutputFolderMemory.Platform,
     // A parameter so tests can exercise both availability and refusal independently.
     private val lowSpaceDeleteEnabled: Boolean = LOW_SPACE_DELETE_ENABLED,
+    // Mobile: the library lives in the app's own storage, whose absolute path iOS changes on
+    // every reinstall or update. It is selected afresh at launch, never restored from a path.
+    private val usesAppOwnedLibrary: Boolean = com.najdev.snapvault.usesAppOwnedLibrary,
 ) {
     // ── Input selection state ────────────────────────────────────────────────
     var htmlFile by mutableStateOf<String?>(null)
@@ -200,6 +203,11 @@ class DashboardViewModel(
     // Only if it is still a folder: an external drive that is not plugged in, or a folder since
     // deleted, would otherwise come back as a selection the Library scans and reports empty.
     private fun restoreLastOutputFolder() {
+        if (usesAppOwnedLibrary) {
+            // Both mobile pickers answer this synchronously with the current library path.
+            pickers.pickOutputFolder { path -> if (path != null) downloadFolder = path }
+            return
+        }
         val saved = outputFolderMemory.load() ?: return
         if (runCatching { fileSystem.metadataOrNull(saved.toPath())?.isDirectory }.getOrNull() == true) {
             downloadFolder = saved

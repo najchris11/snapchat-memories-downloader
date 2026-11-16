@@ -114,7 +114,7 @@ Items that cannot be completed autonomously from code alone:
   - Submit SnapVault to **AlternativeTo**, **SaaSHub**, and **OpenAlternative** as a free open-source alternative to *FixMyExport*, *SnapEasy*, *KeepMySnaps*, and *MemoriesExport*.
 
 
-- [ ] **Replace the Snapchat-ghost app icon (owner decision).** It risks Play Store and App Store trademark rejection, and iOS needs an opaque 1024px master. Stitch concepts are in `docs/growth-assets/icon-concepts/`.
+- [x] **Replace the Snapchat-ghost app icon (owner decision).** It risked Play Store and App Store trademark rejection, and iOS needs an opaque 1024px master. Chosen 2026-11-15: stacked, date-tabbed photo cards with a download badge. The source is `branding/app-icon.svg`; `scripts/render_app_icons.py` regenerates the desktop, Android (adaptive plus legacy) and iOS icons, and `scripts/test_app_icons.py` pins the wiring.
 - [ ] **Promote native CI jobs to required** once `native-tests.yml` has been reliably green on PRs (added 2026-11-14, not yet run).
 
 ## Iteration 3 delivery notes

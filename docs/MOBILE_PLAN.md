@@ -27,7 +27,7 @@ Last verified against the working tree on 2026-11-08. Implementation and compila
 | Video overlay combine | ✅ FFmpeg | ✅ Media3 MP4 burn-in (emulator, synthetic clips); originals retained; `.mov` skipped | ✅ simulator import/rotation/audio/safety/synthetic HLG+PQ HDR; device QA pending |
 | Gallery publishing | — | ✅ image/video copy smoke on API 29+ | ✅ image/video copy and allow/deny smoke |
 | Video playback | ✅ | 🟡 existing VideoView | 🟡 existing AVPlayer |
-| App icons | ✅ | ❌ default | ❌ default |
+| App icons | ✅ | ✅ adaptive | ✅ asset catalog |
 
 ### Android storage implementation
 
@@ -434,7 +434,7 @@ convincing false negative. Apple's `strings` has no `-e` flag.
   device or simulator runtime tests remain a separate gap. The 2026-11-08
   native iOS (4 tests) and Android (10 tests) suites were run manually on a
   simulator/emulator; neither is wired into `check.yml` or `release.yml`.
-- **App icons** are still the platform defaults on both mobile targets.
+- **App icons** ship on both mobile targets since 2026-11-15 (generated from `branding/app-icon.svg`).
 - `feat/platform-capability-honesty` (unmerged) surfaces the ❌ column above to
   users. Its Dashboard banner is still wanted; its Settings half now conflicts
   with the dependency card removal above.

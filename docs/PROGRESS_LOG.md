@@ -323,3 +323,10 @@ Historical access state: the 2026-11-08 GitHub growth settings section below sup
 - **CI:** new non-required `native-tests.yml` runs `connectedDebugAndroidTest` (API 34 emulator, persisted-grant test excluded) and `iosSimulatorArm64Test` on macOS. Covered by a contract test, and the YAML parses. It has **not run yet**: it needs a push or PR.
 - **Icons:** a Google Stitch board with six ghost-free concepts is in `docs/growth-assets/icon-concepts/`. No icon is chosen or shipped; the current icon is still the purple ghost.
 - Local: detekt clean, 561/561 desktop tests, Python suite green, desktop/Android/iOS compiles.
+
+## App icon replaces the ghost (2026-11-15)
+
+- The owner rejected the Stitch concepts and chose hand-drawn option A1: date-tabbed photo cards with a download badge, in the existing purple. The source is [`branding/app-icon.svg`](../branding/app-icon.svg).
+- [`scripts/render_app_icons.py`](../scripts/render_app_icons.py) regenerates every output: the desktop `.png`/`.ico`/`.icns` and in-app `ic_launcher.png`, an Android adaptive icon whose foreground stays inside the 66dp safe circle so circle masks never clip the badge, legacy API 24-25 bitmaps, and an opaque 1024px iOS icon.
+- Android previously declared the system placeholder icon, and iOS had no asset catalog. The Xcode project now compiles `Assets.xcassets` with `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`.
+- **Tests:** [`scripts/test_app_icons.py`](../scripts/test_app_icons.py) failed on all five cases before the change. `aapt2 dump badging` on the debug APK resolves `mipmap-anydpi-v26/ic_launcher.xml`.

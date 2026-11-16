@@ -90,7 +90,7 @@ SnapVault began in December 2025 as a fork of [ManuelPuchner/snapchat-memories-d
 
 ## License
 
-Copyright © 2025–2026 Najib Coulibaly and contributors.
+Copyright © 2025–2026 naj-dev and contributors.
 
 SnapVault is free software under the [GNU General Public License v3.0 or later](LICENSE). You may use, study, share and modify it. If you distribute it — modified or not, for a fee or not — you must pass on the same freedoms, including the corresponding source, and you may not add restrictions of your own.
 

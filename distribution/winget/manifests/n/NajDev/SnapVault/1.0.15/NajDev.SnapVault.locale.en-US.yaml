@@ -6,12 +6,12 @@ PackageVersion: 1.0.15
 PackageLocale: en-US
 Publisher: NajDev
 PublisherSupportUrl: https://github.com/najchris11/snapchat-memories-downloader/issues
-Author: Najib Coulibaly
+Author: naj-dev
 PackageName: SnapVault
 PackageUrl: https://snapvault.naj-dev.com
 License: GPL-3.0-or-later
 LicenseUrl: https://github.com/najchris11/snapchat-memories-downloader/blob/v1.0.15/LICENSE
-Copyright: Copyright © 2025–2026 Najib Coulibaly and contributors.
+Copyright: Copyright © 2025–2026 naj-dev and contributors.
 ShortDescription: Turn a Snapchat "Download My Data" export into a dated library of your Memories.
 Description: |-
   SnapVault is an open-source desktop app that turns the Snapchat "Download My Data" export you

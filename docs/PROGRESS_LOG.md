@@ -327,6 +327,6 @@ Historical access state: the 2026-11-08 GitHub growth settings section below sup
 ## App icon replaces the ghost (2026-11-15)
 
 - The owner rejected the Stitch concepts and chose hand-drawn option A1: date-tabbed photo cards with a download badge, in the existing purple. The source is [`branding/app-icon.svg`](../branding/app-icon.svg).
-- [`scripts/render_app_icons.py`](../scripts/render_app_icons.py) regenerates every output: the desktop `.png`/`.ico`/`.icns` and in-app `ic_launcher.png`, an Android adaptive icon whose foreground stays inside the 66dp safe circle so circle masks never clip the badge, legacy API 24-25 bitmaps, and an opaque 1024px iOS icon.
+- [`scripts/render_app_icons.py`](../scripts/render_app_icons.py) regenerates every output: the desktop `.png`/`.ico`/`.icns` and in-app `ic_launcher.png`, an Android adaptive icon whose foreground is only scaled (never shifted), so the centred card stack stays centred under every launcher mask while the badge still clears a round mask, legacy API 24-25 bitmaps, and an opaque 1024px iOS icon.
 - Android previously declared the system placeholder icon, and iOS had no asset catalog. The Xcode project now compiles `Assets.xcassets` with `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`.
 - **Tests:** [`scripts/test_app_icons.py`](../scripts/test_app_icons.py) failed on all five cases before the change. `aapt2 dump badging` on the debug APK resolves `mipmap-anydpi-v26/ic_launcher.xml`.

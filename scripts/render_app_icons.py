@@ -29,11 +29,11 @@ DESKTOP = ROOT / "composeApp" / "src" / "desktopMain" / "resources"
 IN_APP = ROOT / "composeApp" / "src" / "commonMain" / "composeResources" / "drawable" / "ic_launcher.png"
 
 LEGACY_DENSITIES = {"mdpi": 1, "hdpi": 1.5, "xhdpi": 2, "xxhdpi": 3, "xxxhdpi": 4}
-# The artwork's visual centre sits right of and below the canvas centre (the badge hangs off
-# the bottom-right corner). Shifting it back before shrinking keeps the whole composition,
-# badge included, inside the adaptive icon's 66dp safe circle.
-FOREGROUND_SHIFT = (-44, -74)
-FOREGROUND_SCALE = 0.68
+# The card stack is centred in the source, so the foreground is only scaled, never shifted:
+# shifting it to make room for the badge put the cards visibly off-centre under every mask.
+# At this scale the badge, the farthest point from the centre, still clears the 72dp visible
+# circle of a round launcher mask.
+FOREGROUND_SCALE = 0.66
 # Legacy bitmaps are drawn already masked, so there is no safe zone to stay inside.
 LEGACY_SCALE = 0.88
 DESKTOP_TILE = 824  # macOS Big Sur icon grid: an 824px body on a 1024px canvas
@@ -67,9 +67,7 @@ def render(svg: str, size: int, out: Path, work: Path, opaque: bool = False) -> 
 
 
 def foreground_body(artwork: str, scale: float = FOREGROUND_SCALE) -> str:
-    dx, dy = FOREGROUND_SHIFT
-    return (f'<g transform="translate(512 512) scale({scale}) translate(-512 -512) '
-            f'translate({dx} {dy})">{artwork}</g>')
+    return f'<g transform="translate(512 512) scale({scale}) translate(-512 -512)">{artwork}</g>'
 
 
 def write_icns(entries, out: Path) -> None:

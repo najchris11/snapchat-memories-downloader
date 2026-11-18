@@ -271,6 +271,7 @@ class ProgressTextTest {
     fun terminalStatesUsePlainWording() {
         // Cancelled and Stopping… share a path: stop a run that is hanging in the extractor.
         val started = CompletableDeferred<Unit>()
+        val textWhileStopping = CompletableDeferred<String>()
         val runner = SamplingRunner(sample = ::sample)
         val hanging = object : ZipPipelineRunner by runner {
             override suspend fun extractDownloadedArchives(
@@ -279,7 +280,16 @@ class ProgressTextTest {
                 onWarn: (String) -> Unit,
             ): List<String> {
                 started.complete(Unit)
-                awaitCancellation()
+                try {
+                    awaitCancellation()
+                } finally {
+                    // Read "Stopping…" here, not on the test thread after stopSync(): the run
+                    // lives on Dispatchers.Default, so a worker can unwind the cancellation and
+                    // write "Cancelled" before the test thread looks — that raced and failed
+                    // on CI. This finally runs after stopSync() has written the text and before
+                    // the ViewModel's catch overwrites it, so the read is deterministic.
+                    textWhileStopping.complete(viewModel.progressText)
+                }
             }
         }
         newViewModel(FakeFileSystem(), hanging, oneRow)
@@ -294,9 +304,9 @@ class ProgressTextTest {
         )
         runBlocking { withTimeout(30_000) { started.await() } }
         viewModel.stopSync()
-        assertEquals("Stopping…", viewModel.progressText)
         awaitCompletion()
 
+        assertEquals("Stopping…", runBlocking { textWhileStopping.await() })
         assertEquals("Cancelled", viewModel.progressText)
     }
 

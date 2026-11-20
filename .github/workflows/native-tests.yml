@@ -38,7 +38,7 @@ jobs:
           distribution: 'jetbrains'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v5
 
       # Hardware acceleration for the x86_64 emulator; without it the boot takes ~10 minutes.
       - name: Enable KVM
@@ -83,7 +83,7 @@ jobs:
           distribution: 'jetbrains'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v5
 
       # The Kotlin test task otherwise asks for a fixed default device name that a runner
       # image may not have. Pick any available iPhone simulator instead.

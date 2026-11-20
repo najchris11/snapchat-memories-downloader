@@ -130,7 +130,7 @@ jobs:
           distribution: 'jetbrains'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v5
 
       # Strip local-machine JDK paths from gradle.properties.
       # Do NOT re-add org.gradle.java.home — Windows backslash paths corrupt

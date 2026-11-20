@@ -56,7 +56,14 @@ class Deduplicator(
         if (!fileSystem.metadata(folderPath).isDirectory) return emptyList()
 
         data class FileEntry(val path: Path, val size: Long?)
-        val files = fileSystem.list(folderPath).mapNotNull { p ->
+        val listing = fileSystem.list(folderPath)
+        // A main and its overlay are one memory, not two loose files. Different memories
+        // often share a byte-identical overlay (the same sticker or caption), and deleting
+        // one left another memory's kept original without its caption; deleting an
+        // identical main instead orphaned its overlay. Neither part of a pair is a candidate.
+        val paired = findOverlayPairNames(listing.map { it.name })
+            .flatMapTo(mutableSetOf()) { listOf(it.mainName, it.overlayName) }
+        val files = listing.filter { it.name !in paired }.mapNotNull { p ->
             val m = fileSystem.metadata(p)
             if (m.isRegularFile && !isProtected(p) && isMemory(p)) FileEntry(p, m.size) else null
         }

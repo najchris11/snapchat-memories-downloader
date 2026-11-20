@@ -11,6 +11,7 @@ internal const val DEFAULT_RUN_DOWNLOAD = true
 internal const val DEFAULT_RUN_METADATA = true
 internal const val DEFAULT_PRECISE_MATCHING = true
 internal const val DEFAULT_RUN_COMBINE = true
+internal const val DEFAULT_KEEP_ORIGINALS = false
 internal const val DEFAULT_RUN_DEDUPE = true
 
 // Deletion is an explicit opt-out: preview on, and the card open so the enabled steps are
@@ -32,6 +33,7 @@ internal class PipelineOptions {
     var runMetadata by mutableStateOf(DEFAULT_RUN_METADATA)
     var preciseMatching by mutableStateOf(DEFAULT_PRECISE_MATCHING)
     var runCombine by mutableStateOf(DEFAULT_RUN_COMBINE)
+    var keepOriginals by mutableStateOf(DEFAULT_KEEP_ORIGINALS)
     var runDedupe by mutableStateOf(DEFAULT_RUN_DEDUPE)
     var dryRun by mutableStateOf(DEFAULT_DRY_RUN)
     var expanded by mutableStateOf(DEFAULT_PIPELINE_EXPANDED)
@@ -47,3 +49,13 @@ internal data class LowSpaceOffer(
     val requiredBytes: Long,
     val availableBytes: Long,
 )
+
+/** Read-only preflight; the run measures again because free space can change. */
+internal data class ImportSpaceEstimate(
+    val requiredBytes: Long,
+    val availableBytes: Long,
+    val archiveCount: Int,
+    val reserveBytes: Long = EXTRACTION_SPACE_RESERVE_BYTES,
+) {
+    val fits: Boolean get() = requiredBytes <= availableBytes - reserveBytes
+}

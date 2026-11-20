@@ -35,6 +35,19 @@ class MediaScannerTest {
         dir.deleteRecursively()
     }
 
+    @Test
+    fun scanningCarriesKnownMapCoordinatesAndKeepsLegacyCoordinatesUnknown() {
+        File(dir, "known.jpg").writeBytes(byteArrayOf(1))
+        File(dir, "old.jpg").writeBytes(byteArrayOf(1))
+        File(dir, VaultIndex.FILE_NAME).writeText(
+            """{"known.jpg":{"hasGps":true,"hasOverlay":false,"latitude":51.5,"longitude":-0.1},"old.jpg":{"hasGps":true,"hasOverlay":false}}""",
+        )
+        val byName = scanMediaFiles(dir.path).associateBy { it.title }
+        assertEquals(51.5, byName.getValue("known").latitude)
+        assertEquals(-0.1, byName.getValue("known").longitude)
+        assertEquals(null, byName.getValue("old").latitude)
+    }
+
     // Capture dates were assembled as `date.month.name.take(3)` — the first three letters of
     // the Java enum constant, so JAN/FEB/MAR forever — and the filesystem fallback pinned
     // Locale.US. Two different routes to the same English-only result, on every date in the

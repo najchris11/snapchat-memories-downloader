@@ -1,5 +1,6 @@
 package com.najdev.snapvault.viewmodel
 
+import com.najdev.snapvault.SerializedFileSystem
 import com.najdev.snapvault.ImportMode
 import com.najdev.snapvault.UnenforcedOutputDirectoryLocker
 import com.najdev.snapvault.downloader.CombineResult
@@ -53,10 +54,18 @@ class ProgressTextTest {
         writeObserver?.dispose()
     }
 
+    // sample() runs on whichever thread is doing the work: download workers stream on the IO
+    // dispatcher while the progress consumer writes state on Default, so two calls can overlap.
+    // The read-compare-append has to be one step, or both see the same last sample and the
+    // list gets a duplicate (or loses an append inside ArrayList).
+    private val seenLock = Any()
+
     private fun sample() {
         if (::viewModel.isInitialized) {
-            val text = viewModel.progressText
-            if (seen.lastOrNull() != text) seen += text
+            synchronized(seenLock) {
+                val text = viewModel.progressText
+                if (seen.lastOrNull() != text) seen += text
+            }
         }
     }
 
@@ -116,7 +125,9 @@ class ProgressTextTest {
     ): DashboardViewModel {
         fs.createDirectories("/out".toPath())
         fs.write("/history.json".toPath()) { writeUtf8(history) }
-        val sampling = SamplingFileSystem(fs)
+        // FakeFileSystem does no locking, and a run with more than one row downloads in
+        // parallel on the IO dispatcher.
+        val sampling = SamplingFileSystem(SerializedFileSystem(fs))
         return DashboardViewModel(
             zipPipelineRunner = runner,
             mediaProcessor = FakeMediaProcessor(),
@@ -186,6 +197,10 @@ class ProgressTextTest {
         awaitCompletion()
 
         assertTrue("Downloading: 2 of 2 files…" in seen, "all samples: $seen")
+        // Regression: the two downloads used to share an unlocked FakeFileSystem from two IO
+        // threads, and about 1 run in 8 corrupted it ("source doesn't exist", CME, NPE), so
+        // the test passed while modelling a run where one download failed.
+        assertEquals(0, viewModel.failureCount, "both downloads must succeed, log: ${viewModel.logs.toList()}")
     }
 
     @Test
@@ -271,6 +286,7 @@ class ProgressTextTest {
     fun terminalStatesUsePlainWording() {
         // Cancelled and Stopping… share a path: stop a run that is hanging in the extractor.
         val started = CompletableDeferred<Unit>()
+        val textWhileStopping = CompletableDeferred<String>()
         val runner = SamplingRunner(sample = ::sample)
         val hanging = object : ZipPipelineRunner by runner {
             override suspend fun extractDownloadedArchives(
@@ -279,7 +295,16 @@ class ProgressTextTest {
                 onWarn: (String) -> Unit,
             ): List<String> {
                 started.complete(Unit)
-                awaitCancellation()
+                try {
+                    awaitCancellation()
+                } finally {
+                    // Read "Stopping…" here, not on the test thread after stopSync(): the run
+                    // lives on Dispatchers.Default, so a worker can unwind the cancellation and
+                    // write "Cancelled" before the test thread looks — that raced and failed
+                    // on CI. This finally runs after stopSync() has written the text and before
+                    // the ViewModel's catch overwrites it, so the read is deterministic.
+                    textWhileStopping.complete(viewModel.progressText)
+                }
             }
         }
         newViewModel(FakeFileSystem(), hanging, oneRow)
@@ -294,9 +319,9 @@ class ProgressTextTest {
         )
         runBlocking { withTimeout(30_000) { started.await() } }
         viewModel.stopSync()
-        assertEquals("Stopping…", viewModel.progressText)
         awaitCompletion()
 
+        assertEquals("Stopping…", runBlocking { textWhileStopping.await() })
         assertEquals("Cancelled", viewModel.progressText)
     }
 

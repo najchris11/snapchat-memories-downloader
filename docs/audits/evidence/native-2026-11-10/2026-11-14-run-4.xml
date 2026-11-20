@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="iosSimulatorArm64Test.com.najdev.snapvault.metadata.IosVideoOverlayExporterTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-11-14T18:52:55.144Z" hostname="Mac.lan" time="0.471">
+  <properties/>
+  <testcase name="nativeExportCompletesWithoutCrashingAndRetainsAudioAndSources[iosSimulatorArm64]" classname="iosSimulatorArm64Test.com.najdev.snapvault.metadata.IosVideoOverlayExporterTest" time="0.122"/>
+  <testcase name="aRotatedClipExportsInItsDisplayOrientation[iosSimulatorArm64]" classname="iosSimulatorArm64Test.com.najdev.snapvault.metadata.IosVideoOverlayExporterTest" time="0.025"/>
+  <testcase name="cancellationDrainsTheEncoderAndKeepsOnlyTheSources[iosSimulatorArm64]" classname="iosSimulatorArm64Test.com.najdev.snapvault.metadata.IosVideoOverlayExporterTest" time="0.111"/>
+  <testcase name="anExistingOutputIsNeverOverwrittenOrTreatedAsThisRunsResult[iosSimulatorArm64]" classname="iosSimulatorArm64Test.com.najdev.snapvault.metadata.IosVideoOverlayExporterTest" time="0.002"/>
+  <testcase name="theProbeSeesHdrInTheSourceFixturesAndNotInTheSdrOne[iosSimulatorArm64]" classname="iosSimulatorArm64Test.com.najdev.snapvault.metadata.IosVideoOverlayExporterTest" time="0.006"/>
+  <testcase name="hdrSourcesKeepTheirTransferFunctionThroughExport[iosSimulatorArm64]" classname="iosSimulatorArm64Test.com.najdev.snapvault.metadata.IosVideoOverlayExporterTest" time="0.177"/>
+  <testcase name="anSdrSourceStaysSdrAfterExport[iosSimulatorArm64]" classname="iosSimulatorArm64Test.com.najdev.snapvault.metadata.IosVideoOverlayExporterTest" time="0.026"/>
+  <system-out><![CDATA[HDR-PROBE source hdr-hlg.mp4 -> codec=1752589105 transfer=ITU_R_2100_HLG primaries=ITU_R_2020 matrix=ITU_R_2020 hdr=true
+HDR-PROBE source hdr-pq.mp4 -> codec=1752589105 transfer=SMPTE_ST_2084_PQ primaries=ITU_R_2020 matrix=ITU_R_2020 hdr=true
+HDR-PROBE hdr-hlg.mp4 -> completed=true codec=1752589105 transfer=ITU_R_2100_HLG primaries=ITU_R_2020 matrix=ITU_R_2020 hdr=true
+HDR-PROBE hdr-pq.mp4 -> completed=true codec=1752589105 transfer=SMPTE_ST_2084_PQ primaries=ITU_R_2020 matrix=ITU_R_2020 hdr=true
+HDR-PROBE source.mp4 -> codec=1635148593 transfer=ITU_R_709_2 primaries=ITU_R_709_2 matrix=ITU_R_709_2 hdr=false
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

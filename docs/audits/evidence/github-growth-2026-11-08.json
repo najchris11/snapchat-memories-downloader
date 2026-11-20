@@ -1,0 +1,83 @@
+{
+  "verifiedDate": "2026-11-08",
+  "applicationRepository": {
+    "url": "https://github.com/najchris11/snapchat-memories-downloader",
+    "description": "Free, 100% offline desktop app to download, restore EXIF dates & GPS, and burn in caption overlays for Snapchat Memories exports (macOS, Windows, Linux).",
+    "topics": [
+      "backup",
+      "compose-desktop",
+      "compose-multiplatform",
+      "data-hoarding",
+      "exif",
+      "exiftool",
+      "ffmpeg",
+      "kotlin-multiplatform",
+      "photo-management",
+      "privacy",
+      "snapchat",
+      "snapchat-downloader",
+      "snapchat-export",
+      "snapchat-memories"
+    ],
+    "hasDiscussions": true
+  },
+  "websiteRepository": {
+    "url": "https://github.com/najchris11/snapvault-web",
+    "homepage": "https://snapvault.naj-dev.com"
+  },
+  "existingRelease": {
+    "url": "https://github.com/najchris11/snapchat-memories-downloader/releases/tag/v1.0.15",
+    "id": 405045597,
+    "tag": "v1.0.15",
+    "body": "## Which installer should I download?\n\n| Operating System | File | Notes |\n|---|---|---|\n| **macOS (Apple Silicon \u2014 M1 / M2 / M3 / M4)** | `SnapVault-1.0.15-macos-arm64.dmg` | Most Macs from late 2020 onward (ExifTool + FFmpeg bundled) |\n| **macOS (Intel)** | `SnapVault-1.0.15-macos-x64.dmg` | Pre-2021 Intel Macs (ExifTool + FFmpeg bundled) |\n| **Windows 10 / 11 (64-bit)** | `SnapVault-1.0.15-windows-x64.msi` | ExifTool + FFmpeg bundled |\n| **Linux (Ubuntu / Debian x86_64)** | `SnapVault-1.0.15-linux-x64.deb` | ExifTool bundled (requires `perl`); install `ffmpeg` via `apt` for video overlays |\n\n> **Step-by-step guide & 2-minute walkthrough:** https://snapvault.naj-dev.com/tutorial\n\n### First-launch notes (unsigned open-source builds)\n- **macOS (Sequoia 15+ / Sonoma):** Drag **SnapVault** to **Applications** and try to open it once. When macOS blocks it, open **System Settings \u2192 Privacy & Security**, scroll down, and click **Open Anyway**.\n- **Windows:** If SmartScreen displays *Windows protected your PC*, click **More info \u2192 Run anyway**.\n- **Linux:** Install runtime prerequisites for metadata & video overlay compositing: `sudo apt install ffmpeg perl`.\n\n## What's Changed\n\n- fix: report verified release desktop commit status\n- fix(release): validate version commits before updating protected main\n- Add Ko-fi username to FUNDING.yml\n- refactor(strings): correct, unify and extract user-facing wording\n- ci: require platform builds and verify the complete iOS app\n- fix(combine): preserve existing mobile outputs and cover GIF deletion\n- docs(mobile): refresh the state audit and start a progress log\n- feat(settings): drop the dependency card on mobile and stop it squashing\n- ci(ios): link the framework instead of only compiling it\n- fix(ios): surface a refused URL instead of discarding the result\n- build(ios): stop Xcode skipping the Kotlin build and shipping stale code\n- fix(ios): make external links open again\n- fix(ios): stop the app aborting on launch with no Info.plist key\n- feat(ios): burn overlays into images with CoreGraphics\n- fix(combine): stop an animated GIF being replaced by one flattened frame\n- test(onboarding): cover the walkthrough button now that the video exists\n- ci: drop the setup-android step that broke the Linux Android job\n- ci: cut runner spend without losing a check\n- ci: give the Gradle wrapper a usable timeout and let it retry\n- ci: authenticate setup-java in check.yml so PR runs stop hitting the rate limit\n- chore(git): track the commit-msg hook that refuses AI attribution\n- feat(android): make the ZIP pipeline actually run on Android\n- feat(onboarding): implement first-launch onboarding flow with navigation and user guidance\n\n**Full Changelog:** https://github.com/najchris11/snapchat-memories-downloader/compare/v1.0.14...v1.0.15\n\n## Verification\n- Compare your downloaded installer against `SHA256SUMS.txt` (`shasum -a 256` on macOS/Linux or `Get-FileHash -Algorithm SHA256` in PowerShell).\n- `bundled-tools-manifest.json` records exact upstream URLs, SHA-256 digests, and licenses for every bundled ExifTool and FFmpeg archive.\n",
+    "bodySha256": "50cefeb98d40f17fdf1ee91d7632e9e60b878aaea22204a74f16f41165003909",
+    "assetsUnchangedFromBeforeBackfill": true,
+    "assets": [
+      {
+        "id": 616376875,
+        "name": "bundled-tools-manifest.json",
+        "digest": "sha256:b583d8062013fb46a830b86c76d95aa0e41fe3642de9f74195b53ff233e7c5f5",
+        "size": 5773,
+        "browser_download_url": "https://github.com/najchris11/snapchat-memories-downloader/releases/download/v1.0.15/bundled-tools-manifest.json"
+      },
+      {
+        "id": 616376838,
+        "name": "SHA256SUMS.txt",
+        "digest": "sha256:feb3e5aecc3003914ccd783342cde53781456d10c29514dfa138cac05c0d5cf3",
+        "size": 486,
+        "browser_download_url": "https://github.com/najchris11/snapchat-memories-downloader/releases/download/v1.0.15/SHA256SUMS.txt"
+      },
+      {
+        "id": 616376835,
+        "name": "SnapVault-1.0.15-linux-x64.deb",
+        "digest": "sha256:c376add23e2b29332c20f40c6f36c06d70486690ace2be870314f05e1513dd7a",
+        "size": 222840762,
+        "browser_download_url": "https://github.com/najchris11/snapchat-memories-downloader/releases/download/v1.0.15/SnapVault-1.0.15-linux-x64.deb"
+      },
+      {
+        "id": 616376833,
+        "name": "SnapVault-1.0.15-macos-arm64.dmg",
+        "digest": "sha256:51f6ba55e7a3c17160b50d594d599a8105e629c5af5b174e850ad95d1283b185",
+        "size": 237827197,
+        "browser_download_url": "https://github.com/najchris11/snapchat-memories-downloader/releases/download/v1.0.15/SnapVault-1.0.15-macos-arm64.dmg"
+      },
+      {
+        "id": 616376842,
+        "name": "SnapVault-1.0.15-macos-x64.dmg",
+        "digest": "sha256:26a574422e9e9f479c0aed5e09b2c6b02ee85ce0eb6f348d2bbc05fe3bc7709f",
+        "size": 239107600,
+        "browser_download_url": "https://github.com/najchris11/snapchat-memories-downloader/releases/download/v1.0.15/SnapVault-1.0.15-macos-x64.dmg"
+      },
+      {
+        "id": 616376841,
+        "name": "SnapVault-1.0.15-windows-x64.msi",
+        "digest": "sha256:98ab1361d36ee455a69411ce2b40d3d1f81f201c02a1f5a2ee6b2fb69e0d370a",
+        "size": 225452096,
+        "browser_download_url": "https://github.com/najchris11/snapchat-memories-downloader/releases/download/v1.0.15/SnapVault-1.0.15-windows-x64.msi"
+      }
+    ]
+  },
+  "limits": [
+    "Existing release notes and settings only; no new binary release or deployment."
+  ]
+}

@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- SnapVault app icon: dated photo cards filed in a stack, with a download badge.
+       Edit this file, then run scripts/render_app_icons.py to regenerate every platform's icons.
+       The generator relies on the ids: "background" (full-bleed fill) and "artwork" (everything
+       drawn on top, which becomes the Android adaptive-icon foreground). -->
+  <defs>
+    <linearGradient id="background-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#A078FF"/>
+      <stop offset="1" stop-color="#5B2FC4"/>
+    </linearGradient>
+    <clipPath id="photo-window"><rect x="302" y="350" width="420" height="440" rx="30"/></clipPath>
+  </defs>
+  <rect id="background" width="1024" height="1024" fill="url(#background-gradient)"/>
+  <g id="artwork">
+    <!-- The card stack is centred on the canvas (its bounding box, tab included); only the
+         badge hangs off its corner, so every platform mask frames the cards the same way. -->
+    <g transform="translate(0 -52) translate(512 540) scale(1.2) translate(-512 -540)">
+      <rect x="282" y="300" width="460" height="520" rx="52" fill="#FFFFFF" opacity="0.45" transform="rotate(-11 512 560)"/>
+      <rect x="282" y="300" width="460" height="520" rx="52" fill="#FFFFFF" opacity="0.70" transform="rotate(7 512 560)"/>
+      <path d="M 312 270 h 150 a 34 34 0 0 1 34 34 v 20 h -218 v -20 a 34 34 0 0 1 34 -34 z" fill="#FFB547"/>
+      <rect x="262" y="310" width="500" height="520" rx="56" fill="#FFFFFF"/>
+      <g clip-path="url(#photo-window)">
+        <rect x="302" y="350" width="420" height="440" fill="#EDE6FF"/>
+        <circle cx="596" cy="482" r="46.2" fill="#FFB547"/>
+        <polygon points="292,790 453.2,534.8 604.4,790" fill="#8B5CF6"/>
+        <polygon points="461.6,790 596,605.2 732,754.8 732,790" fill="#5B2FC4"/>
+      </g>
+    </g>
+    <circle cx="770" cy="776" r="124" fill="#2A1650" stroke="#FFFFFF" stroke-width="22"/>
+    <g fill="none" stroke="#FFFFFF" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M 770 714 V 798"/>
+      <path d="M 728 758 L 770 800 L 812 758"/>
+      <path d="M 718 836 H 822"/>
+    </g>
+  </g>
+</svg>

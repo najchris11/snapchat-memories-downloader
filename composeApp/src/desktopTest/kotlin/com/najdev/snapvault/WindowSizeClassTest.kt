@@ -20,7 +20,8 @@ class WindowSizeClassTest {
         // 600dp is the first Medium width, not the last Compact one.
         assertEquals(WindowSize.Medium, getActiveWindowSize(600.dp, auto))
         assertEquals(WindowSize.Medium, getActiveWindowSize(839.dp, auto))
-        assertEquals(WindowSize.Expanded, getActiveWindowSize(840.dp, auto))
+        assertEquals(WindowSize.Medium, getActiveWindowSize(1099.dp, auto))
+        assertEquals(WindowSize.Expanded, getActiveWindowSize(EXPANDED_MIN_WIDTH, auto))
         assertEquals(WindowSize.Expanded, getActiveWindowSize(1280.dp, auto))
     }
 
@@ -41,5 +42,18 @@ class WindowSizeClassTest {
         assertEquals(WindowSize.Medium, medium)
         kotlin.test.assertNotEquals(WindowSize.Expanded, medium)
         kotlin.test.assertNotEquals(WindowSize.Compact, medium)
+    }
+
+    // Regression (2026-11-14, iPhone Duo unfolded): its inner panel leaves about 890dp after
+    // the status-bar inset. At the old 840dp breakpoint that got the desktop layout, with a
+    // 220dp sidebar plus a 280dp Inspector leaving under 400dp for the grid, so the search
+    // field wrapped "Sea / rch" and the stat chips were cut off.
+    @Test
+    fun anUnfoldedPhoneIsMediumNotTheDesktopLayout() {
+        assertEquals(WindowSize.Medium, getActiveWindowSize(890.dp, LayoutOverride.Auto))
+        assertEquals(WindowSize.Medium, getActiveWindowSize(951.dp, LayoutOverride.Auto))
+        // The desktop window opens at 1280dp and must keep the full layout.
+        assertEquals(WindowSize.Expanded, getActiveWindowSize(1280.dp, LayoutOverride.Auto))
+        assertEquals(1100.dp, EXPANDED_MIN_WIDTH)
     }
 }

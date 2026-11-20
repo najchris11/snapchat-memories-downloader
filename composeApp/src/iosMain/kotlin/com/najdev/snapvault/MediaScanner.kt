@@ -2,6 +2,7 @@ package com.najdev.snapvault
 
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import com.najdev.snapvault.metadata.SupportedMediaExtensions
 import com.najdev.snapvault.model.FileMeta
 import com.najdev.snapvault.ui.LibraryItem
 import okio.FileSystem
@@ -13,8 +14,8 @@ import org.jetbrains.skia.Image as SkiaImage
 import platform.Foundation.NSDate
 import platform.Foundation.NSDateFormatter
 
-private val mediaExtensions = setOf("jpg", "jpeg", "png", "mp4", "mov", "gif")
-private val videoExtensions = setOf("mp4", "mov")
+private val mediaExtensions = SupportedMediaExtensions.ALL
+private val videoExtensions = SupportedMediaExtensions.VIDEO
 private val fs = FileSystem.SYSTEM
 private const val THUMBNAIL_TARGET_SIZE = 320
 
@@ -58,6 +59,8 @@ actual fun scanMediaFiles(folderPath: String): List<LibraryItem> {
                 title = scanned.path.name.substringBeforeLast('.'),
                 type = if (ext in videoExtensions) "video" else "photo",
                 hasGps = meta?.hasGps ?: false,
+                latitude = meta?.latitude,
+                longitude = meta?.longitude,
                 hasOverlay = meta?.combined ?: false,
                 favorited = meta?.favorited ?: false,
                 fileSizeBytes = scanned.size

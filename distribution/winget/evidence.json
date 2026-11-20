@@ -1,0 +1,52 @@
+{
+  "note": "Facts about the PUBLISHED v1.0.15 Windows installer. Candidate manifests, not a submission; nothing here claims the package was installed on Windows or accepted by winget-pkgs.",
+  "release": {
+    "tag": "v1.0.15",
+    "url": "https://github.com/najchris11/snapchat-memories-downloader/releases/tag/v1.0.15",
+    "publishedAt": "2026-10-06T18:55:31Z",
+    "tagCommit": "e91d545c322df552a42f526d595741dee5a55d33"
+  },
+  "msi": {
+    "assetName": "SnapVault-1.0.15-windows-x64.msi",
+    "url": "https://github.com/najchris11/snapchat-memories-downloader/releases/download/v1.0.15/SnapVault-1.0.15-windows-x64.msi",
+    "sizeBytes": 225452096,
+    "sha256": "98ab1361d36ee455a69411ce2b40d3d1f81f201c02a1f5a2ee6b2fb69e0d370a",
+    "sha256Sources": [
+      "sha256sum of the downloaded file (parent session)",
+      "GitHub release asset digest (gh release view v1.0.15 --json assets)",
+      "SHA256SUMS.txt release asset"
+    ],
+    "properties": {
+      "ProductName": "SnapVault",
+      "ProductVersion": "1.0.15",
+      "Manufacturer": "Unknown",
+      "ProductCode": "{FDF695BB-26FD-3E6F-B3A1-6071E297B937}",
+      "UpgradeCode": "{6249E2F0-8A8F-3FDB-BCD8-F554C94B1090}",
+      "ALLUSERS": "1",
+      "ProductLanguage": "1033"
+    },
+    "summaryInformation": {
+      "Template": "x64;1033",
+      "Application": "Windows Installer XML Toolset (3.11.2.4516)"
+    },
+    "extractedWith": "msitools 0.106 (`msiinfo export SnapVault-1.0.15-windows-x64.msi Property`; `msiinfo suminfo`)"
+  },
+  "schema": {
+    "manifestVersion": "1.12.0",
+    "why": "1.12.0 is the manifest version microsoft/winget-pkgs Tools/YamlCreate.ps1 emits by default. winget-cli also ships 1.28.0; the validator cross-checks against it.",
+    "source": "https://raw.githubusercontent.com/microsoft/winget-cli/{commit}/schemas/JSON/manifests/v{version}/manifest.{kind}.{version}.json",
+    "wingetCliCommit": "afc9a471496c4cd80ac363df269362f84ea5a457",
+    "sha256": {
+      "1.12.0": {
+        "version": "0cdf9c17a0d19221a3612980c95a47d120c4ce532157177aa6af4368a8a78273",
+        "installer": "47de5aefdea4e7ccbc8ab4e32e8230671300054bd4f688cd7ca8bdebf459f006",
+        "defaultLocale": "b87eaa2252daf0bc9b2d495a3f7f5547b8b36236bdcc0543cf9f7403bd56707e"
+      },
+      "1.28.0": {
+        "version": "5c9fa37ebe70dd410114157d31e4d9e84451b2bb8890e1c4345b4c690406ee1a",
+        "installer": "2caa4cd3a630c284b5ef750522e2e5861f751f376180b89cd29873eb30504ef4",
+        "defaultLocale": "734c069c82470e3436d274fb381bfbe03e22f8fbfae2d2dd50df7dc055a3e061"
+      }
+    }
+  }
+}

@@ -16,7 +16,8 @@ class VerifyIosAppTest(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.app = Path(self.temp.name) / "iosApp.app"
         self.app.mkdir()
-        self.write_plist(CADisableMinimumFrameDurationOnPhone=True)
+        self.write_plist(CADisableMinimumFrameDurationOnPhone=True, CFBundleDisplayName="SnapVault",
+                         UIFileSharingEnabled=True, LSSupportsOpeningDocumentsInPlace=True)
         (self.app / "iosApp").write_bytes(b"executable")
 
     def write_plist(self, **values):
@@ -36,10 +37,35 @@ class VerifyIosAppTest(unittest.TestCase):
     def test_missing_or_false_launch_key_fails(self):
         for values in [{}, {"CADisableMinimumFrameDurationOnPhone": False}]:
             with self.subTest(values=values):
-                self.write_plist(**values)
+                self.write_plist(CFBundleDisplayName="SnapVault", UIFileSharingEnabled=True,
+                                 LSSupportsOpeningDocumentsInPlace=True, **values)
                 result = self.verify()
                 self.assertNotEqual(0, result.returncode)
                 self.assertIn("CADisableMinimumFrameDurationOnPhone", result.stderr)
+
+    # The home screen showed "iosApp": with no display name, iOS falls back to CFBundleName,
+    # which is PRODUCT_NAME, which is the Xcode target name.
+    def test_app_not_named_snapvault_on_the_home_screen_fails(self):
+        for values in [{}, {"CFBundleDisplayName": "iosApp"}]:
+            with self.subTest(values=values):
+                self.write_plist(CADisableMinimumFrameDurationOnPhone=True, UIFileSharingEnabled=True,
+                                 LSSupportsOpeningDocumentsInPlace=True, **values)
+                result = self.verify()
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("CFBundleDisplayName", result.stderr)
+
+    # The working library lives in Documents; without both keys the Files app cannot show it,
+    # and the user has no way to reach their imported media outside SnapVault.
+    def test_library_not_visible_in_the_files_app_fails(self):
+        for missing in ["UIFileSharingEnabled", "LSSupportsOpeningDocumentsInPlace"]:
+            with self.subTest(missing=missing):
+                values = {"CADisableMinimumFrameDurationOnPhone": True, "CFBundleDisplayName": "SnapVault",
+                          "UIFileSharingEnabled": True, "LSSupportsOpeningDocumentsInPlace": True}
+                del values[missing]
+                self.write_plist(**values)
+                result = self.verify()
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn(missing, result.stderr)
 
     def test_missing_or_empty_executable_fails(self):
         executable = self.app / "iosApp"

@@ -13,6 +13,8 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -51,6 +53,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.najdev.snapvault.supportsVideoStitching
+import com.najdev.snapvault.usesAppOwnedLibrary
 import com.najdev.snapvault.WindowSize
 import com.najdev.snapvault.getCachedThumbnail
 import com.najdev.snapvault.loadFullImage
@@ -219,6 +223,7 @@ internal fun LibraryEmptyState(
     onClearFilters: () -> Unit,
     modifier: Modifier = Modifier,
     folderChangeable: Boolean = true,
+    usesDeviceLibrary: Boolean = usesAppOwnedLibrary,
 ) {
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         Column(
@@ -232,7 +237,9 @@ internal fun LibraryEmptyState(
                 modifier = Modifier.size(48.dp)
             )
             Text(
-                libraryEmptyMessage(reason),
+                if (usesDeviceLibrary && reason != LibraryEmptyReason.FilteredOut)
+                    stringResource(if (reason == LibraryEmptyReason.NoFolder) Res.string.android_library_prompt else Res.string.android_library_empty)
+                else libraryEmptyMessage(reason),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -242,7 +249,7 @@ internal fun LibraryEmptyState(
             // gave no way to tell a wrong folder from an empty one.
             if (reason != LibraryEmptyReason.NoFolder && downloadFolder != null) {
                 Text(
-                    downloadFolder,
+                    if (usesDeviceLibrary) stringResource(Res.string.android_library_selected) else downloadFolder,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -254,12 +261,12 @@ internal fun LibraryEmptyState(
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 when (reason) {
                     LibraryEmptyReason.NoFolder -> EmptyStateAction(
-                        label = stringResource(Res.string.lib_select_folder),
+                        label = stringResource(if (usesDeviceLibrary) Res.string.android_use_library else Res.string.lib_select_folder),
                         onClick = onOpenFolder,
                         enabled = folderChangeable,
                     )
                     LibraryEmptyReason.NoMedia -> {
-                        EmptyStateAction(stringResource(Res.string.lib_change_folder), onOpenFolder, enabled = folderChangeable)
+                        if (!usesDeviceLibrary) EmptyStateAction(stringResource(Res.string.lib_change_folder), onOpenFolder, enabled = folderChangeable)
                         EmptyStateAction(stringResource(Res.string.lib_refresh_action), onRefresh)
                     }
                     LibraryEmptyReason.FilteredOut ->
@@ -346,7 +353,9 @@ data class LibraryItem(
     // Scanners fill it from FileMeta.combined, not FileMeta.hasOverlay (D11).
     val hasOverlay: Boolean,
     val favorited: Boolean = false,
-    val fileSizeBytes: Long = 0L
+    val fileSizeBytes: Long = 0L,
+    val latitude: Double? = null,
+    val longitude: Double? = null
 )
 
 @Composable
@@ -399,6 +408,9 @@ fun LibraryScreen(
     // and "the item after this one" is not a question a LibraryItem can answer.
     var selectedIndex by remember { mutableStateOf(LIBRARY_NO_SELECTION) }
     var showPreview by remember { mutableStateOf(false) }
+    var showMap by remember { mutableStateOf(false) }
+    var showStitch by remember { mutableStateOf(false) }
+    var stitchNotice by remember { mutableStateOf(false) }
 
     val gridFocus = remember { FocusRequester() }
     val searchFocus = remember { FocusRequester() }
@@ -414,6 +426,22 @@ fun LibraryScreen(
         )
     }
     val selectedItem = filteredItems.getOrNull(selectedIndex)
+
+    if (showMap) {
+        GpsMapDialog(filteredItems, onOpenItem = { item ->
+            selectedIndex = filteredItems.indexOfFirst { it.id == item.id }
+            showMap = false
+            showPreview = true
+        }, onDismiss = { showMap = false })
+    }
+
+    if (showStitch && downloadFolder != null) {
+        VideoStitchDialog(items.filter { it.type == "video" }, downloadFolder, onSuccess = {
+            showStitch = false
+            stitchNotice = true
+            refreshKey++
+        }, onDismiss = { showStitch = false })
+    }
 
     // Filtering re-indexes everything, so a held index would point at a different memory —
     // or past the end. Dropping it is the only honest answer.
@@ -439,47 +467,29 @@ fun LibraryScreen(
             // Stats row
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.Top
             ) {
-                // Scrolls rather than overflowing: four chips need more width than a phone
-                // has, and the row sits next to the refresh button.
-                Row(
-                    modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    StatChip(
-                        icon = Icons.Outlined.PhotoLibrary,
-                        label = pluralStringResource(Res.plurals.lib_memory_count, items.size, items.size),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    StatChip(
-                        icon = Icons.Outlined.Image,
-                        label = photoCount.let { pluralStringResource(Res.plurals.lib_photo_count, it, it) },
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    StatChip(
-                        icon = Icons.Outlined.Videocam,
-                        label = videoCount.let { pluralStringResource(Res.plurals.lib_video_count, it, it) },
-                        tint = SnapVaultColors.info
-                    )
-                    StatChip(
-                        icon = Icons.Outlined.GpsFixed,
-                        label = gpsCount.let { pluralStringResource(Res.plurals.lib_gps_chip_count, it, it) },
-                        tint = SnapVaultColors.success
-                    )
+                LibraryStatChips(
+                    memories = items.size,
+                    photos = photoCount,
+                    videos = videoCount,
+                    withLocation = gpsCount,
                     // Total size otherwise only appears in the inspector, so without this it
                     // would simply vanish on narrower windows.
-                    if (!showInspector && items.isNotEmpty()) {
-                        StatChip(
-                            icon = Icons.Outlined.Storage,
-                            label = formatBytes(items.sumOf { it.fileSizeBytes }),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
+                    totalSize = if (!showInspector && items.isNotEmpty()) formatBytes(items.sumOf { it.fileSizeBytes }) else null,
+                    modifier = Modifier.weight(1f),
+                )
                 if (downloadFolder != null) {
                     LibraryHeaderActions(downloadFolder = downloadFolder)
+                    IconButton(onClick = { showMap = true }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Outlined.Map, contentDescription = stringResource(Res.string.map_title))
+                    }
+                    if (supportsVideoStitching) {
+                        IconButton(enabled = folderChangeable && videoCount >= 2, onClick = { showStitch = true }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Outlined.Movie, contentDescription = stringResource(Res.string.stitch_title))
+                        }
+                    }
                     LibrarySortMenu(selected = selectedSort, onSelect = { selectedSort = it })
                     IconButton(onClick = { refreshKey++ }, modifier = Modifier.size(32.dp)) {
                         Icon(
@@ -491,6 +501,8 @@ fun LibraryScreen(
                     }
                 }
             }
+
+            if (stitchNotice) Text(stringResource(Res.string.stitch_complete), style = MaterialTheme.typography.bodySmall)
 
             // Filter tabs plus search. Side by side these need about 384dp — roughly 184dp
             // of tabs and a fixed 200dp field — which is more than Compact (~328dp) or the
@@ -565,6 +577,7 @@ fun LibraryScreen(
                 item = selectedItem,
                 onDismiss = { showPreview = false },
                 onToggleFavorite = { onToggleFavorite(selectedItem, it) },
+                galleryExportEnabled = folderChangeable,
             )
         }
 
@@ -929,6 +942,34 @@ private fun InspectorGlobalStats(items: List<LibraryItem>) {
     }
 }
 
+/**
+ * The Library's counts. They wrap onto a second line rather than scrolling sideways: as one
+ * scrolling row beside the toolbar icons, the last chips were cut off on phones, the folded
+ * iPhone Duo and 1024px desktop windows, with nothing to say the row scrolled.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun LibraryStatChips(
+    memories: Int,
+    photos: Int,
+    videos: Int,
+    withLocation: Int,
+    totalSize: String?,
+    modifier: Modifier = Modifier,
+) {
+    FlowRow(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        StatChip(Icons.Outlined.PhotoLibrary, pluralStringResource(Res.plurals.lib_memory_count, memories, memories), MaterialTheme.colorScheme.primary)
+        StatChip(Icons.Outlined.Image, pluralStringResource(Res.plurals.lib_photo_count, photos, photos), MaterialTheme.colorScheme.primary)
+        StatChip(Icons.Outlined.Videocam, pluralStringResource(Res.plurals.lib_video_count, videos, videos), SnapVaultColors.info)
+        StatChip(Icons.Outlined.GpsFixed, pluralStringResource(Res.plurals.lib_gps_chip_count, withLocation, withLocation), SnapVaultColors.success)
+        if (totalSize != null) StatChip(Icons.Outlined.Storage, totalSize, MaterialTheme.colorScheme.primary)
+    }
+}
+
 @Composable
 fun StatChip(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -987,6 +1028,7 @@ fun MediaPreviewDialog(
     // The dialog is the only surface reachable at every width: the inspector renders at
     // Expanded only, so without this there is no way to favorite anything on a phone.
     onToggleFavorite: ((Boolean) -> Unit)? = null,
+    galleryExportEnabled: Boolean = true,
 ) {
     val isVideo = item.type == "video"
     val thumbnail by produceState<ImageBitmap?>(null, item.id) {
@@ -1095,71 +1137,8 @@ fun MediaPreviewDialog(
                         }
                     }
 
-                    // Info bar
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                            .padding(horizontal = 20.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(item.title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(item.date, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            if (onToggleFavorite != null) {
-                                IconButton(onClick = { onToggleFavorite(!item.favorited) }) {
-                                    Icon(
-                                        if (item.favorited) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                                        contentDescription = stringResource(
-                                            if (item.favorited) Res.string.lib_favorite_remove
-                                            else Res.string.lib_favorite_add
-                                        ),
-                                        tint = if (item.favorited) {
-                                            MaterialTheme.colorScheme.error
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                }
-                            }
-                            if (item.fileSizeBytes > 0) {
-                                Text(formatBytes(item.fileSizeBytes), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                            }
-                            if (item.hasGps) {
-                                Row(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
-                                        .padding(horizontal = 7.dp, vertical = 3.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Outlined.GpsFixed, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(11.dp))
-                                    Text(stringResource(Res.string.lib_detail_gps), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                                }
-                            }
-                            if (item.hasOverlay) {
-                                Row(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(SnapVaultColors.info.copy(alpha = 0.1f))
-                                        .padding(horizontal = 7.dp, vertical = 3.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Outlined.Layers, null, tint = SnapVaultColors.info, modifier = Modifier.size(11.dp))
-                                    Text(stringResource(Res.string.lib_detail_overlay), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = SnapVaultColors.info)
-                                }
-                            }
-                        }
-                    }
+                    PreviewInfoBar(item, onToggleFavorite)
+                    GalleryExportButton(item.id, enabled = galleryExportEnabled)
                 }
             }
         }
@@ -1460,5 +1439,78 @@ private fun formatBytes(bytes: Long): String {
         bytes >= 1_048_576L     -> "${oneDecimal(bytes / 1_048_576.0)} MB"
         bytes >= 1_024L         -> "${bytes / 1_024L} KB"
         else                    -> "$bytes B"
+    }
+}
+
+/**
+ * Title, date, favorite, size and location under a preview. The title is a Snapchat file name
+ * (a date plus a 36-character ID), and without a weight on the title column it took the whole
+ * row: on a 412dp phone the size was left a one-character column, drawn "1 / . / 1 / M / B".
+ */
+@Composable
+internal fun PreviewInfoBar(item: LibraryItem, onToggleFavorite: ((Boolean) -> Unit)?) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(item.title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(item.date, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            if (onToggleFavorite != null) {
+                IconButton(onClick = { onToggleFavorite(!item.favorited) }) {
+                    Icon(
+                        if (item.favorited) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                        contentDescription = stringResource(
+                            if (item.favorited) Res.string.lib_favorite_remove
+                            else Res.string.lib_favorite_add
+                        ),
+                        tint = if (item.favorited) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+            if (item.fileSizeBytes > 0) {
+                Text(formatBytes(item.fileSizeBytes), maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            }
+            if (item.hasGps) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                        .padding(horizontal = 7.dp, vertical = 3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Outlined.GpsFixed, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(11.dp))
+                    Text(stringResource(Res.string.lib_detail_gps), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+            if (item.hasOverlay) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(SnapVaultColors.info.copy(alpha = 0.1f))
+                        .padding(horizontal = 7.dp, vertical = 3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Outlined.Layers, null, tint = SnapVaultColors.info, modifier = Modifier.size(11.dp))
+                    Text(stringResource(Res.string.lib_detail_overlay), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = SnapVaultColors.info)
+                }
+            }
+        }
     }
 }

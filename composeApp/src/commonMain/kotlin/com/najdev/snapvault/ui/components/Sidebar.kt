@@ -1,7 +1,6 @@
 package com.najdev.snapvault.ui.components
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.*
@@ -12,6 +11,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -37,11 +38,17 @@ fun AppSidebar(
     onOpenSupportPage: (suspend (String) -> Unit)? = null,
     onCopySupportPage: ((String) -> Unit)? = null,
 ) {
+    // A right divider only: a full box border also outlined the window edge and the top bar
+    // seam (see ChromeEdgeTest).
+    val divider = MaterialTheme.colorScheme.outlineVariant
     Surface(
-        modifier = Modifier.width(220.dp).fillMaxHeight(),
+        modifier = Modifier.width(220.dp).fillMaxHeight().drawWithContent {
+            drawContent()
+            val x = size.width - 0.5.dp.toPx()
+            drawLine(divider, Offset(x, 0f), Offset(x, size.height), strokeWidth = 1.dp.toPx())
+        },
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(
             modifier = Modifier.fillMaxSize().padding(16.dp)

@@ -1,6 +1,7 @@
 package com.najdev.snapvault.downloader
 
 import com.najdev.snapvault.parser.HtmlMemoryEntry
+import com.najdev.snapvault.ImportManifest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -13,6 +14,8 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import java.io.File
 import java.nio.file.Files
+import java.io.InputStream
+import java.security.MessageDigest
 import java.util.zip.ZipFile
 
 class ZipExtractEngine(
@@ -98,7 +101,18 @@ class ZipExtractEngine(
         if (!archive.isFile) return listOf("${archive.name} is no longer present")
         return runCatching {
             ZipFile(archive).use { zf ->
-                entries.flatMap(::expectedNames).mapNotNull { name ->
+                val expectedPaths = entries.flatMap(::expectedNames).map { "memories/$it" }.toSet()
+                val members = zf.entries().asSequence().filterNot { it.isDirectory }.toList()
+                val extras = members.filterNot { it.name in expectedPaths }.mapNotNull { member ->
+                    if (member.name == "json/memories_history.json") {
+                        val backup = File(outDir, "${ImportManifest.DIR_NAME}/history/${archive.name}.json")
+                        if (backup.isFile && zf.getInputStream(member).use(::sha256).contentEquals(backup.inputStream().use(::sha256))) null
+                        else "${member.name} has no verified history backup"
+                    } else "${member.name} was not preserved — archive kept"
+                }
+                val duplicates = members.groupingBy { it.name }.eachCount().filterValues { it > 1 }
+                    .keys.map { "$it occurs more than once — archive kept" }
+                extras + duplicates + entries.flatMap(::expectedNames).mapNotNull { name ->
                     val expected = zf.getEntry("memories/$name")
                     val dest = File(outDir, name)
                     when {
@@ -106,11 +120,26 @@ class ZipExtractEngine(
                         !dest.isFile -> "$name was not written"
                         expected.size >= 0 && dest.length() != expected.size ->
                             "$name is ${dest.length()} bytes, expected ${expected.size}"
-                        else -> null
+                        else -> {
+                            val archiveHash = zf.getInputStream(expected).use(::sha256)
+                            val outputHash = dest.inputStream().use(::sha256)
+                            if (!archiveHash.contentEquals(outputHash)) "$name differs from its archived content" else null
+                        }
                     }
                 }
             }
         }.getOrElse { listOf("${archive.name} could not be read back: ${it.message ?: it::class.simpleName}") }
+    }
+
+    private fun sha256(input: InputStream): ByteArray {
+        val digest = MessageDigest.getInstance("SHA-256")
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            digest.update(buffer, 0, count)
+        }
+        return digest.digest()
     }
 
     suspend fun extractAll(

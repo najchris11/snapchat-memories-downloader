@@ -1,0 +1,15 @@
+MSI size+sha256 match evidence: True
+schema 1.12.0: OK
+schema 1.28.0: OK
+consistency with MSI evidence: OK
+negative control (each mutation must be rejected):
+  rejected: malformed InstallerSha256  -> installer: Installers/0/InstallerSha256: 'not-a-hash' does not match '^[A-Fa-f0-9]{64}$'
+  rejected: unknown Scope  -> installer: Scope: 'everyone' is not one of ['user', 'machine']
+  rejected: no Installers  -> installer: : 'Installers' is a required property
+  rejected: unknown InstallerType  -> installer: InstallerType: 'rpm' is not one of ['msix', 'msi', 'appx', 'exe', 'zip', 'inno', 'nullsoft', 'wix', 'burn', 'pwa', 'portable', 'font']
+  rejected: PackageIdentifier without publisher  -> version: PackageIdentifier: 'SnapVault' does not match '^[^\\.\\s\\\\/:\\*\\?"<>\\|\\x01-\\x1f]{1,32}(\\.[^\\.\\s\\\\/:\\*\\?"<>\\|\\x01-\\x1f]{1,32}){1,7}$'
+  rejected: valid-looking wrong sha  -> InstallerSha256: '0000000000000000000000000000000000000000000000000000000000000000' != '98ab1361d36ee455a69411ce2b40d3d1f81f201c02a1f5a2ee6b2fb69e0d370a'
+  rejected: wrong ProductCode  -> ProductCode vs MSI: '{00000000-0000-0000-0000-000000000000}' != '{FDF695BB-26FD-3E6F-B3A1-6071E297B937}'
+  rejected: version drift in one file  -> PackageVersion across files: 2 != 1
+  rejected: per-user scope  -> Scope vs MSI ALLUSERS: 'user' != 'machine'
+ALL CHECKS PASSED

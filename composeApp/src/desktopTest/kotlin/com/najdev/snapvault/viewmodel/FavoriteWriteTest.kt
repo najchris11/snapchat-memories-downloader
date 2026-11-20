@@ -305,6 +305,112 @@ class FavoriteWriteTest {
         assertEquals(false, viewModel.favoriteIsPending("/out/memory.jpg"))
         assertEquals(emptyMap(), viewModel.favoriteOverrides, "there is nowhere to save it, so do not pretend")
     }
+
+    // ── The writer settling while the user presses again ─────────────────────
+
+    // settleFavorite (on the writer coroutine) and setFavorite (on the UI thread) both did
+    // unlocked read-modify-writes of pendingFavorites and favoriteOverrides. The writer checked
+    // that its intent was still the newest for the item and only later wrote
+    // `pendingFavorites - id`. A press landing between the two put a newer generation in the map
+    // which that write then deleted, so the newer press was never pending: when its own write
+    // failed, the generation check threw the outcome away and the heart stayed lit over a
+    // favorite that was never saved, with nothing in the log.
+    //
+    // The window is held open deterministically: the first write's exception blocks in its
+    // `message` getter, which settleFavorite reads (to log it) after the check and before it
+    // clears pending. The second press comes from another thread, as it does from the UI.
+    @Test
+    fun aPressWhileAnOlderWriteIsSettlingKeepsItsOwnOutcome() {
+        val fs = sharedFileSystem()
+        val settling = SettlingGate()
+        val control = IndexWriteControl(
+            fs,
+            failAt = setOf(1, 2),
+            failure = { n -> if (n == 1) GatedFailure(settling) else IOException("second write refused") },
+        )
+        val viewModel = viewModel(control)
+
+        viewModel.setFavorite("/out/memory.jpg", false) // fails, and is held while settling
+        settling.awaitReached()
+
+        val presser = Thread {
+            viewModel.setFavorite("/out/memory.jpg", true) // fails too: this is the one to report
+            viewModel.setFavorite("/out/other.jpg", true) // queued behind it, so it settles after
+        }
+        presser.start()
+        try {
+            awaitFinishedOrBlockedOnSyncLock(presser)
+        } finally {
+            settling.release()
+        }
+        presser.join(60_000)
+        check(!presser.isAlive) { "the second press never completed" }
+        awaitFavorite(viewModel, "/out/other.jpg")
+
+        assertEquals(
+            mapOf("/out/other.jpg" to true),
+            viewModel.favoriteOverrides,
+            "the newest press's write failed but its heart was left lit: the older write settling " +
+                "dropped its generation, so its own failure was ignored",
+        )
+        assertTrue(
+            viewModel.logs.any { it.startsWith("[WARN]") && it.contains("second write refused") },
+            "the newest press's failure has to be reported, was: ${viewModel.logs}",
+        )
+    }
+
+    // Spins (bounded, no sleep) until the presser has either run to completion or is parked on
+    // one of the view model's SyncLocks — the only place a correct implementation may make it
+    // wait while the writer is mid-settle.
+    private fun awaitFinishedOrBlockedOnSyncLock(thread: Thread) {
+        val threads = java.lang.management.ManagementFactory.getThreadMXBean()
+        val deadline = System.nanoTime() + 60_000_000_000L
+        while (System.nanoTime() < deadline) {
+            val state = thread.state
+            if (state == Thread.State.TERMINATED) return
+            if (state == Thread.State.BLOCKED &&
+                threads.getThreadInfo(thread.id)?.lockInfo?.className == com.najdev.snapvault.SyncLock::class.java.name
+            ) {
+                return
+            }
+            Thread.yield()
+        }
+        error("the presser neither finished nor blocked on the favorites lock")
+    }
+}
+
+/** Holds the favorite writer inside settleFavorite, and only there. */
+private class SettlingGate {
+    private val reached = java.util.concurrent.CountDownLatch(1)
+    private val gate = java.util.concurrent.CountDownLatch(1)
+
+    fun awaitReached() =
+        check(reached.await(60, java.util.concurrent.TimeUnit.SECONDS)) { "the writer never settled the failure" }
+
+    fun release() = gate.countDown()
+
+    fun hold() {
+        val inSettle = Thread.currentThread().stackTrace.any { it.methodName.startsWith("settleFavorite") }
+        if (!inSettle || reached.count == 0L) return
+        reached.countDown()
+        check(gate.await(60, java.util.concurrent.TimeUnit.SECONDS)) { "settling gate never released" }
+    }
+}
+
+/**
+ * A failure whose message blocks at [SettlingGate] when settleFavorite reads it.
+ *
+ * Its only constructor takes the gate, so kotlinx.coroutines' stack-trace recovery cannot copy
+ * it (it copies only through Throwable's standard constructors) and the instance the writer
+ * settles is this one. The stack check lets a `message` read from anywhere else straight
+ * through instead of tripping the gate early.
+ */
+private class GatedFailure(private val gate: SettlingGate) : IOException() {
+    override val message: String
+        get() {
+            gate.hold()
+            return "first write refused"
+        }
 }
 
 /**
@@ -320,6 +426,8 @@ private class IndexWriteControl(
     private val blockFrom: Int = Int.MAX_VALUE,
     /** 1-based indices of index writes that should fail instead of succeeding. */
     private val failAt: Set<Int> = emptySet(),
+    /** What failing write [n] throws. */
+    private val failure: (n: Int) -> Throwable = { IOException("disk is full") },
 ) : ForwardingFileSystem(delegate) {
 
     private val writes = java.util.concurrent.atomic.AtomicInteger()
@@ -340,7 +448,7 @@ private class IndexWriteControl(
             reachedGate.countDown()
             check(gate.await(60, java.util.concurrent.TimeUnit.SECONDS)) { "gate never released" }
         }
-        if (n in failAt) throw IOException("disk is full")
+        if (n in failAt) throw failure(n)
         return super.sink(file, mustCreate)
     }
 }

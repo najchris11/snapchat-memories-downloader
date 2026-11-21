@@ -176,6 +176,16 @@ class DashboardViewModel(
 
     private var favoriteGeneration = 0L
 
+    // Guards every read-modify-write of favoriteOverrides, pendingFavorites and
+    // favoriteGeneration. They are written from two threads — setFavorite and
+    // reconcileFavorites on the UI thread, settleFavorite on the writer coroutine — and each
+    // write is a new map built from a read. Unlocked, the writer could pass its generation
+    // check, a press could then record a newer generation, and the writer's
+    // `pendingFavorites - id` would delete it: the newer press was never pending, so its own
+    // failure was ignored and its heart stayed lit over a save that never happened. Snapshot
+    // state makes each read and each write safe, not the pair.
+    private val favoritesLock = SyncLock()
+
     private data class FavoriteIntent(
         val itemId: String,
         val favorited: Boolean,
@@ -236,8 +246,8 @@ class DashboardViewModel(
      * A superseded intent must not clear the pending flag, revert the override, or report a
      * failure: all three belong to the press the user made last, not to one already overtaken.
      */
-    private fun settleFavorite(intent: FavoriteIntent, outcome: Result<Unit>) {
-        if (pendingFavorites[intent.itemId] != intent.generation) return
+    private fun settleFavorite(intent: FavoriteIntent, outcome: Result<Unit>): Unit = favoritesLock.withLock {
+        if (pendingFavorites[intent.itemId] != intent.generation) return@withLock
 
         // Settle the outcome before clearing pending, not after: "no longer pending" is what
         // everything else treats as "this write is finished", and clearing it first exposes a
@@ -263,14 +273,14 @@ class DashboardViewModel(
      * re-run rebuilds it, so a heart left lit over a write that never landed is the worst
      * outcome available here — the user has no way to tell, and no other copy.
      */
-    fun setFavorite(itemId: String, favorited: Boolean) {
+    fun setFavorite(itemId: String, favorited: Boolean): Unit = favoritesLock.withLock {
         favoriteOverrides = favoriteOverrides + (itemId to favorited)
 
         val folder = downloadFolder
         if (folder == null) {
             // Nothing to write to, so do not show a heart that claims otherwise.
             favoriteOverrides = favoriteOverrides - itemId
-            return
+            return@withLock
         }
 
         val generation = ++favoriteGeneration
@@ -287,9 +297,11 @@ class DashboardViewModel(
      * write has not landed yet, so the scan cannot have seen it.
      */
     fun reconcileFavorites(scannedIds: Collection<String>) {
-        if (favoriteOverrides.isEmpty()) return
         val seen = scannedIds.toSet()
-        favoriteOverrides = favoriteOverrides.filterKeys { it in pendingFavorites || it !in seen }
+        favoritesLock.withLock {
+            if (favoriteOverrides.isEmpty()) return@withLock
+            favoriteOverrides = favoriteOverrides.filterKeys { it in pendingFavorites || it !in seen }
+        }
     }
 
     // ── Picker actions ───────────────────────────────────────────────────────

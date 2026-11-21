@@ -1,0 +1,267 @@
+/tmp/snapvault-roadmap-20261108/failure-main.apk: 1 file pushed, 0 skipped. 428.8 MB/s (27955600 bytes in 0.062s)
+Performing Push Install
+Success
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+com.najdev.snapvault.StreamingExtractionFailureTest:
+INSTRUMENTATION_STATUS: test=aProviderThatReportsAnErrorMidEntryNeverPublishesTheStalledEntry
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stack=java.util.NoSuchElementException: Collection contains no element matching the predicate.
+	at com.najdev.snapvault.StreamingExtractionFailureTest$aProviderThatReportsAnErrorMidEntryNeverPublishesTheStalledEntry$1.invokeSuspend(StreamingExtractionFailureTest.kt:268)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:256)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:54)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlockingImpl(Builders.kt:30)
+	at kotlinx.coroutines.BuildersKt.runBlockingImpl(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK(Builders.concurrent.kt:172)
+	at kotlinx.coroutines.BuildersKt.runBlockingK(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK$default(Builders.concurrent.kt:157)
+	at kotlinx.coroutines.BuildersKt.runBlockingK$default(Unknown Source:1)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.aProviderThatReportsAnErrorMidEntryNeverPublishesTheStalledEntry(StreamingExtractionFailureTest.kt:110)
+
+INSTRUMENTATION_STATUS: stream=
+Error in aProviderThatReportsAnErrorMidEntryNeverPublishesTheStalledEntry(com.najdev.snapvault.StreamingExtractionFailureTest):
+java.util.NoSuchElementException: Collection contains no element matching the predicate.
+	at com.najdev.snapvault.StreamingExtractionFailureTest$aProviderThatReportsAnErrorMidEntryNeverPublishesTheStalledEntry$1.invokeSuspend(StreamingExtractionFailureTest.kt:268)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:256)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:54)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlockingImpl(Builders.kt:30)
+	at kotlinx.coroutines.BuildersKt.runBlockingImpl(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK(Builders.concurrent.kt:172)
+	at kotlinx.coroutines.BuildersKt.runBlockingK(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK$default(Builders.concurrent.kt:157)
+	at kotlinx.coroutines.BuildersKt.runBlockingK$default(Unknown Source:1)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.aProviderThatReportsAnErrorMidEntryNeverPublishesTheStalledEntry(StreamingExtractionFailureTest.kt:110)
+
+INSTRUMENTATION_STATUS: test=aProviderThatReportsAnErrorMidEntryNeverPublishesTheStalledEntry
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=aDocumentTheProviderCannotOpenFailsEveryRequestedEntryAndWritesNothing
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stack=java.lang.AssertionError: expected:<[first.jpg, second.jpg, third.jpg]> but was:<[]>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at org.junit.Assert.assertEquals(Assert.java:146)
+	at com.najdev.snapvault.StreamingExtractionFailureTest$aDocumentTheProviderCannotOpenFailsEveryRequestedEntryAndWritesNothing$1.invokeSuspend(StreamingExtractionFailureTest.kt:122)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:256)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:54)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlockingImpl(Builders.kt:30)
+	at kotlinx.coroutines.BuildersKt.runBlockingImpl(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK(Builders.concurrent.kt:172)
+	at kotlinx.coroutines.BuildersKt.runBlockingK(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK$default(Builders.concurrent.kt:157)
+	at kotlinx.coroutines.BuildersKt.runBlockingK$default(Unknown Source:1)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.aDocumentTheProviderCannotOpenFailsEveryRequestedEntryAndWritesNothing(StreamingExtractionFailureTest.kt:120)
+
+INSTRUMENTATION_STATUS: stream=
+Error in aDocumentTheProviderCannotOpenFailsEveryRequestedEntryAndWritesNothing(com.najdev.snapvault.StreamingExtractionFailureTest):
+java.lang.AssertionError: expected:<[first.jpg, second.jpg, third.jpg]> but was:<[]>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at org.junit.Assert.assertEquals(Assert.java:146)
+	at com.najdev.snapvault.StreamingExtractionFailureTest$aDocumentTheProviderCannotOpenFailsEveryRequestedEntryAndWritesNothing$1.invokeSuspend(StreamingExtractionFailureTest.kt:122)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:256)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:54)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlockingImpl(Builders.kt:30)
+	at kotlinx.coroutines.BuildersKt.runBlockingImpl(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK(Builders.concurrent.kt:172)
+	at kotlinx.coroutines.BuildersKt.runBlockingK(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK$default(Builders.concurrent.kt:157)
+	at kotlinx.coroutines.BuildersKt.runBlockingK$default(Unknown Source:1)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.aDocumentTheProviderCannotOpenFailsEveryRequestedEntryAndWritesNothing(StreamingExtractionFailureTest.kt:120)
+
+INSTRUMENTATION_STATUS: test=aDocumentTheProviderCannotOpenFailsEveryRequestedEntryAndWritesNothing
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=cancellingBetweenEntriesNeverStartsAStageForTheNextEntry
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=cancellingBetweenEntriesNeverStartsAStageForTheNextEntry
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=cancellingWhileTheProviderIsStalledIsHonouredAfterTheBlockedReadReturns
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: cancelLatencyMillisWhileProviderStalled=2695
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=cancellingWhileTheProviderIsStalledIsHonouredAfterTheBlockedReadReturns
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=5
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=aProviderThatClosesMidEntryFailsThatEntryAndLeavesNoStageOrPartialFile
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=5
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stack=java.lang.AssertionError: expected:<[first.jpg, second.jpg, third.jpg]> but was:<[first.jpg, second.jpg]>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at org.junit.Assert.assertEquals(Assert.java:146)
+	at com.najdev.snapvault.StreamingExtractionFailureTest$aProviderThatClosesMidEntryFailsThatEntryAndLeavesNoStageOrPartialFile$1.invokeSuspend(StreamingExtractionFailureTest.kt:97)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:256)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:54)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlockingImpl(Builders.kt:30)
+	at kotlinx.coroutines.BuildersKt.runBlockingImpl(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK(Builders.concurrent.kt:172)
+	at kotlinx.coroutines.BuildersKt.runBlockingK(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK$default(Builders.concurrent.kt:157)
+	at kotlinx.coroutines.BuildersKt.runBlockingK$default(Unknown Source:1)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.aProviderThatClosesMidEntryFailsThatEntryAndLeavesNoStageOrPartialFile(StreamingExtractionFailureTest.kt:93)
+
+INSTRUMENTATION_STATUS: stream=
+Error in aProviderThatClosesMidEntryFailsThatEntryAndLeavesNoStageOrPartialFile(com.najdev.snapvault.StreamingExtractionFailureTest):
+java.lang.AssertionError: expected:<[first.jpg, second.jpg, third.jpg]> but was:<[first.jpg, second.jpg]>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at org.junit.Assert.assertEquals(Assert.java:146)
+	at com.najdev.snapvault.StreamingExtractionFailureTest$aProviderThatClosesMidEntryFailsThatEntryAndLeavesNoStageOrPartialFile$1.invokeSuspend(StreamingExtractionFailureTest.kt:97)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:256)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:54)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlockingImpl(Builders.kt:30)
+	at kotlinx.coroutines.BuildersKt.runBlockingImpl(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK(Builders.concurrent.kt:172)
+	at kotlinx.coroutines.BuildersKt.runBlockingK(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK$default(Builders.concurrent.kt:157)
+	at kotlinx.coroutines.BuildersKt.runBlockingK$default(Unknown Source:1)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.aProviderThatClosesMidEntryFailsThatEntryAndLeavesNoStageOrPartialFile(StreamingExtractionFailureTest.kt:93)
+
+INSTRUMENTATION_STATUS: test=aProviderThatClosesMidEntryFailsThatEntryAndLeavesNoStageOrPartialFile
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=aCompleteProviderDocumentPublishesEveryEntryWithoutAStageOrACachedArchive
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=aCompleteProviderDocumentPublishesEveryEntryWithoutAStageOrACachedArchive
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=7
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=cancellingWhileAnEntryIsBeingStagedStopsAtTheNextReadAndRemovesTheStage
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=7
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=cancellingWhileAnEntryIsBeingStagedStopsAtTheNextReadAndRemovesTheStage
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_RESULT: stream=
+
+Time: 4.274
+There were 3 failures:
+1) aProviderThatReportsAnErrorMidEntryNeverPublishesTheStalledEntry(com.najdev.snapvault.StreamingExtractionFailureTest)
+java.util.NoSuchElementException: Collection contains no element matching the predicate.
+	at com.najdev.snapvault.StreamingExtractionFailureTest$aProviderThatReportsAnErrorMidEntryNeverPublishesTheStalledEntry$1.invokeSuspend(StreamingExtractionFailureTest.kt:268)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:256)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:54)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlockingImpl(Builders.kt:30)
+	at kotlinx.coroutines.BuildersKt.runBlockingImpl(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK(Builders.concurrent.kt:172)
+	at kotlinx.coroutines.BuildersKt.runBlockingK(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK$default(Builders.concurrent.kt:157)
+	at kotlinx.coroutines.BuildersKt.runBlockingK$default(Unknown Source:1)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.aProviderThatReportsAnErrorMidEntryNeverPublishesTheStalledEntry(StreamingExtractionFailureTest.kt:110)
+2) aDocumentTheProviderCannotOpenFailsEveryRequestedEntryAndWritesNothing(com.najdev.snapvault.StreamingExtractionFailureTest)
+java.lang.AssertionError: expected:<[first.jpg, second.jpg, third.jpg]> but was:<[]>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at org.junit.Assert.assertEquals(Assert.java:146)
+	at com.najdev.snapvault.StreamingExtractionFailureTest$aDocumentTheProviderCannotOpenFailsEveryRequestedEntryAndWritesNothing$1.invokeSuspend(StreamingExtractionFailureTest.kt:122)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:256)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:54)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlockingImpl(Builders.kt:30)
+	at kotlinx.coroutines.BuildersKt.runBlockingImpl(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK(Builders.concurrent.kt:172)
+	at kotlinx.coroutines.BuildersKt.runBlockingK(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK$default(Builders.concurrent.kt:157)
+	at kotlinx.coroutines.BuildersKt.runBlockingK$default(Unknown Source:1)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.aDocumentTheProviderCannotOpenFailsEveryRequestedEntryAndWritesNothing(StreamingExtractionFailureTest.kt:120)
+3) aProviderThatClosesMidEntryFailsThatEntryAndLeavesNoStageOrPartialFile(com.najdev.snapvault.StreamingExtractionFailureTest)
+java.lang.AssertionError: expected:<[first.jpg, second.jpg, third.jpg]> but was:<[first.jpg, second.jpg]>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at org.junit.Assert.assertEquals(Assert.java:146)
+	at com.najdev.snapvault.StreamingExtractionFailureTest$aProviderThatClosesMidEntryFailsThatEntryAndLeavesNoStageOrPartialFile$1.invokeSuspend(StreamingExtractionFailureTest.kt:97)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:256)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:54)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlockingImpl(Builders.kt:30)
+	at kotlinx.coroutines.BuildersKt.runBlockingImpl(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK(Builders.concurrent.kt:172)
+	at kotlinx.coroutines.BuildersKt.runBlockingK(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK$default(Builders.concurrent.kt:157)
+	at kotlinx.coroutines.BuildersKt.runBlockingK$default(Unknown Source:1)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.aProviderThatClosesMidEntryFailsThatEntryAndLeavesNoStageOrPartialFile(StreamingExtractionFailureTest.kt:93)
+
+FAILURES!!!
+Tests run: 7,  Failures: 3
+
+
+INSTRUMENTATION_CODE: -1

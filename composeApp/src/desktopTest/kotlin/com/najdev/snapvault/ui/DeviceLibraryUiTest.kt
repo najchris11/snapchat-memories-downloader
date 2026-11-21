@@ -1,0 +1,64 @@
+package com.najdev.snapvault.ui
+
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.v2.runComposeUiTest
+import com.najdev.snapvault.ui.theme.SnapVaultTheme
+import kotlin.test.Test
+
+@OptIn(ExperimentalTestApi::class)
+class DeviceLibraryUiTest {
+    @Test
+    fun dashboardExplainsTheOnDeviceLibraryInsteadOfPromisingAFolderPicker() = runComposeUiTest {
+        val vm = idleDashboardViewModel()
+        setContent { SnapVaultTheme(darkMode = true) { DashboardScreen(vm, {}, usesDeviceLibrary = true, showsAndroidPreview = true) } }
+        onNodeWithText("Use on-device library").assertExists()
+        // Android now burns video overlays in (Media3); the banner used to say they stay separate.
+        onNodeWithText("ZIP imports and photo and video overlays are available in this preview.", substring = true).assertExists()
+        onNodeWithText("Combined videos keep their originals", substring = true).assertExists()
+        onNodeWithText("remain separate", substring = true).assertDoesNotExist()
+        // Regression: the cleanup helper said "the original photo or video ... permanently
+        // deleted", but the on-device pipeline never deletes a video's originals.
+        onNodeWithText("Videos always keep their originals.", substring = true).assertExists()
+        onNodeWithText("the original photo or video and its overlay are permanently deleted", substring = true).assertDoesNotExist()
+        onNodeWithText("Choose an output folder").assertDoesNotExist()
+        onNodeWithText("Imports are processed in SnapVault’s own on-device library.", substring = true).assertExists()
+        vm.dispose()
+    }
+    // Regression: iOS treated itself as a folder-picker platform, so the Library said "No output
+    // folder set yet" and offered a Files folder the app never kept permission for, which broke
+    // after a relaunch. iOS now uses the app-owned library too, but it is not the Android preview.
+    @Test
+    fun iosDescribesTheOnDeviceLibraryWithoutTheAndroidPreviewBanner() = runComposeUiTest {
+        val vm = idleDashboardViewModel()
+        setContent { SnapVaultTheme(darkMode = true) { DashboardScreen(vm, {}, usesDeviceLibrary = true, showsAndroidPreview = false) } }
+        onNodeWithText("Use on-device library").assertExists()
+        onNodeWithText("Android preview").assertDoesNotExist()
+        onNodeWithText("Choose an output folder").assertDoesNotExist()
+        // "gallery" is Android's word; the shared helper must read right on iOS too.
+        onNodeWithText("Save copies to your photo library", substring = true).assertExists()
+        vm.dispose()
+    }
+    @Test
+    fun anEmptyOnDeviceLibraryOffersRefreshRatherThanAnUnavailableFolderChange() = runComposeUiTest {
+        setContent {
+            SnapVaultTheme(darkMode = true) {
+                LibraryEmptyState(LibraryEmptyReason.NoMedia, "/private/library", {}, {}, {}, usesDeviceLibrary = true)
+            }
+        }
+        onNodeWithText("Change output folder").assertDoesNotExist()
+        onNodeWithText("/private/library").assertDoesNotExist()
+        onNodeWithText("Refresh").assertExists()
+    }
+    @Test
+    fun settingsDoNotOfferToChangeAnAppOwnedWorkingLibrary() = runComposeUiTest {
+        setContent { SnapVaultTheme(darkMode = true) {
+            SettingsScreen(true, true, {}, "/private/library", {}, {}, com.najdev.snapvault.ThemeMode.DARK, {},
+                com.najdev.snapvault.LayoutOverride.Auto, {}, usesDeviceLibrary = true)
+        } }
+        onNodeWithText("/private/library").assertDoesNotExist()
+        onNodeWithText("Change").assertDoesNotExist()
+        onNodeWithText("Use on-device library").assertDoesNotExist()
+        onNodeWithText("On-device SnapVault library").assertExists()
+    }
+}

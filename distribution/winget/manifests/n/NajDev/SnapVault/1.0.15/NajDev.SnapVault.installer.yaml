@@ -1,0 +1,28 @@
+# Created for review, not published. See distribution/winget/README.md.
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
+
+PackageIdentifier: NajDev.SnapVault
+PackageVersion: 1.0.15
+InstallerLocale: en-US
+MinimumOSVersion: 10.0.0.0
+InstallerType: wix
+Scope: machine
+InstallModes:
+- interactive
+- silent
+- silentWithProgress
+ProductCode: '{FDF695BB-26FD-3E6F-B3A1-6071E297B937}'
+ReleaseDate: 2026-10-06
+AppsAndFeaturesEntries:
+- DisplayName: SnapVault
+  Publisher: Unknown
+  DisplayVersion: 1.0.15
+  ProductCode: '{FDF695BB-26FD-3E6F-B3A1-6071E297B937}'
+  UpgradeCode: '{6249E2F0-8A8F-3FDB-BCD8-F554C94B1090}'
+  InstallerType: wix
+Installers:
+- Architecture: x64
+  InstallerUrl: https://github.com/najchris11/snapchat-memories-downloader/releases/download/v1.0.15/SnapVault-1.0.15-windows-x64.msi
+  InstallerSha256: 98AB1361D36EE455A69411CE2B40D3D1F81F201C02A1F5A2EE6B2FB69E0D370A
+ManifestType: installer
+ManifestVersion: 1.12.0

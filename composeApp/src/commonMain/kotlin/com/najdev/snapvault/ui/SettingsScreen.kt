@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.*
 import com.najdev.snapvault.viewmodel.DashboardViewModel
 import androidx.compose.foundation.rememberScrollState
@@ -23,9 +24,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalUriHandler
+import com.najdev.snapvault.ReleaseUpdateChecker
+import com.najdev.snapvault.UpdateCheckResult
+import com.najdev.snapvault.RELEASE_DOWNLOAD_URL
+import kotlinx.coroutines.launch
 import com.najdev.snapvault.AppBuildConfig
 import com.najdev.snapvault.binaryInstallHint
 import com.najdev.snapvault.isAndroidBuild
+import com.najdev.snapvault.usesAppOwnedLibrary
 import com.najdev.snapvault.isIosBuild
 import com.najdev.snapvault.platformSupportPageUrl
 import com.najdev.snapvault.ui.theme.SnapVaultColors
@@ -58,6 +65,8 @@ fun SettingsScreen(
     // row is hidden rather than dead when no host supplies it.
     onShowOnboarding: (() -> Unit)? = null,
     showDependencySection: Boolean = showsDependencySection(isAndroidBuild, isIosBuild),
+    checkForUpdates: suspend () -> UpdateCheckResult = { ReleaseUpdateChecker().check() },
+    usesDeviceLibrary: Boolean = usesAppOwnedLibrary,
 ) {
     Column(
         modifier = Modifier
@@ -169,6 +178,8 @@ fun SettingsScreen(
 
             }
         }
+
+        ManualUpdateSection(checkForUpdates)
 
         // ── System Dependencies ───────────────────────────────────────────────
         if (showDependencySection) {
@@ -291,17 +302,17 @@ fun SettingsScreen(
                 // Output path
                 SettingsRow(
                     icon = Icons.Outlined.FolderOpen,
-                    title = stringResource(Res.string.set_output_path_label),
-                    description = downloadFolder ?: stringResource(Res.string.set_output_path_unset),
+                    title = stringResource(if (usesDeviceLibrary) Res.string.android_library_label else Res.string.set_output_path_label),
+                    description = if (usesDeviceLibrary && downloadFolder != null) stringResource(Res.string.android_library_selected) else downloadFolder ?: stringResource(Res.string.set_output_path_unset),
                     descriptionMaxLines = 1,
                 ) {
-                    TextButton(
+                    if (!usesDeviceLibrary || downloadFolder == null) TextButton(
                         onClick = onEditOutputPath,
                         // A run captured the folder it writes to; see outputFolderChangeable.
                         enabled = outputFolderChangeable,
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        Text(stringResource(Res.string.set_output_path_edit), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(if (usesDeviceLibrary) Res.string.android_use_library else Res.string.set_output_path_edit), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -365,6 +376,39 @@ fun SettingsScreen(
 }
 
 @Composable
+private fun ManualUpdateSection(checkForUpdates: suspend () -> UpdateCheckResult) {
+    val scope = rememberCoroutineScope()
+    val uriHandler = LocalUriHandler.current
+    var checking by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<UpdateCheckResult?>(null) }
+    SettingsCard {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(Res.string.set_update_privacy), style = MaterialTheme.typography.bodySmall)
+            Button(enabled = !checking, onClick = {
+                checking = true
+                result = null
+                scope.launch {
+                    try { result = checkForUpdates() } finally { checking = false }
+                }
+            }) {
+                Text(stringResource(if (checking) Res.string.set_update_checking else Res.string.set_update_check))
+            }
+            when (val outcome = result) {
+                UpdateCheckResult.Current -> Text(stringResource(Res.string.set_update_current))
+                UpdateCheckResult.Failed -> Text(stringResource(Res.string.set_update_failed), color = MaterialTheme.colorScheme.error)
+                is UpdateCheckResult.Available -> {
+                    Text(stringResource(Res.string.set_update_available, outcome.version))
+                    TextButton(onClick = { uriHandler.openUri(RELEASE_DOWNLOAD_URL) }) {
+                        Text(stringResource(Res.string.set_update_download))
+                    }
+                }
+                null -> Unit
+            }
+        }
+    }
+}
+
+@Composable
 fun SettingsCard(content: @Composable () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -408,30 +452,49 @@ fun SettingsRow(
     descriptionMaxLines: Int = Int.MAX_VALUE,
     trailing: @Composable () -> Unit = {},
 ) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Icon(
-            icon,
-            null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(16.dp)
-        )
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium)
-            Text(
-                description,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = descriptionMaxLines,
-                overflow = TextOverflow.Ellipsis,
-            )
+    // Beside the text, a segmented control or button keeps its own width and the text column
+    // gets what is left: on a phone that was one word per line, and on the folded iPhone Duo
+    // "Layout" broke mid-word. Below this width the control moves under the text instead.
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        val stacked = maxWidth < SETTINGS_ROW_STACK_WIDTH
+        val text: @Composable (Modifier) -> Unit = { textModifier ->
+            Column(modifier = textModifier, verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text(title, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    description,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = descriptionMaxLines,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
-        trailing()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = if (stacked) Alignment.Top else Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                icon,
+                null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp)
+            )
+            if (stacked) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    text(Modifier.fillMaxWidth())
+                    trailing()
+                }
+            } else {
+                text(Modifier.weight(1f))
+                trailing()
+            }
+        }
     }
 }
+
+// Wide enough for a ~230dp segmented control beside a readable text column.
+internal val SETTINGS_ROW_STACK_WIDTH = 480.dp
 
 @Composable
 fun DependencyItem(

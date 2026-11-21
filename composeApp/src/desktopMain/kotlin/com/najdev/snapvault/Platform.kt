@@ -6,6 +6,7 @@ import java.io.File
 import java.net.URI
 
 actual val isAndroidBuild: Boolean = false
+actual val usesAppOwnedLibrary: Boolean = false
 actual val isIosBuild: Boolean = false
 actual val platformSupportPageUrl: String? = "https://ko-fi.com/najdev"
 

@@ -1,30 +1,25 @@
 package com.najdev.snapvault
 
-import android.content.Context
-import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
 import com.najdev.snapvault.downloader.AndroidZipPipelineRunner
 import com.najdev.snapvault.metadata.AndroidMediaProcessor
-import java.io.File
-import java.io.FileOutputStream
 import okio.FileSystem
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        ContextHolder.context = applicationContext
+        val appContext = applicationContext
+        ContextHolder.context = appContext
+        JvmDocumentSources.open = { path ->
+            appContext.contentResolver.openInputStream(android.net.Uri.parse(path))
+                ?: throw java.io.IOException("Could not open selected document")
+        }
+        JvmDocumentSources.directory = AndroidDocumentAccess(appContext)::directory
         setContent {
-            val pickers = rememberAndroidPickers()
+            val pickers = rememberPlatformPickers()
             val mediaProcessor = remember { AndroidMediaProcessor() }
             // Was NoOpZipPipelineRunner: the app could pick an export and then silently do
             // nothing with it. The runner shares desktop's extraction and composites
@@ -37,79 +32,5 @@ class MainActivity : ComponentActivity() {
                 fileSystem = FileSystem.SYSTEM
             )
         }
-    }
-}
-
-@Composable
-fun rememberAndroidPickers(): PlatformPickers {
-    val context = LocalContext.current
-    var onHtmlResult by remember { mutableStateOf<((String?) -> Unit)?>(null) }
-    var onFolderResult by remember { mutableStateOf<((String?) -> Unit)?>(null) }
-    var onZipsResult by remember { mutableStateOf<((List<String>) -> Unit)?>(null) }
-
-    val htmlPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        val path = uri?.let { copyUriToInternalStorage(context, it, "memories_history.html") }
-        onHtmlResult?.invoke(path)
-    }
-
-    val folderPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocumentTree()
-    ) { uri: Uri? ->
-        onFolderResult?.invoke(uri?.toString())
-    }
-
-    val zipsPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetMultipleContents()
-    ) { uris: List<Uri> ->
-        val paths = uris.mapNotNull { uri ->
-            val filename = "snapchat_export_${System.currentTimeMillis()}_${uris.indexOf(uri)}.zip"
-            copyUriToInternalStorage(context, uri, filename)
-        }
-        onZipsResult?.invoke(paths)
-    }
-
-    return remember {
-        object : PlatformPickers {
-            override fun pickHtmlFile(onResult: (String?) -> Unit) {
-                onHtmlResult = onResult
-                htmlPickerLauncher.launch("text/html")
-            }
-
-            override fun pickFolder(onResult: (String?) -> Unit) {
-                onFolderResult = onResult
-                folderPickerLauncher.launch(null)
-            }
-
-            override fun pickOutputFolder(onResult: (String?) -> Unit) {
-                onFolderResult = onResult
-                folderPickerLauncher.launch(null)
-            }
-
-            override fun pickZipFolder(onResult: (String?) -> Unit) {
-                onFolderResult = onResult
-                folderPickerLauncher.launch(null)
-            }
-
-            override fun pickMultipleZips(onResult: (List<String>) -> Unit) {
-                onZipsResult = onResult
-                zipsPickerLauncher.launch("application/zip")
-            }
-        }
-    }
-}
-
-private fun copyUriToInternalStorage(context: Context, uri: Uri, targetFilename: String): String? {
-    return try {
-        val inputStream = context.contentResolver.openInputStream(uri) ?: return null
-        val outputFile = File(context.cacheDir, targetFilename)
-        FileOutputStream(outputFile).use { output ->
-            inputStream.copyTo(output)
-        }
-        outputFile.absolutePath
-    } catch (e: Exception) {
-        e.printStackTrace()
-        null
     }
 }

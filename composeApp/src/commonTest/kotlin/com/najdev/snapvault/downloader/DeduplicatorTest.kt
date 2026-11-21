@@ -8,8 +8,10 @@ import okio.ForwardingFileSystem
 import okio.IOException
 import okio.Path
 import okio.Path.Companion.toPath
+import okio.fakefilesystem.FakeFileSystem
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class DeduplicatorTest {
@@ -250,5 +252,66 @@ class DeduplicatorTest {
         assertEquals(listOf("2023-11-30_ZZZ.jpg"), results.flatMap { it.deletedFiles })
         listOf("notes.txt", "notes (copy).txt", "invoice.pdf", "invoice-2.pdf", "backup.zip", "backup-old.zip")
             .forEach { assertTrue(fs.exists(dir / it), "$it is not a memory and must not be touched") }
+    }
+
+    // On a real export, different memories carry byte-identical caption overlays (the same
+    // sticker or text). Each overlay was a "duplicate" of the others, so with preview off the
+    // cleanup deleted the overlay that belonged to another memory, and that memory's kept
+    // original video lost its caption for good. A main and its overlay are one memory, not
+    // two loose files, so neither part is a duplicate candidate.
+    @Test
+    fun identicalOverlaysOfDifferentMemoriesAreBothKept() = runTest {
+        val fs = FakeFileSystem()
+        val dir = "/vault".toPath()
+        fs.createDirectories(dir)
+        fs.write(dir / "2024-01-01_A-main.mp4") { writeUtf8("video a") }
+        fs.write(dir / "2024-01-01_A-overlay.png") { writeUtf8("same sticker") }
+        fs.write(dir / "2024-02-02_B-main.mp4") { writeUtf8("video b") }
+        fs.write(dir / "2024-02-02_B-overlay.png") { writeUtf8("same sticker") }
+
+        val results = Deduplicator(fs).deduplicateFolder(dir, dryRun = false)
+
+        assertEquals(emptyList(), results)
+        assertTrue(fs.exists(dir / "2024-01-01_A-overlay.png"))
+        assertTrue(fs.exists(dir / "2024-02-02_B-overlay.png"))
+    }
+
+    // The same rule from the other side: two memories whose videos are identical but whose
+    // captions differ are still two memories. Deleting one main would leave its overlay
+    // orphaned and the memory unrecoverable from the library.
+    @Test
+    fun identicalMainsWithTheirOwnOverlaysAreBothKept() = runTest {
+        val fs = FakeFileSystem()
+        val dir = "/vault".toPath()
+        fs.createDirectories(dir)
+        fs.write(dir / "2024-01-01_A-main.mp4") { writeUtf8("same video") }
+        fs.write(dir / "2024-01-01_A-overlay.png") { writeUtf8("caption a") }
+        fs.write(dir / "2024-02-02_B-main.mp4") { writeUtf8("same video") }
+        fs.write(dir / "2024-02-02_B-overlay.png") { writeUtf8("caption b") }
+
+        val results = Deduplicator(fs).deduplicateFolder(dir, dryRun = false)
+
+        assertEquals(emptyList(), results)
+        assertTrue(fs.exists(dir / "2024-02-02_B-main.mp4"))
+    }
+
+    // Excluding pairs must not switch dedupe off: plain memories (no overlay) that are
+    // byte-identical are still cleaned up alongside a pair.
+    @Test
+    fun unpairedDuplicatesBesideAPairAreStillRemoved() = runTest {
+        val fs = FakeFileSystem()
+        val dir = "/vault".toPath()
+        fs.createDirectories(dir)
+        fs.write(dir / "2024-01-01_A-main.mp4") { writeUtf8("video a") }
+        fs.write(dir / "2024-01-01_A-overlay.png") { writeUtf8("same bytes") }
+        fs.write(dir / "2024-03-03_C.jpg") { writeUtf8("same bytes") }
+        fs.write(dir / "2024-04-04_D.jpg") { writeUtf8("same bytes") }
+
+        val results = Deduplicator(fs).deduplicateFolder(dir, dryRun = false)
+
+        assertEquals(listOf("2024-04-04_D.jpg"), results.single().deletedFiles)
+        assertEquals("2024-03-03_C.jpg", results.single().keptFile)
+        assertTrue(fs.exists(dir / "2024-01-01_A-overlay.png"))
+        assertFalse(fs.exists(dir / "2024-04-04_D.jpg"))
     }
 }

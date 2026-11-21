@@ -2,7 +2,9 @@
 
 **SnapVault** is an open-source desktop app for downloading, organizing, and processing your Snapchat memories. No Python or command line needed.
 
-**What runs where:** ZIP imports run locally. Legacy link imports require internet access. Linux requires FFmpeg and Perl.
+**[Website](https://snapvault.naj-dev.com)** · **[Step-by-Step Guide & Video Tutorial](https://snapvault.naj-dev.com/tutorial)** · **[Download Latest Release](../../releases/latest)** · **[Privacy Policy](PRIVACY.md)**
+
+**What runs where:** ZIP imports run 100% locally offline. Legacy link imports connect only to the download URLs in your Snapchat export. Linux requires FFmpeg and Perl.
 
 > **Not affiliated with Snap Inc.** SnapVault is an independent, unofficial tool. It is not made, endorsed, sponsored or supported by Snap Inc., and "Snapchat" is a trademark of Snap Inc. It works only on the data export Snapchat gives *you*, through Snapchat's own "Download My Data" — it does not access your account, log in for you, or bypass anything.
 
@@ -17,9 +19,12 @@ Built with Kotlin Multiplatform + Compose Desktop. Ships as a native installer f
 
 ## Quickstart
 
-1. **Download** the latest release for your OS from the [Releases](../../releases) page. On a Mac, choose `macos-arm64` for Apple Silicon (M-series) or `macos-x64` for Intel. `SHA256SUMS.txt` on the release lists each download's checksum.
+1. **Download** the latest release for your OS from the [Releases](../../releases/latest) page. On a Mac, choose `macos-arm64` for Apple Silicon (M1/M2/M3/M4) or `macos-x64` for Intel. `SHA256SUMS.txt` on the release lists each download's checksum.
 2. **Install** the `.dmg` (macOS), `.msi` (Windows), or `.deb` (Linux)
-   > **Note:** releases are not yet code-signed. On macOS, Gatekeeper will warn that the app is from an unidentified developer — right-click the app → **Open** → **Open** (or run `xattr -d com.apple.quarantine /Applications/SnapVault.app`). On Windows, SmartScreen may show "Windows protected your PC" — click **More info** → **Run anyway**. See [docs/CODE_SIGNING.md](docs/CODE_SIGNING.md) for the signing roadmap.
+   > **Note:** releases are not yet code-signed.
+   > - **macOS Sequoia (15+) / Sonoma:** Drag **SnapVault** to **Applications** and try to open it once. When macOS blocks it, open **System Settings → Privacy & Security**, scroll down, and click **Open Anyway** (macOS Sequoia removed the older right-click → Open bypass). Alternatively, run `xattr -dr com.apple.quarantine /Applications/SnapVault.app`.
+   > - **Windows:** SmartScreen may show *"Windows protected your PC"* — click **More info → Run anyway**. The published v1.0.15 installer uses a machine-wide installation and may request administrator permission.
+   > - See [docs/CODE_SIGNING.md](docs/CODE_SIGNING.md) for the signing roadmap.
 3. On Linux, install FFmpeg and Perl with your package manager (e.g. `sudo apt install ffmpeg perl`); on macOS/Windows both tools are bundled
 4. On the **Dashboard**, choose your Snapchat ZIP(s) and an output folder
 5. Configure pipeline options and click **Start Download**
@@ -85,7 +90,7 @@ SnapVault began in December 2025 as a fork of [ManuelPuchner/snapchat-memories-d
 
 ## License
 
-Copyright © 2025–2026 Najib Coulibaly and contributors.
+Copyright © 2025–2026 naj-dev and contributors.
 
 SnapVault is free software under the [GNU General Public License v3.0 or later](LICENSE). You may use, study, share and modify it. If you distribute it — modified or not, for a fee or not — you must pass on the same freedoms, including the corresponding source, and you may not add restrictions of your own.
 

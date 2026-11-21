@@ -98,6 +98,31 @@ class ReleaseWorkflowTest(unittest.TestCase):
         self.assertIn("if: ${{ !inputs.dry_run }}", staged)
         self.assertIn("if: ${{ !inputs.dry_run }}", job(self.release, "publish"))
 
+    def test_packaging_filters_foreign_os_binaries_while_desktop_test_keeps_all(self):
+        build = job(self.release, "build")
+        for expected_bin in ("darwin-arm64", "darwin-x64", "windows-x64", "linux-x64"):
+            self.assertIn(f"bin_platform: {expected_bin}", build)
+        test_line = next(
+            line for line in build.splitlines() if ":composeApp:desktopTest" in line
+        )
+        package_line = next(
+            line
+            for line in build.splitlines()
+            if "packageReleaseDistributionForCurrentOS" in line
+        )
+        self.assertNotIn("bundleTargetPlatform", test_line)
+        self.assertIn("-PbundleTargetPlatform=", package_line)
+
+    # Regression for v1.0.12, v1.0.13, and v1.0.15 publishing with `body: null`.
+    # Notes must live outside `dist/` so `dist/*` uploads and SHA256SUMS.txt only include
+    # installers and the tool manifest.
+    def test_publish_attaches_generated_release_notes_outside_dist(self):
+        published = job(self.release, "publish")
+        self.assertIn("python3 scripts/release_notes.py", published)
+        self.assertIn("--notes-file", published)
+        self.assertNotIn("dist/RELEASE_NOTES", published)
+        self.assertIn('RUNNER_TEMP', published)
+
 
 if __name__ == "__main__":
     unittest.main()

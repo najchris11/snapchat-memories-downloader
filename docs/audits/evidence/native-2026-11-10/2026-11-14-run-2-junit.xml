@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="iosSimulatorArm64Test.com.najdev.snapvault.metadata.IosVideoOverlayExporterTest" tests="7" skipped="0" failures="1" errors="0" timestamp="2026-11-14T18:50:07.167Z" hostname="Mac.lan" time="0.998">
+  <properties/>
+  <testcase name="nativeExportCompletesWithoutCrashingAndRetainsAudioAndSources[iosSimulatorArm64]" classname="iosSimulatorArm64Test.com.najdev.snapvault.metadata.IosVideoOverlayExporterTest" time="0.329"/>
+  <testcase name="aRotatedClipExportsInItsDisplayOrientation[iosSimulatorArm64]" classname="iosSimulatorArm64Test.com.najdev.snapvault.metadata.IosVideoOverlayExporterTest" time="0.025"/>
+  <testcase name="cancellationDrainsTheEncoderAndKeepsOnlyTheSources[iosSimulatorArm64]" classname="iosSimulatorArm64Test.com.najdev.snapvault.metadata.IosVideoOverlayExporterTest" time="0.106"/>
+  <testcase name="anExistingOutputIsNeverOverwrittenOrTreatedAsThisRunsResult[iosSimulatorArm64]" classname="iosSimulatorArm64Test.com.najdev.snapvault.metadata.IosVideoOverlayExporterTest" time="0.004"/>
+  <testcase name="theProbeSeesHdrInTheSourceFixturesAndNotInTheSdrOne[iosSimulatorArm64]" classname="iosSimulatorArm64Test.com.najdev.snapvault.metadata.IosVideoOverlayExporterTest" time="0.005"/>
+  <testcase name="hdrSourcesKeepTheirTransferFunctionThroughExport[iosSimulatorArm64]" classname="iosSimulatorArm64Test.com.najdev.snapvault.metadata.IosVideoOverlayExporterTest" time="0.504">
+    <failure message="kotlin.AssertionError: kotlin.AssertionError: hdr-hlg.mp4 exported with a different transfer function (silent HDR downgrade). Expected &lt;ITU_R_2100_HLG&gt;, actual &lt;ITU_R_709_2&gt;." type="kotlin.AssertionError">kotlin.AssertionError: hdr-hlg.mp4 exported with a different transfer function (silent HDR downgrade). Expected &lt;ITU_R_2100_HLG&gt;, actual &lt;ITU_R_709_2&gt;.
+	at kotlin.Error#&lt;init&gt;(Unknown Source)
+	at kotlin.AssertionError#&lt;init&gt;(Unknown Source)
+	at kotlin.test.DefaultAsserter#fail(Unknown Source)
+	at kotlin.test.Asserter#fail(Unknown Source)
+	at kotlin.test.Asserter#assertTrue(Unknown Source)
+	at kotlin.test.Asserter#assertTrue(Unknown Source)
+	at kotlin.test.Asserter#assertEquals(Unknown Source)
+	at kotlin.test.Asserter#assertEquals(Unknown Source)
+	at kotlin.test#assertEquals(Unknown Source)
+	at com.najdev.snapvault.metadata.IosVideoOverlayExporterTest.IosVideoOverlayExporterTest$hdrSourcesKeepTheirTransferFunctionThroughExport$1.$invokeCOROUTINE$5.invokeSuspend#internal(/private/tmp/snapvault-hdr-20261114/composeApp/src/iosTest/kotlin/com/najdev/snapvault/metadata/IosVideoOverlayExporterTest.kt:114)
+	at kotlin.coroutines.native.internal.BaseContinuationImpl#invokeSuspend(Unknown Source)
+	at kotlin.coroutines.native.internal.BaseContinuationImpl#resumeWith(Unknown Source)
+	at kotlin.coroutines.Continuation#resumeWith(Unknown Source)
+	at kotlinx.coroutines.DispatchedTask#run(/opt/buildAgent/work/44ec6e850d5c63f0/kotlinx-coroutines-core/common/src/internal/DispatchedTask.kt:100)
+	at kotlinx.coroutines.Runnable#run(/opt/buildAgent/work/44ec6e850d5c63f0/kotlinx-coroutines-core/native/src/Runnable.kt:12)
+	at kotlinx.coroutines.test.TestDispatcher#processEvent(/opt/buildAgent/work/44ec6e850d5c63f0/kotlinx-coroutines-test/common/src/TestDispatcher.kt:24)
+	at kotlinx.coroutines.test.TestCoroutineScheduler#tryRunNextTaskUnless(/opt/buildAgent/work/44ec6e850d5c63f0/kotlinx-coroutines-test/common/src/TestCoroutineScheduler.kt:98)
+	at kotlinx.coroutines.test.runTest$$inlined$let$1.runTest$$inlined$let$1$invoke$3.$invokeCOROUTINE$2.invokeSuspend#internal(/opt/buildAgent/work/44ec6e850d5c63f0/kotlinx-coroutines-test/common/src/TestBuilders.kt:326)
+	at kotlin.coroutines.native.internal.BaseContinuationImpl#invokeSuspend(Unknown Source)
+	at kotlin.coroutines.native.internal.BaseContinuationImpl#resumeWith(Unknown Source)
+	at kotlin.coroutines.Continuation#resumeWith(Unknown Source)
+	at kotlinx.coroutines.DispatchedTask#run(/opt/buildAgent/work/44ec6e850d5c63f0/kotlinx-coroutines-core/common/src/internal/DispatchedTask.kt:100)
+	at kotlinx.coroutines.Runnable#run(/opt/buildAgent/work/44ec6e850d5c63f0/kotlinx-coroutines-core/native/src/Runnable.kt:12)
+	at kotlinx.coroutines.EventLoopImplBase#processNextEvent(/opt/buildAgent/work/44ec6e850d5c63f0/kotlinx-coroutines-core/common/src/EventLoop.common.kt:256)
+	at kotlinx.coroutines.EventLoop#processNextEvent(/opt/buildAgent/work/44ec6e850d5c63f0/kotlinx-coroutines-core/common/src/EventLoop.common.kt:49)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking#internal(/opt/buildAgent/work/44ec6e850d5c63f0/kotlinx-coroutines-core/native/src/Builders.kt:79)
+	at kotlinx.coroutines#runBlockingImpl(/opt/buildAgent/work/44ec6e850d5c63f0/kotlinx-coroutines-core/native/src/Builders.kt:15)
+	at kotlinx.coroutines#runBlocking(/opt/buildAgent/work/44ec6e850d5c63f0/kotlinx-coroutines-core/concurrent/src/Builders.concurrent.kt:172)
+	at kotlinx.coroutines#runBlocking$default(/opt/buildAgent/work/44ec6e850d5c63f0/kotlinx-coroutines-core/concurrent/src/Builders.concurrent.kt:157)
+	at kotlinx.coroutines.test#createTestResult(/opt/buildAgent/work/44ec6e850d5c63f0/kotlinx-coroutines-test/native/src/TestBuilders.kt:7)
+	at kotlinx.coroutines.test#runTest__at__kotlinx.coroutines.test.TestScope(/opt/buildAgent/work/44ec6e850d5c63f0/kotlinx-coroutines-test/common/src/TestBuilders.kt:309)
+	at kotlinx.coroutines.test#runTest(/opt/buildAgent/work/44ec6e850d5c63f0/kotlinx-coroutines-test/common/src/TestBuilders.kt:167)
+	at kotlinx.coroutines.test#runTest$default(/opt/buildAgent/work/44ec6e850d5c63f0/kotlinx-coroutines-test/common/src/TestBuilders.kt:159)
+	at com.najdev.snapvault.metadata.IosVideoOverlayExporterTest#hdrSourcesKeepTheirTransferFunctionThroughExport(/private/tmp/snapvault-hdr-20261114/composeApp/src/iosTest/kotlin/com/najdev/snapvault/metadata/IosVideoOverlayExporterTest.kt:105)
+	at com.najdev.snapvault.metadata.$IosVideoOverlayExporterTest$test$0.$IosVideoOverlayExporterTest$test$0$$FUNCTION_REFERENCE_FOR$hdrSourcesKeepTheirTransferFunctionThroughExport$5.invoke#internal(/private/tmp/snapvault-hdr-20261114/composeApp/src/iosTest/kotlin/com/najdev/snapvault/metadata/IosVideoOverlayExporterTest.kt:105)
+	at com.najdev.snapvault.metadata.$IosVideoOverlayExporterTest$test$0.$IosVideoOverlayExporterTest$test$0$$FUNCTION_REFERENCE_FOR$hdrSourcesKeepTheirTransferFunctionThroughExport$5.$&lt;bridge-DNC&gt;invoke(/private/tmp/snapvault-hdr-20261114/composeApp/src/iosTest/kotlin/com/najdev/snapvault/metadata/IosVideoOverlayExporterTest.kt:105)
+	at kotlin.Function1#invoke(Unknown Source)
+	at kotlin.native.internal.test.BaseClassSuite.TestCase#doRun(Unknown Source)
+	at kotlin.native.internal.test.TestCase#doRun(Unknown Source)
+	at kotlin.native.internal.test.TestCase#run(Unknown Source)
+	at kotlin.native.internal.test.TestCase#run(Unknown Source)
+	at kotlin.native.internal.test.TestRunner.run#internal(Unknown Source)
+	at kotlin.native.internal.test.TestRunner.runIteration#internal(Unknown Source)
+	at kotlin.native.internal.test.TestRunner#run(Unknown Source)
+	at kotlin.native.internal.test#testLauncherEntryPoint(Unknown Source)
+	at kotlin.native.internal.test#main(Unknown Source)
+	at &lt;global&gt;.Konan_start(/Users/najchris11/.gradle/daemon/9.4.1/entryPointOwner:1)
+	at &lt;global&gt;.Init_and_run_start(Unknown Source)
+	at &lt;global&gt;.0x0(Unknown Source)
+	at &lt;global&gt;.0x0(Unknown Source)
+</failure>
+  </testcase>
+  <testcase name="anSdrSourceStaysSdrAfterExport[iosSimulatorArm64]" classname="iosSimulatorArm64Test.com.najdev.snapvault.metadata.IosVideoOverlayExporterTest" time="0.018"/>
+  <system-out><![CDATA[HDR-PROBE hdr-hlg.mp4 -> codec=1635148593 transfer=ITU_R_709_2 primaries=ITU_R_709_2 matrix=ITU_R_709_2 hdr=false
+HDR-PROBE source.mp4 -> codec=1635148593 transfer=ITU_R_709_2 primaries=ITU_R_709_2 matrix=ITU_R_709_2 hdr=false
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

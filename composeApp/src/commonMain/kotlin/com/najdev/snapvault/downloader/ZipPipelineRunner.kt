@@ -45,7 +45,7 @@ interface ZipPipelineRunner {
 
     /**
      * What is wrong with the files [entries] should have produced in [outputDir], if anything:
-     * each is checked against the archive for presence and size. An empty list means the
+     * each is verified against archived content, including any history backup. An empty list means the
      * archive's contents are all on disk, which is the only condition under which the archive
      * itself may be deleted (D20).
      */

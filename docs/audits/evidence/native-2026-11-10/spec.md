@@ -1,0 +1,10 @@
+# Spec: checklist 2.4 — synthetic HDR validation of iOS exportIosVideoOverlay (raw request: "alright, plx resume")
+Acceptance criteria
+1. Generate real 10-bit HEVC Main10 HLG (arib-std-b67) and PQ (smpte2084) bt2020 fixtures (120x160, 2 s, AAC), verified with ffprobe (pix_fmt yuv420p10le, transfer, primaries, matrix); metadata + sha256 documented in the fixture README.
+2. Tests use only the existing public seam exportIosVideoOverlay (iosTest). They read the EXPORTED file's real properties (codec subtype, transfer function, primaries, bit depth/HDR characteristic) via AVFoundation, plus existing structural asserts (dimensions, 1 audio track, sources retained, no .stage left). No assertion of "HDR preserved" from success or from source metadata alone.
+3. First characterise actual behaviour on the real simulator exporter. If HDR is NOT preserved, record the exact finding with evidence before any production change; do not speculatively rewrite. Any fix needs failing-first test, then full detekt, desktopTest, and desktop/Android/iOS compile.
+4. Test-first/mutation discipline: show a failing-first run or a deliberate mutant that fails the new test, then restore byte-for-byte (hash verified).
+5. Run on Mac simulator CF9A84A0-… via the permitted project runner (:composeApp:iosSimulatorArm64Test --device <id> --tests "*IosVideoOverlayExporterTest*", JDK21). device_open already done. No simctl/adb/ssh UI. If transport blocked, record exact error and stop, no loops/bypass.
+6. Evidence in docs/audits/evidence/native-2026-11-10/; update docs/GROWTH_CHECKLIST.md and docs/PROGRESS_LOG.md (+MOBILE_PLAN if needed) only from actual evidence; physical devices and real cloud remain unchecked; state that standalone runner has green frames so pixel/visual fidelity is unproven.
+7. Preserve all 112 existing uncommitted changes and source originals; no new detekt baseline entries, theme literals, or UI strings; no commit/push/release.
+8. Final: agent-verify --jev-only (no paid review); report counts, logs, mutation/restoration, fixture metadata, limits.

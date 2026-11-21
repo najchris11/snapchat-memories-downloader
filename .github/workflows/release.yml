@@ -89,13 +89,17 @@ jobs:
           - target: macos-arm64
             runner: macos-15
             arch: arm64
+            bin_platform: darwin-arm64
           - target: macos-x64
             runner: macos-15-intel
             arch: x86_64
+            bin_platform: darwin-x64
           - target: windows-x64
             runner: windows-latest
+            bin_platform: windows-x64
           - target: linux-x64
             runner: ubuntu-latest
+            bin_platform: linux-x64
 
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
@@ -126,7 +130,7 @@ jobs:
           distribution: 'jetbrains'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v5
 
       # Strip local-machine JDK paths from gradle.properties.
       # Do NOT re-add org.gradle.java.home — Windows backslash paths corrupt
@@ -164,7 +168,7 @@ jobs:
       # what was actually validated.
       - name: Build & package desktop distribution (release variant)
         shell: bash
-        run: ./gradlew packageReleaseDistributionForCurrentOS -Pcompose.javaHome="$JAVA_HOME" -Papp.version="$VERSION"
+        run: ./gradlew packageReleaseDistributionForCurrentOS -Pcompose.javaHome="$JAVA_HOME" -Papp.version="$VERSION" -PbundleTargetPlatform="${{ matrix.bin_platform }}"
 
       - name: Verify the DMG architecture
         if: runner.os == 'macOS'
@@ -314,8 +318,16 @@ jobs:
           git tag "$TAG"
           git push origin "$TAG"
 
+      - name: Generate release notes
+        run: |
+          python3 scripts/release_notes.py \
+            --tag "$TAG" \
+            --repo "${{ github.repository }}" \
+            --output "$RUNNER_TEMP/RELEASE_NOTES.md"
+          cat "$RUNNER_TEMP/RELEASE_NOTES.md"
+
       - name: Publish the release
-        run: gh release create "$TAG" dist/* --title "$TAG" --verify-tag
+        run: gh release create "$TAG" dist/* --title "$TAG" --verify-tag --notes-file "$RUNNER_TEMP/RELEASE_NOTES.md"
 
       - name: Remove the temporary branch
         env:

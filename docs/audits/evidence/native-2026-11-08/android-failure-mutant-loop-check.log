@@ -1,0 +1,224 @@
+/tmp/snapvault-roadmap-20261108/failure-main.apk: 1 file pushed, 0 skipped. 551.3 MB/s (27955600 bytes in 0.048s)
+Performing Push Install
+Success
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+com.najdev.snapvault.StreamingExtractionFailureTest:
+INSTRUMENTATION_STATUS: test=aProviderThatReportsAnErrorMidEntryNeverPublishesTheStalledEntry
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=aProviderThatReportsAnErrorMidEntryNeverPublishesTheStalledEntry
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=aDocumentTheProviderCannotOpenFailsEveryRequestedEntryAndWritesNothing
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=aDocumentTheProviderCannotOpenFailsEveryRequestedEntryAndWritesNothing
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=cancellingBetweenEntriesNeverStartsAStageForTheNextEntry
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=cancellingBetweenEntriesNeverStartsAStageForTheNextEntry
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=cancellingWhileTheProviderIsStalledIsHonouredAfterTheBlockedReadReturns
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: cancelLatencyMillisWhileProviderStalled=2727
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stack=java.lang.AssertionError: second.jpg must not be reported as written
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.assertNoSuccessFor(StreamingExtractionFailureTest.kt:219)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.access$assertNoSuccessFor(StreamingExtractionFailureTest.kt:39)
+	at com.najdev.snapvault.StreamingExtractionFailureTest$cancellingWhileTheProviderIsStalledIsHonouredAfterTheBlockedReadReturns$1.invokeSuspend(StreamingExtractionFailureTest.kt:210)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:256)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:54)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlockingImpl(Builders.kt:30)
+	at kotlinx.coroutines.BuildersKt.runBlockingImpl(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK(Builders.concurrent.kt:172)
+	at kotlinx.coroutines.BuildersKt.runBlockingK(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK$default(Builders.concurrent.kt:157)
+	at kotlinx.coroutines.BuildersKt.runBlockingK$default(Unknown Source:1)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.cancellingWhileTheProviderIsStalledIsHonouredAfterTheBlockedReadReturns(StreamingExtractionFailureTest.kt:187)
+
+INSTRUMENTATION_STATUS: stream=
+Error in cancellingWhileTheProviderIsStalledIsHonouredAfterTheBlockedReadReturns(com.najdev.snapvault.StreamingExtractionFailureTest):
+java.lang.AssertionError: second.jpg must not be reported as written
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.assertNoSuccessFor(StreamingExtractionFailureTest.kt:219)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.access$assertNoSuccessFor(StreamingExtractionFailureTest.kt:39)
+	at com.najdev.snapvault.StreamingExtractionFailureTest$cancellingWhileTheProviderIsStalledIsHonouredAfterTheBlockedReadReturns$1.invokeSuspend(StreamingExtractionFailureTest.kt:210)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:256)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:54)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlockingImpl(Builders.kt:30)
+	at kotlinx.coroutines.BuildersKt.runBlockingImpl(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK(Builders.concurrent.kt:172)
+	at kotlinx.coroutines.BuildersKt.runBlockingK(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK$default(Builders.concurrent.kt:157)
+	at kotlinx.coroutines.BuildersKt.runBlockingK$default(Unknown Source:1)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.cancellingWhileTheProviderIsStalledIsHonouredAfterTheBlockedReadReturns(StreamingExtractionFailureTest.kt:187)
+
+INSTRUMENTATION_STATUS: test=cancellingWhileTheProviderIsStalledIsHonouredAfterTheBlockedReadReturns
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=5
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=aProviderThatClosesMidEntryFailsThatEntryAndLeavesNoStageOrPartialFile
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=5
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=aProviderThatClosesMidEntryFailsThatEntryAndLeavesNoStageOrPartialFile
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=aCompleteProviderDocumentPublishesEveryEntryWithoutAStageOrACachedArchive
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=aCompleteProviderDocumentPublishesEveryEntryWithoutAStageOrACachedArchive
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=7
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=cancellingWhileAnEntryIsBeingStagedStopsAtTheNextReadAndRemovesTheStage
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.najdev.snapvault.StreamingExtractionFailureTest
+INSTRUMENTATION_STATUS: current=7
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=7
+INSTRUMENTATION_STATUS: stack=java.lang.AssertionError: second.jpg must not be reported as written
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.assertNoSuccessFor(StreamingExtractionFailureTest.kt:219)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.access$assertNoSuccessFor(StreamingExtractionFailureTest.kt:39)
+	at com.najdev.snapvault.StreamingExtractionFailureTest$cancellingWhileAnEntryIsBeingStagedStopsAtTheNextReadAndRemovesTheStage$1.invokeSuspend(StreamingExtractionFailureTest.kt:158)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:256)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:54)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlockingImpl(Builders.kt:30)
+	at kotlinx.coroutines.BuildersKt.runBlockingImpl(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK(Builders.concurrent.kt:172)
+	at kotlinx.coroutines.BuildersKt.runBlockingK(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK$default(Builders.concurrent.kt:157)
+	at kotlinx.coroutines.BuildersKt.runBlockingK$default(Unknown Source:1)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.cancellingWhileAnEntryIsBeingStagedStopsAtTheNextReadAndRemovesTheStage(StreamingExtractionFailureTest.kt:138)
+
+INSTRUMENTATION_STATUS: stream=
+Error in cancellingWhileAnEntryIsBeingStagedStopsAtTheNextReadAndRemovesTheStage(com.najdev.snapvault.StreamingExtractionFailureTest):
+java.lang.AssertionError: second.jpg must not be reported as written
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.assertNoSuccessFor(StreamingExtractionFailureTest.kt:219)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.access$assertNoSuccessFor(StreamingExtractionFailureTest.kt:39)
+	at com.najdev.snapvault.StreamingExtractionFailureTest$cancellingWhileAnEntryIsBeingStagedStopsAtTheNextReadAndRemovesTheStage$1.invokeSuspend(StreamingExtractionFailureTest.kt:158)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:256)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:54)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlockingImpl(Builders.kt:30)
+	at kotlinx.coroutines.BuildersKt.runBlockingImpl(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK(Builders.concurrent.kt:172)
+	at kotlinx.coroutines.BuildersKt.runBlockingK(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK$default(Builders.concurrent.kt:157)
+	at kotlinx.coroutines.BuildersKt.runBlockingK$default(Unknown Source:1)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.cancellingWhileAnEntryIsBeingStagedStopsAtTheNextReadAndRemovesTheStage(StreamingExtractionFailureTest.kt:138)
+
+INSTRUMENTATION_STATUS: test=cancellingWhileAnEntryIsBeingStagedStopsAtTheNextReadAndRemovesTheStage
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_RESULT: stream=
+
+Time: 3.396
+There were 2 failures:
+1) cancellingWhileTheProviderIsStalledIsHonouredAfterTheBlockedReadReturns(com.najdev.snapvault.StreamingExtractionFailureTest)
+java.lang.AssertionError: second.jpg must not be reported as written
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.assertNoSuccessFor(StreamingExtractionFailureTest.kt:219)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.access$assertNoSuccessFor(StreamingExtractionFailureTest.kt:39)
+	at com.najdev.snapvault.StreamingExtractionFailureTest$cancellingWhileTheProviderIsStalledIsHonouredAfterTheBlockedReadReturns$1.invokeSuspend(StreamingExtractionFailureTest.kt:210)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:256)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:54)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlockingImpl(Builders.kt:30)
+	at kotlinx.coroutines.BuildersKt.runBlockingImpl(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK(Builders.concurrent.kt:172)
+	at kotlinx.coroutines.BuildersKt.runBlockingK(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK$default(Builders.concurrent.kt:157)
+	at kotlinx.coroutines.BuildersKt.runBlockingK$default(Unknown Source:1)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.cancellingWhileTheProviderIsStalledIsHonouredAfterTheBlockedReadReturns(StreamingExtractionFailureTest.kt:187)
+2) cancellingWhileAnEntryIsBeingStagedStopsAtTheNextReadAndRemovesTheStage(com.najdev.snapvault.StreamingExtractionFailureTest)
+java.lang.AssertionError: second.jpg must not be reported as written
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.assertNoSuccessFor(StreamingExtractionFailureTest.kt:219)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.access$assertNoSuccessFor(StreamingExtractionFailureTest.kt:39)
+	at com.najdev.snapvault.StreamingExtractionFailureTest$cancellingWhileAnEntryIsBeingStagedStopsAtTheNextReadAndRemovesTheStage$1.invokeSuspend(StreamingExtractionFailureTest.kt:158)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:256)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:54)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlockingImpl(Builders.kt:30)
+	at kotlinx.coroutines.BuildersKt.runBlockingImpl(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK(Builders.concurrent.kt:172)
+	at kotlinx.coroutines.BuildersKt.runBlockingK(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__Builders_concurrentKt.runBlockingK$default(Builders.concurrent.kt:157)
+	at kotlinx.coroutines.BuildersKt.runBlockingK$default(Unknown Source:1)
+	at com.najdev.snapvault.StreamingExtractionFailureTest.cancellingWhileAnEntryIsBeingStagedStopsAtTheNextReadAndRemovesTheStage(StreamingExtractionFailureTest.kt:138)
+
+FAILURES!!!
+Tests run: 7,  Failures: 2
+
+
+INSTRUMENTATION_CODE: -1

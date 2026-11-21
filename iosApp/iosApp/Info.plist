@@ -13,5 +13,13 @@
 	     name, scene manifest, launch screen, orientations) into this file. -->
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<!-- Publish Documents (the "SnapVault Library" folder) to the Files app, so imported media
+	     can be browsed and copied without SnapVault. Both keys are required for that. -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Save a copy of a selected memory to Photos. Your SnapVault original stays unchanged.</string>
 </dict>
 </plist>

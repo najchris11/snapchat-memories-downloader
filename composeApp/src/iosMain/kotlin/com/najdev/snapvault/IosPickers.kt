@@ -13,7 +13,7 @@ import platform.UIKit.UIWindow
 import platform.UIKit.UIWindowScene
 import platform.darwin.NSObject
 
-private enum class PickerSlot { HTML, OUTPUT_FOLDER, ZIP_FOLDER, ZIP_FILES }
+private enum class PickerSlot { HTML, ZIP_FOLDER, ZIP_FILES }
 
 class IosPickers : PlatformPickers {
     // Retain a strong reference to the active delegate while the picker is presented.
@@ -23,6 +23,16 @@ class IosPickers : PlatformPickers {
     // Track active security-scoped URLs per slot so HTML index, ZIP source, and Output folder
     // stay concurrently accessible during sync execution without revoking each other.
     private val accessedUrlsBySlot = mutableMapOf<PickerSlot, List<NSURL>>()
+
+    // The picked path is a sandbox location (".../CoreSimulator/Devices/<id>/.../Documents/x.zip"
+    // on a simulator), which the Dashboard used to show in full.
+    override fun sourceLabel(path: String): String = sourceDisplayName(path)
+
+    override fun pickExportFile(onResult: (String?) -> Unit) {
+        presentPicker(slot = PickerSlot.HTML, types = listOf("public.zip-archive", "public.json", "public.html", "public.plain-text"), multiple = false) { urls ->
+            onResult(urls.firstOrNull()?.path)
+        }
+    }
 
     override fun pickHtmlFile(onResult: (String?) -> Unit) {
         presentPicker(slot = PickerSlot.HTML, types = listOf("public.html", "public.plain-text"), multiple = false) { urls ->
@@ -34,10 +44,11 @@ class IosPickers : PlatformPickers {
         pickOutputFolder(onResult)
     }
 
+    // No picker: a Files folder chosen here was never bookmarked, so it stopped being readable
+    // after a relaunch. The app-owned library in Documents is always reachable, and the Files
+    // app shows it under On My iPhone > SnapVault.
     override fun pickOutputFolder(onResult: (String?) -> Unit) {
-        presentPicker(slot = PickerSlot.OUTPUT_FOLDER, types = listOf("public.folder"), multiple = false) { urls ->
-            onResult(urls.firstOrNull()?.path)
-        }
+        onResult(iosWorkingLibrary())
     }
 
     override fun pickZipFolder(onResult: (String?) -> Unit) {

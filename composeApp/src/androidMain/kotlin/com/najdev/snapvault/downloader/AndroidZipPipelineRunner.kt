@@ -1,58 +1,55 @@
 package com.najdev.snapvault.downloader
 
+import android.system.ErrnoException
+import com.najdev.snapvault.ContextHolder
+import com.najdev.snapvault.AndroidDocumentAccess
+import com.najdev.snapvault.JvmDocumentSources
+import java.io.IOException
+import android.system.Os
+import android.system.OsConstants
+import androidx.exifinterface.media.ExifInterface
 import com.najdev.snapvault.metadata.MediaProcessor
+import com.najdev.snapvault.metadata.exportAndroidVideoOverlay
 import com.najdev.snapvault.parser.HtmlMemoryEntry
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
  * The ZIP pipeline on Android.
  *
- * Android shipped with [NoOpZipPipelineRunner] wired in, so the app could pick an export and
- * then silently do nothing with it. This is the working runner, ported from
- * feature/mobile-responsive-ui and rewritten against the current [ZipPipelineRunner] — that
- * branch predates extractDownloadedArchives taking its archive list, and predates
- * extractionBudget, availableSpace and verifyExtraction existing at all.
- *
- * Extraction is shared with desktop through [ZipExtractEngine] (jvmSharedMain). Only the
- * combine step is genuinely platform-specific: desktop has ImageIO and a bundled FFmpeg,
- * Android has neither and composites with android.graphics instead.
+ * Extraction is shared with desktop through [ZipExtractEngine] (`jvmSharedMain`), archive
+ * discovery uses [sortExportZipPaths] (`commonMain`), and image overlay compositing delegates
+ * to [StagedImageOverlayCombiner] (`jvmSharedMain`) with kernel-atomic non-overwriting publish
+ * via [Os.link] (available since API 21, safe on `minSdk = 24`) and filename-date metadata
+ * fallback callbacks (#51, #64).
  */
 class AndroidZipPipelineRunner(
     private val mediaProcessor: MediaProcessor,
 ) : ZipPipelineRunner {
 
     private val extractor = ZipExtractEngine()
+    private val streaming = StreamingZipExtractor { path -> JvmDocumentSources.open?.invoke(path) ?: throw IOException("Document access is unavailable") }
+    private val combiner = StagedImageOverlayCombiner(
+        mediaProcessor = mediaProcessor,
+        publishNoOverwrite = ::androidAtomicNoOverwritePublish,
+        hasCaptureTimestamp = ::hasExifCaptureTimestamp,
+        videoEncoder = { main, overlay, staged ->
+            val context = ContextHolder.context ?: return@StagedImageOverlayCombiner false
+            exportAndroidVideoOverlay(context, main, overlay, staged)
+        },
+    )
 
-    override fun listZipFiles(folderPath: String): List<String> {
-        val numberedSuffixRegex = Regex("""-(\d+)\.zip$""")
-        // Snapchat splits large exports into memories-1.zip … memories-10.zip, which sort
-        // wrong as text: -10 lands between -1 and -2.
-        val zipSorter = Comparator<File> { a, b ->
-            val numA = numberedSuffixRegex.find(a.name)?.groupValues?.get(1)?.toIntOrNull()
-            val numB = numberedSuffixRegex.find(b.name)?.groupValues?.get(1)?.toIntOrNull()
-            when {
-                numA == null && numB == null -> a.name.compareTo(b.name)
-                numA == null -> -1
-                numB == null -> 1
-                else -> numA.compareTo(numB)
-            }
-        }
-        return File(folderPath)
-            .listFiles { f -> f.extension.lowercase() == "zip" }
-            ?.sortedWith(zipSorter)
-            ?.map { it.absolutePath }
-            ?: emptyList()
-    }
+    override fun listZipFiles(folderPath: String): List<String> =
+        if (folderPath.startsWith("content://")) {
+            ContextHolder.context?.let { AndroidDocumentAccess(it).archives(folderPath) }.orEmpty()
+        } else sortExportZipPaths(
+            File(folderPath)
+                .listFiles { f -> f.isFile }
+                ?.map { it.absolutePath }
+                .orEmpty(),
+        )
 
     override fun extractionBudget(itemsByZip: Map<String, List<HtmlMemoryEntry>>, outputDir: String) =
-        extractor.extractionBudget(itemsByZip, outputDir)
+        if (itemsByZip.keys.any { it.startsWith("content://") }) null else extractor.extractionBudget(itemsByZip, outputDir)
 
     override fun availableSpace(outputDir: String) = extractor.availableSpace(outputDir)
 
@@ -64,7 +61,11 @@ class AndroidZipPipelineRunner(
         outputDir: String,
         workerCount: Int,
         onProgress: (ExtractResult) -> Unit,
-    ) = extractor.extractAll(itemsByZip, outputDir, workerCount, onProgress)
+    ) {
+        val (documents, local) = itemsByZip.entries.partition { it.key.startsWith("content://") }
+        if (local.isNotEmpty()) extractor.extractAll(local.associate { it.key to it.value }, outputDir, workerCount, onProgress)
+        documents.forEach { streaming.extract(it.key, it.value, outputDir, onProgress) }
+    }
 
     override suspend fun extractDownloadedArchives(
         outputDir: String,
@@ -80,79 +81,40 @@ class AndroidZipPipelineRunner(
         onMetaStart: (total: Int) -> Unit,
         onMetaError: ((String) -> Unit)?,
         onProgress: (CombineResult) -> Unit,
-    ) = coroutineScope {
-        val dir = File(outputDir)
-        if (!dir.isDirectory) {
-            onStart(0)
-            return@coroutineScope
+    ) = combiner.combineAll(
+        outputDir = outputDir,
+        deleteOriginals = deleteOriginals,
+        onStart = onStart,
+        onMetaStart = onMetaStart,
+        onMetaError = onMetaError,
+        onProgress = onProgress,
+    )
+}
+
+private fun androidAtomicNoOverwritePublish(staged: File, destination: File): PublishOutcome {
+    return try {
+        // Atomic in the kernel since API 21: fails with EEXIST if `destination` already
+        // exists, closing the mid-combine TOCTOU overwrite window (#64).
+        Os.link(staged.absolutePath, destination.absolutePath)
+        staged.delete()
+        PublishOutcome.Published
+    } catch (e: ErrnoException) {
+        when (e.errno) {
+            OsConstants.EEXIST -> PublishOutcome.AlreadyExists
+            // Emulated external / FAT / FUSE mounts often disallow hardlinks; fall back to a
+            // synchronized check-then-rename so shared storage still works cleanly.
+            OsConstants.EPERM,
+            OsConstants.EACCES,
+            OsConstants.ENOSYS,
+            OsConstants.EOPNOTSUPP,
+            OsConstants.EXDEV,
+            -> StagedImageOverlayCombiner.jvmSynchronizedNoOverwritePublish(staged, destination)
+            else -> PublishOutcome.Failed
         }
-
-        val byName = (dir.listFiles() ?: emptyArray()).associateBy { it.name }
-        val pairs = findOverlayPairNames(byName.keys.toList())
-        onStart(pairs.size)
-        if (pairs.isEmpty()) return@coroutineScope
-
-        // Results reach the caller on one coroutine, so onProgress never sees two threads.
-        val channel = Channel<CombineResult>(Channel.UNLIMITED)
-        val consumer = launch { for (result in channel) onProgress(result) }
-
-        // Serialised deliberately, and workerCount is ignored here as a result. Compositing
-        // decodes the main image, the overlay and the output at full resolution at once;
-        // running pairs concurrently multiplies that by the worker count and puts the app
-        // over its per-process heap limit on exactly the large exports this is for.
-        val oneAtATime = Semaphore(1)
-
-        for (names in pairs) {
-            val mainFile = byName[names.mainName] ?: continue
-            val overlayFile = byName[names.overlayName] ?: continue
-            oneAtATime.withPermit {
-                channel.send(combineOne(dir, names, mainFile, overlayFile, deleteOriginals))
-            }
-        }
-
-        channel.close()
-        consumer.join()
-    }
-
-    private suspend fun combineOne(
-        dir: File,
-        names: OverlayPairNames,
-        mainFile: File,
-        overlayFile: File,
-        deleteOriginals: Boolean,
-    ): CombineResult {
-        val outputFile = File(dir, names.outputName)
-        val warnings = mutableListOf<String>()
-
-        // Existing output, video, then animation: see overlayCombineSkipStatus, which is
-        // where the order and each reason are tested. The output check has to happen here —
-        // the processor is handed the final path and would replace whatever is there.
-        val status = overlayCombineSkipStatus(names, outputExists = outputFile.exists()) ?: run {
-            val combined = withContext(Dispatchers.IO) {
-                mediaProcessor.combineImageWithOverlay(
-                    mainFile.absolutePath,
-                    overlayFile.absolutePath,
-                    outputFile.absolutePath,
-                    onWarning = { warnings += it },
-                )
-            }
-            if (combined) OverlayCombineStatus.Combined else OverlayCombineStatus.Failed
-        }
-
-        // Only a confirmed combine has produced a second copy of the pixels; see
-        // mayDeleteOriginals, which is where that rule is tested.
-        if (mayDeleteOriginals(status, deleteOriginals)) {
-            if (!mainFile.delete()) warnings += "could not delete original: ${mainFile.name}"
-            if (!overlayFile.delete()) warnings += "could not delete overlay: ${overlayFile.name}"
-        }
-
-        return overlayCombineResult(
-            pair = names,
-            mainPath = mainFile.absolutePath,
-            overlayPath = overlayFile.absolutePath,
-            outputPath = outputFile.absolutePath,
-            status = status,
-            warnings = warnings,
-        )
     }
 }
+
+private fun hasExifCaptureTimestamp(filePath: String): Boolean =
+    runCatching {
+        !ExifInterface(filePath).getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL).isNullOrBlank()
+    }.getOrDefault(false)

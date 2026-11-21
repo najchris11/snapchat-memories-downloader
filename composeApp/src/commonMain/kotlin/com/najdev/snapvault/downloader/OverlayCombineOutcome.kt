@@ -50,10 +50,10 @@ fun mayDeleteOriginals(status: OverlayCombineStatus, deleteRequested: Boolean): 
  * re-import replaced a combined image the user had edited, reported Combined, and then
  * deleted both originals, leaving no copy of anything.
  */
-fun overlayCombineSkipStatus(pair: OverlayPairNames, outputExists: Boolean): OverlayCombineStatus? =
+fun overlayCombineSkipStatus(pair: OverlayPairNames, outputExists: Boolean, supportsVideo: Boolean = false): OverlayCombineStatus? =
     when {
         outputExists -> OverlayCombineStatus.SkippedExistingOutput
-        pair.isVideo -> OverlayCombineStatus.SkippedVideo
+        pair.isVideo && !supportsVideo -> OverlayCombineStatus.SkippedVideo
         pair.isAnimatedImage -> OverlayCombineStatus.SkippedAnimated
         else -> null
     }

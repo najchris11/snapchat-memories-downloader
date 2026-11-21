@@ -47,3 +47,28 @@ archive and of the executable, license, and source — is recorded in
 The installers embed an OpenJDK-based Java runtime (JetBrains Runtime / OpenJDK,
 GPLv2 with Classpath Exception — https://openjdk.org/legal/gplv2+ce.html) produced by
 `jpackage` as part of the Compose Desktop packaging process.
+
+## Offline map land geometry
+
+`composeApp/src/commonMain/composeResources/files/world-land.json` is derived from Natural Earth's
+1:110m land polygons (`ne_110m_land.geojson`), rounded to three decimal places for the global map.
+Source: https://github.com/nvkelso/natural-earth-vector/blob/master/geojson/ne_110m_land.geojson
+Retrieved November 6, 2026. Natural Earth data is public domain:
+https://www.naturalearthdata.com/about/terms-of-use/ . Made with Natural Earth.
+The map ships with the app and does not download map tiles or send memory coordinates anywhere.
+
+## Offline desktop timezone lookup
+
+Desktop includes Timeshape `net.iakovlev:timeshape:2026b.29` (MIT; license text in
+`docs/licenses/timeshape-MIT.txt`), https://github.com/RomanIakovlev/timeshape . Its bundled
+coordinate-to-timezone database comes from timezone-boundary-builder / OpenStreetMap and
+is made available under the Open Data Commons Open Database License (ODbL) 1.0:
+https://opendatacommons.org/licenses/odbl/1-0/ . Upstream database sources and downloadable
+releases: https://github.com/evansiroky/timezone-boundary-builder/releases .
+Database © OpenStreetMap contributors: https://www.openstreetmap.org/copyright .
+No coordinate lookup is made over the network. The pinned Timeshape JAR is about 22 MiB;
+its native decompression dependencies add to desktop distribution size. The boundary index
+is initialized lazily during GPS metadata writing, not at app launch. Historical offsets
+come from the bundled Java runtime's IANA rules; unknown zones or ambiguous matches produce
+no inferred local offset. This feature is desktop-only; native mobile timezone writing
+remains pending.

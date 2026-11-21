@@ -1,0 +1,5 @@
+FAIL  4 requirements judged, 4 not checkable from a diff (process steps)
+  changes: least implemented 0.56 (fails below 0.75)   restrictions: most broken 0.28 (fails at 0.75)
+  model skipped (stage 1 did not pass)
+  -> check these requirements; if one really is missing, fix it or escalate one builder tier (above model_rung) with it as context:
+     - c06 (change, implemented 0.56): Evidence in docs/audits/evidence/native-2026-11-10/; update docs/GROWTH_CHECKLIST.md and docs/PROGRESS_LOG.md (+MOBILE_PLAN if needed) only from actual evidence

@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="iosSimulatorArm64Test.com.najdev.snapvault.metadata.IosVideoOverlayExporterTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-11-08T21:21:35.741Z" hostname="simulator-host" time="0.22">
+  <properties />
+  <testcase name="nativeExportCompletesWithoutCrashingAndRetainsAudioAndSources[iosSimulatorArm64]" classname="iosSimulatorArm64Test.com.najdev.snapvault.metadata.IosVideoOverlayExporterTest" time="0.081" />
+  <testcase name="aRotatedClipExportsInItsDisplayOrientation[iosSimulatorArm64]" classname="iosSimulatorArm64Test.com.najdev.snapvault.metadata.IosVideoOverlayExporterTest" time="0.027" />
+  <testcase name="cancellationDrainsTheEncoderAndKeepsOnlyTheSources[iosSimulatorArm64]" classname="iosSimulatorArm64Test.com.najdev.snapvault.metadata.IosVideoOverlayExporterTest" time="0.11" />
+  <testcase name="anExistingOutputIsNeverOverwrittenOrTreatedAsThisRunsResult[iosSimulatorArm64]" classname="iosSimulatorArm64Test.com.najdev.snapvault.metadata.IosVideoOverlayExporterTest" time="0.002" />
+  <system-out />
+  <system-err />
+</testsuite>

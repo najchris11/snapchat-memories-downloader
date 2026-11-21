@@ -112,8 +112,11 @@ class AndroidMediaProcessor : MediaProcessor {
             )
 
             val outputFile = File(outputPath)
+            val isPng = outputPath.endsWith(".png", ignoreCase = true)
+            val format = if (isPng) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
+            val quality = if (isPng) PNG_QUALITY_IGNORED else JPEG_QUALITY
             val compressed = outputFile.outputStream().use { out ->
-                compositeBitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
+                compositeBitmap.compress(format, quality, out)
             }
 
             // compress() can report success having written nothing, and a zero-byte file that
@@ -158,6 +161,7 @@ class AndroidMediaProcessor : MediaProcessor {
 
     private companion object {
         const val JPEG_QUALITY = 95
+        const val PNG_QUALITY_IGNORED = 100
 
         val CARRIED_EXIF_TAGS = arrayOf(
             ExifInterface.TAG_DATETIME_ORIGINAL,

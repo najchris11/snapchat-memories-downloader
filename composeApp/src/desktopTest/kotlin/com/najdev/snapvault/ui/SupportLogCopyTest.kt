@@ -3,13 +3,18 @@ package com.najdev.snapvault.ui
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
 import com.najdev.snapvault.ui.theme.SnapVaultTheme
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -44,6 +49,15 @@ class SupportLogCopyTest {
         }
         onNodeWithContentDescription("Copy log").performClick()
         waitForIdle()
+
+        // The 32dp icon box wrapped the final characters of the confirmation.
+        val layouts = mutableListOf<TextLayoutResult>()
+        onNodeWithText("Copied!").performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val layout = layouts.single()
+        assertEquals(1, layout.lineCount)
+        assertEquals("Copied!".length, layout.getLineEnd(0))
+        assertTrue(layout.size.width >= layout.multiParagraph.intrinsics.maxIntrinsicWidth,
+            "copy confirmation was clipped horizontally")
 
         val copied = assertNotNull(clipboard.copied, "nothing was copied").text
         assertFalse("S3CR3T" in copied || "abc123" in copied, "link credentials reached the clipboard: $copied")

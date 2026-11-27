@@ -142,7 +142,7 @@ fun DashboardScreen(
                         hasExifTool,
                         hasFFmpeg,
                         mediaCapabilities,
-                            usesDeviceLibrary,
+                        usesDeviceLibrary,
                         showsAndroidPreview,
                     )
                 }
@@ -582,7 +582,7 @@ private fun DashboardStatus(
         }
 
         if (viewModel.logs.isNotEmpty()) {
-            IconButton(
+            TextButton(
                 onClick = {
                     @Suppress("DEPRECATION")
                     clipboardManager.setText(
@@ -594,11 +594,14 @@ private fun DashboardStatus(
                         logsCopied = false
                     }
                 },
-                modifier = Modifier.size(32.dp),
+                modifier = Modifier.heightIn(min = 32.dp).widthIn(min = 72.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp),
             ) {
                 if (logsCopied) {
                     Text(
                         stringResource(Res.string.status_copied),
+                        maxLines = 1,
+                        softWrap = false,
                         style = MaterialTheme.typography.labelSmall,
                         color = SnapVaultColors.success,
                         fontWeight = FontWeight.SemiBold,

@@ -1,6 +1,8 @@
 package com.najdev.snapvault.downloader
 
 import com.najdev.snapvault.parser.HtmlMemoryEntry
+import com.najdev.snapvault.parser.ZipImportParser
+import com.najdev.snapvault.parser.buildExperimentalZipMetadataPlan
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.util.zip.ZipEntry
@@ -95,6 +97,30 @@ class ZipExtractEngineTest {
         assertTrue(results.all { it.error == null && !it.skipped })
         assertEquals(mainBytes.toList(), File(outDir, "2023-10-12_ABC-main.jpg").readBytes().toList())
         assertEquals(overlayBytes.toList(), File(outDir, "2023-10-12_ABC-overlay.png").readBytes().toList())
+    }
+
+    // Snapchat names WebP overlays .png. The suffix made metadata tools reject those files,
+    // and an extension repair needs to survive extraction retries and archive verification.
+    @Test
+    fun zipWebpOverlayIsExtractedAndPlannedUnderItsRealExtension() {
+        val webp = "RIFF\u0004\u0000\u0000\u0000WEBP".encodeToByteArray()
+        val zip = createZip("export.zip", mapOf(
+            "memories/2023-10-12_ABC-main.jpg" to byteArrayOf(1, 2, 3),
+            "memories/2023-10-12_ABC-overlay.png" to webp,
+            "memories/2023-10-12_DEF-overlay.png" to "RIFF0000WAVE".encodeToByteArray(),
+        ))
+        val entries = ZipImportParser.parseMemoriesFromZip(zip.absolutePath)
+        val correctedName = "2023-10-12_ABC-overlay.webp"
+        val extracted = runExtract(zip, entries)
+
+        assertTrue(extracted.all { it.error == null && !it.skipped })
+        assertEquals(webp.toList(), File(outDir, correctedName).readBytes().toList())
+        assertFalse(File(outDir, "2023-10-12_ABC-overlay.png").exists())
+        assertTrue(File(outDir, "2023-10-12_DEF-overlay.png").isFile)
+        assertTrue(buildExperimentalZipMetadataPlan(entries, emptyList()).targets.any { it.fileName == correctedName })
+        assertEquals(emptyList(), ZipExtractEngine().verifyExtraction(zip.absolutePath, entries, outDir.absolutePath))
+        assertEquals(0L, ZipExtractEngine().extractionBudget(mapOf(zip.absolutePath to entries), outDir.absolutePath).requiredBytes)
+        assertTrue(runExtract(zip, entries).all { it.skipped })
     }
 
     @Test

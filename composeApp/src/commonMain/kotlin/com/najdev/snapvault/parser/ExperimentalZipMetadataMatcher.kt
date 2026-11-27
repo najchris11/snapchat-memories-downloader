@@ -16,6 +16,7 @@ data class ZipMetadataTarget(
 data class ZipMetadataPlan(
     val targets: List<ZipMetadataTarget>,
     val warnings: List<String> = emptyList(),
+    val matchSummary: String? = null,
 )
 
 enum class MediaKind { Image, Video }
@@ -89,10 +90,11 @@ fun buildExperimentalZipMetadataPlan(
         return ZipMetadataPlan(emptyList(), listOf("No ZIP media files were found."))
     }
 
+    val memoryEntries = entries.filterNot { it.isStandaloneOverlay }
     if (records.isEmpty()) {
         return ZipMetadataPlan(
             entries.flatMap { buildDateOnlyTargets(it) },
-            listOf("No usable memories_history.json records were found; using verified ZIP capture times where available, with no GPS.")
+            if (memoryEntries.isEmpty()) emptyList() else listOf("No usable memories_history.json records were found; using verified ZIP capture times where available, with no GPS.")
         )
     }
 
@@ -102,7 +104,7 @@ fun buildExperimentalZipMetadataPlan(
     val consolidated: Map<RecordKey, ZipMemoryRecord> = recordsByKey.mapValues { (_, group) ->
         consolidateByLocation(group)
     }
-    val filesByKey = entries.mapNotNull { entry ->
+    val filesByKey = memoryEntries.mapNotNull { entry ->
         entry.captureEpochSecond?.let { RecordKey(it, if (entry.isVideo) MediaKind.Video else MediaKind.Image) }
     }.groupingBy { it }.eachCount()
 
@@ -111,6 +113,11 @@ fun buildExperimentalZipMetadataPlan(
     var ambiguousLocationCount = 0
 
     for (entry in entries) {
+        if (entry.isStandaloneOverlay) {
+            targets += buildDateOnlyTargets(entry)
+            continue
+        }
+
         val kind = if (entry.isVideo) MediaKind.Video else MediaKind.Image
         val key = entry.captureEpochSecond?.let { RecordKey(it, kind) }
         // The filename supplies an independent calendar date. A corrupt or shifted ZIP
@@ -144,15 +151,21 @@ fun buildExperimentalZipMetadataPlan(
     }
 
     val warnings = mutableListOf<String>()
-    when {
-        matchedCount == 0 -> warnings += "No files could be matched to memories_history.json by exact capture timestamp; using verified ZIP capture times where available, with no GPS."
-        matchedCount < entries.size -> warnings += "$matchedCount of ${entries.size} file(s) matched memories_history.json by exact capture timestamp; the rest used verified ZIP capture times where available, with no GPS."
+    if (memoryEntries.isNotEmpty() && matchedCount == 0) {
+        warnings += "No files could be matched to memories_history.json by exact capture timestamp; using ZIP capture times or filename dates."
     }
+    val matchSummary = if (matchedCount > 0) {
+        val unmatchedCount = memoryEntries.size - matchedCount
+        buildString {
+            append("Matched $matchedCount of ${memoryEntries.size} memories to history by exact capture time.")
+            if (unmatchedCount > 0) append(" Used ZIP capture times or filename dates for the rest.")
+        }
+    } else null
     if (ambiguousLocationCount > 0) {
         warnings += "$ambiguousLocationCount file(s) had an ambiguous capture timestamp or conflicting location; GPS was omitted for those to avoid tagging the wrong file."
     }
 
-    return ZipMetadataPlan(targets, warnings)
+    return ZipMetadataPlan(targets, warnings, matchSummary)
 }
 
 // Multiple JSON records can share the same (media type, second) key — e.g. a burst of

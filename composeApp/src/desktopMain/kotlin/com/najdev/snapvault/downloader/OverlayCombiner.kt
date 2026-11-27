@@ -17,6 +17,9 @@ import java.awt.AlphaComposite
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 import java.io.File
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 import javax.imageio.ImageIO
 
 /**
@@ -152,11 +155,19 @@ class OverlayCombiner(
                 dateGroups.forEach { (date, datePairs) ->
                     val d = date ?: return@forEach
                     runInterruptible {
+                        val modificationTimes = datePairs.associate { it.outputFile to it.outputFile.lastModified() }
                         mediaProcessor.writeDateMetadataBatch(
                             datePairs.map { it.outputFile.absolutePath },
                             d,
                             onMetaError
                         )
+                        // The batch writes midnight. Keep the source's precision if the
+                        // main file already had a capture-time modification date.
+                        modificationTimes.forEach { (file, time) ->
+                            if (time > 0 && file.lastModified() != time && !file.setLastModified(time)) {
+                                onMetaError?.invoke("Could not preserve modification time: ${file.name}")
+                            }
+                        }
                     }
                 }
             }
@@ -255,6 +266,8 @@ class OverlayCombiner(
             }
 
             if (metadataMissing) onMetadataMissing()
+
+            restoreModificationTime(pair.mainFile, staged)?.let { onWarning(it) }
 
             if (!commit(staged, pair.outputFile)) {
                 return "error: could not move combined output into place — ${pair.outputFile.name}"
@@ -364,6 +377,19 @@ class OverlayCombiner(
     // forever on verbose output).
     private fun copyExif(sourcePath: String, destPath: String): MetadataCopy =
         copyMetadata(sourcePath, destPath)
+
+    private fun restoreModificationTime(source: File, output: File): String? {
+        val filenameDate = runCatching { LocalDate.parse(source.name.substringBefore('_')) }.getOrNull()
+            ?: return null
+        val sourceTime = Instant.ofEpochMilli(source.lastModified())
+        val captureTime = if (sourceTime.atOffset(ZoneOffset.UTC).toLocalDate() == filenameDate) {
+            sourceTime
+        } else {
+            filenameDate.atStartOfDay().toInstant(ZoneOffset.UTC)
+        }
+        return if (captureTime.toEpochMilli() >= 0 && output.setLastModified(captureTime.toEpochMilli())) null
+        else "could not set modification time for ${source.name}"
+    }
 
     // A combined output already has a real capture timestamp when copyExif (images) or the
     // TagsFromFile copy inside combineVideoWithOverlay (videos) propagated one from the

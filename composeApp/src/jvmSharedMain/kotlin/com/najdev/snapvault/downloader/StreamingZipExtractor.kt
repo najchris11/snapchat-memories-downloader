@@ -22,8 +22,12 @@ class StreamingZipExtractor(private val open: (String) -> InputStream) {
         data class Target(val name: String, val uuid: String)
         val pending = linkedMapOf<String, Target>()
         entries.forEach { entry ->
-            pending["memories/${entry.fileName}"] = Target(entry.fileName, entry.uuid)
-            entry.overlayFileName?.takeIf { entry.hasOverlay }?.let { pending["memories/$it"] = Target(it, entry.uuid) }
+            pending["memories/${entry.archiveFileName}"] = Target(entry.fileName, entry.uuid)
+            val archiveOverlay = entry.archiveOverlayFileName
+            val overlay = entry.overlayFileName
+            if (entry.hasOverlay && archiveOverlay != null && overlay != null) {
+                pending["memories/$archiveOverlay"] = Target(overlay, entry.uuid)
+            }
         }
         val folder = File(outputDir).apply { mkdirs() }
         val context = currentCoroutineContext()

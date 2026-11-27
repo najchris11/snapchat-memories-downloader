@@ -1,6 +1,7 @@
 package com.najdev.snapvault
 
 import okio.FileSystem
+import okio.buffer
 import okio.Path.Companion.toPath
 import okio.openZip
 import okio.use
@@ -50,3 +51,17 @@ actual fun listZipEntryTimestamps(zipFilePath: String): Map<String, Long> {
         emptyMap()
     }
 }
+
+internal actual fun listZipWebpOverlays(zipFilePath: String): Set<String> = runCatching {
+    FileSystem.SYSTEM.openZip(zipFilePath.toPath()).use { zip ->
+        zip.listRecursively("/memories".toPath())
+            .filter { isZipPngOverlay(it.toString().removePrefix("/")) }
+            .filter { path ->
+                zip.source(path).buffer().use { source ->
+                    source.request(12L) && isWebpHeader(source.readByteArray(12L))
+                }
+            }
+            .map { it.toString().removePrefix("/") }
+            .toSet()
+    }
+}.getOrDefault(emptySet())

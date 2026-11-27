@@ -68,3 +68,34 @@ internal fun extendedTimestampSeconds(extra: ByteArray?): Long? {
     }
     return null
 }
+
+internal actual fun listZipWebpOverlays(zipFilePath: String): Set<String> = runCatching {
+    buildSet {
+        val document = documentZipReader(zipFilePath)
+        if (document != null) {
+            document.forEachEntry { entry, input ->
+                if (isZipPngOverlay(entry.name) && isWebpHeader(input.zipEntryHeader())) add(entry.name)
+            }
+        } else {
+            java.util.zip.ZipFile(zipFilePath).use { zip ->
+                for (entry in zip.entries()) {
+                    if (isZipPngOverlay(entry.name) &&
+                        zip.getInputStream(entry).use { isWebpHeader(it.zipEntryHeader()) }
+                    ) add(entry.name)
+                }
+            }
+        }
+    }
+}.getOrDefault(emptySet())
+
+// InputStream.readNBytes is unavailable on older Android API levels.
+private fun java.io.InputStream.zipEntryHeader(): ByteArray {
+    val header = ByteArray(12)
+    var offset = 0
+    while (offset < header.size) {
+        val count = read(header, offset, header.size - offset)
+        if (count < 0) return header.copyOf(offset)
+        offset += count
+    }
+    return header
+}

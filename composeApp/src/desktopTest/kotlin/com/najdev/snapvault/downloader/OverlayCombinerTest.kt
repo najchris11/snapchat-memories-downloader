@@ -99,6 +99,35 @@ class OverlayCombinerTest {
         assertTrue(main.exists() && overlay.exists(), "Deleted video originals with metadata unavailable; status=${results.single().status}")
     }
 
+    // The fresh video encode and ExifTool tag copy left Finder showing the day of import.
+    @Test
+    fun combinedVideoKeepsPreciseModificationTimeFromMain() {
+        val timestamp = java.time.Instant.parse("2023-10-12T20:17:30Z").toEpochMilli()
+        File(dir, "2023-10-12_VVV-main.mp4").apply {
+            writeBytes(byteArrayOf(1, 2, 3))
+            assertTrue(setLastModified(timestamp))
+        }
+        writePng("2023-10-12_VVV-overlay.png")
+
+        val result = combineAll(FakeProcessor(onVideoCombine = { output ->
+            File(output).writeBytes(byteArrayOf(4, 5, 6))
+            true
+        })).single()
+
+        assertEquals(timestamp, File(result.outputPath).lastModified())
+    }
+
+    @Test
+    fun combinedImageWithAnUnrelatedSourceModificationDateUsesFilenameDate() {
+        writePng("2023-10-12_AAA-main.png")
+        writePng("2023-10-12_AAA-overlay.png")
+
+        val result = combineAll(FakeProcessor()).single()
+
+        assertEquals(java.time.Instant.parse("2023-10-12T00:00:00Z").toEpochMilli(),
+            File(result.outputPath).lastModified())
+    }
+
     // ── findPairs ────────────────────────────────────────────────────────────
 
     @Test

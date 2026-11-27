@@ -1299,8 +1299,8 @@ class DashboardViewModelTest {
             assertEquals("Run complete", viewModel.progressText)
             assertEquals(listOf("2025-06-15 14:32:10 UTC"), dates)
             assertTrue(
-                viewModel.logs.any { it.startsWith("[INFO] Precise time + GPS matching") &&
-                    it.contains("keep verified ZIP capture times") },
+                viewModel.logs.any { it.contains("No usable memories_history.json records") &&
+                    it.contains("using verified ZIP capture times") },
                 "the on-screen matching explanation must describe the actual no-history fallback",
             )
         } finally {

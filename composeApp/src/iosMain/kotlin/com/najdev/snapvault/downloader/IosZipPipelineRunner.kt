@@ -104,7 +104,7 @@ class IosZipPipelineRunner(
                                     var isSkipped = false
 
                                     try {
-                                        val mainZipEntryPath = findZipEntryPath(zipFs, entry.fileName)
+                                        val mainZipEntryPath = findZipEntryPath(zipFs, entry.archiveFileName)
                                         if (mainZipEntryPath == null) {
                                             errorMessage = "Entry not found in ZIP: ${entry.fileName}"
                                         } else {
@@ -148,7 +148,7 @@ class IosZipPipelineRunner(
                                         var overlayError: String? = null
                                         var overlaySkipped = false
                                         try {
-                                            val overlayZipEntryPath = findZipEntryPath(zipFs, overlayName)
+                                            val overlayZipEntryPath = findZipEntryPath(zipFs, entry.archiveOverlayFileName ?: overlayName)
                                             if (overlayZipEntryPath == null) {
                                                 overlayError = "Overlay entry not found in ZIP: $overlayName"
                                             } else {

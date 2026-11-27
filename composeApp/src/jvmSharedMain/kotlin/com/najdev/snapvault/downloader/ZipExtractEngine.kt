@@ -64,10 +64,10 @@ class ZipExtractEngine(
     private fun requiredBytesFor(zipPath: String, entries: List<HtmlMemoryEntry>, outDir: File): Long {
         var required = 0L
         ZipFile(zipPath).use { zf ->
-            for (name in entries.flatMap(::expectedNames)) {
+            for ((source, name) in entries.flatMap(::expectedFiles)) {
                 val dest = File(outDir, name)
                 if (dest.isFile && dest.length() > 0L) continue
-                val size = zf.getEntry("memories/$name")?.size ?: continue
+                val size = zf.getEntry("memories/$source")?.size ?: continue
                 if (size > 0) required += size
             }
         }
@@ -84,8 +84,12 @@ class ZipExtractEngine(
         return archiveVolume == volumeId(outputDir)
     }
 
-    private fun expectedNames(entry: HtmlMemoryEntry): List<String> =
-        listOfNotNull(entry.fileName, entry.overlayFileName.takeIf { entry.hasOverlay })
+    private fun expectedFiles(entry: HtmlMemoryEntry): List<Pair<String, String>> = buildList {
+        add(entry.archiveFileName to entry.fileName)
+        if (entry.hasOverlay && entry.archiveOverlayFileName != null && entry.overlayFileName != null) {
+            add(entry.archiveOverlayFileName to entry.overlayFileName)
+        }
+    }
 
     /**
      * What is wrong with the files [entries] should have produced, if anything (D20).
@@ -101,7 +105,7 @@ class ZipExtractEngine(
         if (!archive.isFile) return listOf("${archive.name} is no longer present")
         return runCatching {
             ZipFile(archive).use { zf ->
-                val expectedPaths = entries.flatMap(::expectedNames).map { "memories/$it" }.toSet()
+                val expectedPaths = entries.flatMap(::expectedFiles).map { (source, _) -> "memories/$source" }.toSet()
                 val members = zf.entries().asSequence().filterNot { it.isDirectory }.toList()
                 val extras = members.filterNot { it.name in expectedPaths }.mapNotNull { member ->
                     if (member.name == "json/memories_history.json") {
@@ -112,8 +116,8 @@ class ZipExtractEngine(
                 }
                 val duplicates = members.groupingBy { it.name }.eachCount().filterValues { it > 1 }
                     .keys.map { "$it occurs more than once — archive kept" }
-                extras + duplicates + entries.flatMap(::expectedNames).mapNotNull { name ->
-                    val expected = zf.getEntry("memories/$name")
+                extras + duplicates + entries.flatMap(::expectedFiles).mapNotNull { (source, name) ->
+                    val expected = zf.getEntry("memories/$source")
                     val dest = File(outDir, name)
                     when {
                         expected == null -> "$name is not in ${archive.name}"
@@ -159,9 +163,8 @@ class ZipExtractEngine(
         for ((zipPath, entries) in itemsByZip) {
             val list = tasksByZip.getOrPut(zipPath) { mutableListOf() }
             for (entry in entries) {
-                list += ExtractTask("memories/${entry.fileName}", entry.fileName, entry.uuid)
-                if (entry.hasOverlay && entry.overlayFileName != null) {
-                    list += ExtractTask("memories/${entry.overlayFileName}", entry.overlayFileName, entry.uuid)
+                expectedFiles(entry).forEach { (source, name) ->
+                    list += ExtractTask("memories/$source", name, entry.uuid)
                 }
             }
         }

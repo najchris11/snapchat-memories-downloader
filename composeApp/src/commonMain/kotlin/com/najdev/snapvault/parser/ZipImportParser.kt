@@ -2,6 +2,8 @@ package com.najdev.snapvault.parser
 
 import com.najdev.snapvault.listZipEntries
 import com.najdev.snapvault.listZipEntryTimestamps
+import com.najdev.snapvault.isZipPngOverlay
+import com.najdev.snapvault.listZipWebpOverlays
 
 data class HtmlMemoryEntry(
     val fileName: String,
@@ -13,7 +15,13 @@ data class HtmlMemoryEntry(
     // Capture instant (Unix epoch seconds) from the ZIP entry's extended-timestamp
     // extra field, when present. Null on platforms/exports where it can't be read.
     val captureEpochSecond: Long? = null,
-)
+    // Archive names can differ from the output when the extension is corrected.
+    val archiveFileName: String = fileName,
+    val archiveOverlayFileName: String? = overlayFileName,
+) {
+    internal val isStandaloneOverlay: Boolean
+        get() = fileName.substringBeforeLast('.').endsWith("-overlay")
+}
 
 object ZipImportParser {
 
@@ -58,8 +66,17 @@ object ZipImportParser {
     fun parseMemoriesFromZip(
         zipFilePath: String,
         onUnmatched: ((filePath: String) -> Unit)? = null
-    ): List<HtmlMemoryEntry> =
-        parseMemoryEntryNames(listZipEntries(zipFilePath), listZipEntryTimestamps(zipFilePath), onUnmatched)
+    ): List<HtmlMemoryEntry> {
+        val names = listZipEntries(zipFilePath)
+        val entries = parseMemoryEntryNames(names, listZipEntryTimestamps(zipFilePath), onUnmatched)
+        if (names.none(::isZipPngOverlay)) return entries
+        val webpOverlays = listZipWebpOverlays(zipFilePath)
+        fun correctedName(name: String): String =
+            if ("memories/$name" in webpOverlays) name.substringBeforeLast('.') + ".webp" else name
+        return entries.map {
+            it.copy(fileName = correctedName(it.fileName), overlayFileName = it.overlayFileName?.let(::correctedName))
+        }
+    }
 
     // Pure filename-list variant of parseMemoriesFromZip — separated from zip I/O for testability.
     fun parseMemoryEntryNames(

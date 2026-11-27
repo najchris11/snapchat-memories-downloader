@@ -8,6 +8,25 @@ import kotlin.test.assertTrue
 
 class ExperimentalZipMetadataMatcherTest {
 
+    // A split export can include a video overlay without the main video. Counting that
+    // artwork as a photo produced false misses and could suppress a real photo's GPS.
+    @Test
+    fun standaloneOverlaysDoNotCountAsMemoriesOrCompeteForGps() {
+        val entries = ZipImportParser.parseMemoryEntryNames(
+            listOf("memories/2024-01-01_A-main.jpg", "memories/2024-01-01_B-overlay.webp"),
+            mapOf("memories/2024-01-01_A-main.jpg" to 1704110400L, "memories/2024-01-01_B-overlay.webp" to 1704110400L),
+        )
+        val records = listOf(ZipMemoryRecord("2024-01-01 12:00:00 UTC", 1704110400L, MediaKind.Image, 48.2, 13.3))
+
+        val plan = buildExperimentalZipMetadataPlan(entries, records)
+
+        assertTrue(plan.warnings.isEmpty(), plan.warnings.toString())
+        assertEquals("Matched 1 of 1 memories to history by exact capture time.", plan.matchSummary)
+        assertEquals(48.2, plan.targets.first().latitude)
+        assertEquals("2024-01-01 12:00:00 UTC", plan.targets.last().dateStr)
+        assertNull(plan.targets.last().latitude)
+    }
+
     @Test
     fun testExactTimestampMatchAppliesGpsAndDate() {
         val entries = listOf(

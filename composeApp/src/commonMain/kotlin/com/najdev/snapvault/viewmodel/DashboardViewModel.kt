@@ -904,18 +904,25 @@ class DashboardViewModel(
             val zipName = sourceDisplayName(zipPath)
             var unmatchedCount = 0
             val unmatchedSamples = mutableListOf<String>()
-            val entries = ZipImportParser.parseMemoriesFromZip(zipPath) { filePath ->
-                unmatchedCount++
-                if (unmatchedSamples.size < 5) unmatchedSamples.add(filePath.substringAfterLast('/'))
+            val entries = withContext(ioDispatcher) {
+                ZipImportParser.parseMemoriesFromZip(zipPath) { filePath ->
+                    unmatchedCount++
+                    if (unmatchedSamples.size < 5) unmatchedSamples.add(filePath.substringAfterLast('/'))
+                }
             }
             itemsByZip[zipPath] = entries
-            totalMemoryCount += entries.size
+            val mainCount = entries.count { !it.isStandaloneOverlay }
+            totalMemoryCount += mainCount
             val parsedFileCount = entries.size + entries.count { it.overlayFileName != null }
             val dateRange = if (entries.isNotEmpty()) {
                 val sorted = entries.map { it.date }.sorted()
                 "${sorted.first()} – ${sorted.last()}"
             } else "no entries"
-            log("[INFO] $zipName: ${plural(Res.plurals.count_memories, entries.size)}, ${plural(Res.plurals.count_files, parsedFileCount)} parsed ($dateRange)")
+            if (entries.isEmpty()) {
+                log("[INFO] $zipName: no Memories media.")
+            } else {
+                log("[INFO] $zipName: ${plural(Res.plurals.count_memories, mainCount)}, ${plural(Res.plurals.count_files, parsedFileCount)} parsed ($dateRange)")
+            }
             if (unmatchedCount > 0) {
                 log("[WARN] $zipName: skipped ${plural(Res.plurals.count_files, unmatchedCount)} in memories/ — unexpected filename format. Examples: ${unmatchedSamples.joinToString(", ")}")
                 pipelineWarningCount += unmatchedCount
@@ -926,7 +933,7 @@ class DashboardViewModel(
         // Stop before touching the output folder. Carrying on ran metadata, combination and
         // dedupe over whatever the folder already held, saved an empty index, and finished at
         // "Pipeline Complete" — for an import that imported nothing (D10).
-        if (totalMemoryCount == 0) {
+        if (itemsByZip.values.all { it.isEmpty() }) {
             throw PipelineAbortException(
                 "Found no Snapchat memories in the ${plural(Res.plurals.count_zip_files, zipFiles.size)} you selected, so nothing was imported. " +
                     "Choose the ZIP files from Snapchat's \"Download My Data\" export — their memories are in a memories/ folder.",
@@ -1064,6 +1071,7 @@ class DashboardViewModel(
                     log("[INFO] Precise matching found memories_history.json in ${plural(Res.plurals.count_zip_files, memoryJsonSources.size)}; merged into ${plural(Res.plurals.count_records, records.size)}.")
                 }
                 val plan = buildExperimentalZipMetadataPlan(itemsByZip.values.flatten(), records)
+                plan.matchSummary?.let { log("[INFO] $it") }
                 plan.warnings.forEach { log("[WARN] $it") }
                 if (plan.targets.isEmpty()) {
                     log("[WARN] Precise matching found no files to tag; writing dates only.")

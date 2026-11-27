@@ -101,6 +101,11 @@ Avoid `"item${if (n == 1) "" else "s"}"` — use a plural resource.
 - The debug build caps imports at 2,500 items. Never diagnose "missing memories" without
   checking `IS_DEBUG` first.
 
+## Pull requests
+
+Follow the branch flow in [AGENTS.md](AGENTS.md#pull-requests). Feature and fix PRs target
+`develop`, and promotion PRs go from `develop` into `main`.
+
 ## Commits
 
 No `Claude-Session:` trailer, no `Co-Authored-By:` crediting an AI, no "Generated with"

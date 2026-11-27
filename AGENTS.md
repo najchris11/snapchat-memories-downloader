@@ -69,6 +69,11 @@ private members, parameters and properties; eleven unused imports and two never-
 composables reached `main` before it existed. Do not silence a new finding by adding it to
 `config/detekt/baseline.xml`.
 
+## Pull requests
+
+Base feature and fix branches on `develop` and explicitly target `develop` when opening their
+PRs. To promote integrated changes, open a PR from `develop` into `main`.
+
 ## Commits
 
 No `Claude-Session:` trailer. Explain *why* in the body — the mechanism behind a bug is the

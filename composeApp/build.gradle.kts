@@ -248,6 +248,8 @@ kotlin.sourceSets.getByName("commonMain").kotlin
 // so a clone picks it up on the first build rather than on remembering to read the README.
 //
 // Idempotent, and a no-op outside a git checkout (a source tarball has no .git).
+// IDEs can run Gradle where Git cannot write its config. Report that failure without
+// preventing the desktop app from building or running.
 val installGitHooks by tasks.registering {
     group = "build setup"
     description = "Point core.hooksPath at the tracked .githooks directory"
@@ -263,10 +265,22 @@ val installGitHooks by tasks.registering {
         }.getOrDefault("")
 
         if (current != ".githooks") {
-            providers.exec {
-                commandLine("git", "config", "core.hooksPath", ".githooks")
-            }.result.get()
-            logger.lifecycle("git hooks: core.hooksPath -> .githooks")
+            val failure = runCatching {
+                val update = providers.exec {
+                    commandLine("git", "config", "core.hooksPath", ".githooks")
+                    isIgnoreExitValue = true
+                }
+                val exitCode = update.result.get().exitValue
+                if (exitCode == 0) null else {
+                    update.standardError.asText.get().trim().ifEmpty { "Git exited with status $exitCode" }
+                }
+            }.getOrElse { it.localizedMessage ?: it.javaClass.simpleName }
+
+            if (failure == null) {
+                logger.lifecycle("git hooks: core.hooksPath -> .githooks")
+            } else {
+                logger.warn("Could not configure Git hooks. $failure")
+            }
         }
 
         // git does not honour a hook that is not executable, and the permission bit can be

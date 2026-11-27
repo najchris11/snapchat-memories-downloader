@@ -1,0 +1,8 @@
+Exception in thread "main" java.util.zip.ZipException: invalid entry size (expected 576460838270094160 but got 4294979641 bytes)
+	at java.base/java.util.zip.ZipInputStream.readEnd(ZipInputStream.java:616)
+	at java.base/java.util.zip.ZipInputStream.read(ZipInputStream.java:414)
+	at java.base/java.util.zip.ZipInputStream.closeEntry(ZipInputStream.java:171)
+	at com.najdev.snapvault.StreamingZipReader.entries$lambda$0(StreamingZipReader.kt:21)
+	at com.najdev.snapvault.StreamingZipReader.withZip(StreamingZipReader.kt:71)
+	at com.najdev.snapvault.StreamingZipReader.entries(StreamingZipReader.kt:16)
+	at Prod.main(Prod.java:16)

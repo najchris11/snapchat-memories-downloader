@@ -1,6 +1,5 @@
 package com.najdev.snapvault.ui.components
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -13,6 +12,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -33,10 +34,16 @@ fun AppTopBar(
     onMaximize: () -> Unit,
 ) {
     DraggableArea {
+        // A bottom divider only: a full box border framed the bar on mobile, where it runs
+        // edge to edge under the status bar (see ChromeEdgeTest).
+        val divider = MaterialTheme.colorScheme.outlineVariant
         Surface(
-            modifier = Modifier.fillMaxWidth().height(56.dp),
+            modifier = Modifier.fillMaxWidth().height(56.dp).drawWithContent {
+                drawContent()
+                val y = size.height - 0.5.dp.toPx()
+                drawLine(divider, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
+            },
             color = MaterialTheme.colorScheme.background,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
             Row(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),

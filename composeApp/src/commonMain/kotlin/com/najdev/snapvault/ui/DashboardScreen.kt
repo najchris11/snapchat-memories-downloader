@@ -1,5 +1,7 @@
 package com.najdev.snapvault.ui
 
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
@@ -37,6 +39,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.najdev.snapvault.ExportSource
 import com.najdev.snapvault.ImportMode
 import com.najdev.snapvault.CapabilityLevel
 import com.najdev.snapvault.CapabilityStatus
@@ -45,6 +48,7 @@ import com.najdev.snapvault.MediaCapability
 import com.najdev.snapvault.WindowSize
 import com.najdev.snapvault.binaryInstallHint
 import com.najdev.snapvault.capabilityBannerState
+import com.najdev.snapvault.usesAppOwnedLibrary
 import com.najdev.snapvault.isAndroidBuild
 import com.najdev.snapvault.platformMediaCapabilities
 import com.najdev.snapvault.ui.theme.LogColors
@@ -74,7 +78,8 @@ fun DashboardScreen(
     hasFFmpeg: Boolean = true,
     windowSize: WindowSize = WindowSize.Expanded,
     mediaCapabilities: MediaCapabilities = platformMediaCapabilities,
-    showAndroidPreview: Boolean = isAndroidBuild,
+    usesDeviceLibrary: Boolean = usesAppOwnedLibrary,
+    showsAndroidPreview: Boolean = isAndroidBuild,
 ) {
     // Owned by the view model, not remembered here: this composable leaves composition every
     // time the user visits another screen or crosses a layout boundary, and remembered state
@@ -110,7 +115,8 @@ fun DashboardScreen(
                     hasExifTool,
                     hasFFmpeg,
                     mediaCapabilities,
-                    showAndroidPreview,
+                    usesDeviceLibrary,
+                    showsAndroidPreview,
                 )
                 DashboardStatus(viewModel, compact = true)
             }
@@ -136,7 +142,8 @@ fun DashboardScreen(
                         hasExifTool,
                         hasFFmpeg,
                         mediaCapabilities,
-                        showAndroidPreview,
+                            usesDeviceLibrary,
+                        showsAndroidPreview,
                     )
                 }
                 Spacer(Modifier.height(16.dp))
@@ -153,6 +160,7 @@ fun DashboardScreen(
 
 // ── Controls ─────────────────────────────────────────────────────────────────
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DashboardControls(
     viewModel: DashboardViewModel,
@@ -161,9 +169,10 @@ private fun DashboardControls(
     hasExifTool: Boolean,
     hasFFmpeg: Boolean,
     mediaCapabilities: MediaCapabilities,
-    showAndroidPreview: Boolean,
+    usesDeviceLibrary: Boolean,
+    showsAndroidPreview: Boolean,
 ) {
-    if (showAndroidPreview) {
+    if (showsAndroidPreview) {
         InlineBanner(
             icon = Icons.Outlined.Info,
             accent = SnapVaultColors.warning,
@@ -213,89 +222,57 @@ private fun DashboardControls(
                 text = stringResource(Res.string.dash_source_title)
             )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                // ZIP first: it's the recommended path and the only mode that reads the
-                // raw export archives directly.
-                ModeToggleButton(
-                    label = stringResource(Res.string.opt_mode_zip),
-                    selected = viewModel.importMode == ImportMode.Zip,
-                    onClick = { viewModel.changeImportMode(ImportMode.Zip) },
-                    modifier = Modifier.weight(1f),
-                    enabled = !viewModel.isRunning
-                )
-                ModeToggleButton(
-                    label = stringResource(Res.string.opt_mode_legacy),
-                    selected = viewModel.importMode == ImportMode.Legacy,
-                    onClick = { viewModel.changeImportMode(ImportMode.Legacy) },
-                    modifier = Modifier.weight(1f),
-                    enabled = !viewModel.isRunning
+            // Wraps: as a fixed Row, the folded iPhone Duo squeezed "Choose export folder" into a
+            // three-line pill beside its neighbour.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = viewModel::pickExportFile, enabled = !viewModel.isRunning) {
+                    Text(stringResource(Res.string.source_choose_file))
+                }
+                OutlinedButton(onClick = viewModel::pickExportFolder, enabled = !viewModel.isRunning) {
+                    Text(stringResource(Res.string.source_choose_folder))
+                }
+            }
+            TextButton(onClick = viewModel::pickMultipleZips, enabled = !viewModel.isRunning) {
+                Text(stringResource(Res.string.source_choose_multiple))
+            }
+            val zips = viewModel.selectedZipFiles
+            if (zips.size > 1) {
+                // Every picked ZIP by name. It used to say "Detected ZIP archive" over the first
+                // one alone, which read as if the others would be ignored.
+                Text(pluralStringResource(Res.plurals.zip_files_selected, zips.size, zips.size), style = MaterialTheme.typography.bodySmall)
+                zips.forEach { Text(viewModel.displayNameOf(it), style = MaterialTheme.typography.labelSmall) }
+            } else viewModel.detectedSource?.let { source ->
+                Text(stringResource(when (source) {
+                    is ExportSource.ZipFolder -> Res.string.source_detected_zip_folder
+                    is ExportSource.ZipFile -> Res.string.source_detected_zip
+                    is ExportSource.History -> Res.string.source_detected_history
+                }), style = MaterialTheme.typography.bodySmall)
+                Text(
+                    if (source is ExportSource.ZipFile) viewModel.displayNameOf(source.path) else viewModel.sourceLabel ?: source.path,
+                    style = MaterialTheme.typography.labelSmall,
                 )
             }
-
-            if (viewModel.importMode == ImportMode.Zip) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(stringResource(Res.string.zip_folder_label), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        FilePickerBox(
-                            icon = Icons.Outlined.FolderZip,
-                            label = viewModel.zipFolder ?: stringResource(Res.string.zip_folder_placeholder),
-                            onClick = viewModel::pickZipFolder,
-                            isSelected = viewModel.zipFolder != null,
-                            enabled = !viewModel.isRunning
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(stringResource(Res.string.zip_files_label), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        FilePickerBox(
-                            icon = Icons.Outlined.FolderZip,
-                            label = when (viewModel.selectedZipFiles.size) {
-                                0 -> stringResource(Res.string.zip_files_placeholder)
-                                1 -> viewModel.selectedZipFiles.single().substringAfterLast('/').substringAfterLast('\\')
-                                else -> pluralStringResource(Res.plurals.count_zip_files, viewModel.selectedZipFiles.size, viewModel.selectedZipFiles.size)
-                            },
-                            onClick = viewModel::pickMultipleZips,
-                            isSelected = viewModel.selectedZipFiles.isNotEmpty(),
-                            enabled = !viewModel.isRunning
-                        )
-                    }
-                }
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        stringResource(Res.string.dash_history_label),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    FilePickerBox(
-                        icon = Icons.Outlined.FileOpen,
-                        label = viewModel.htmlFile ?: stringResource(Res.string.dash_history_placeholder),
-                        onClick = viewModel::pickHtmlFile,
-                        isSelected = viewModel.htmlFile != null,
-                        enabled = !viewModel.isRunning
-                    )
-                }
+            if (viewModel.sourceSelectionFailed) {
+                Text(stringResource(Res.string.source_unsupported), color = MaterialTheme.colorScheme.error)
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    stringResource(Res.string.dash_output_label),
+                    stringResource(if (usesDeviceLibrary) Res.string.android_library_label else Res.string.dash_output_label),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 FilePickerBox(
                     icon = Icons.Outlined.FolderOpen,
-                    label = viewModel.downloadFolder ?: stringResource(Res.string.dash_output_placeholder),
+                    label = if (usesDeviceLibrary) stringResource(if (viewModel.downloadFolder == null) Res.string.android_use_library else Res.string.android_library_selected)
+                        else viewModel.downloadFolder ?: stringResource(Res.string.dash_output_placeholder),
                     onClick = viewModel::pickOutputFolder,
                     isSelected = viewModel.downloadFolder != null,
                     enabled = !viewModel.isRunning
                 )
             }
+            if (usesDeviceLibrary) Text(stringResource(Res.string.android_library_helper), style = MaterialTheme.typography.bodySmall)
+            if (viewModel.importMode == ImportMode.Zip) DiskSpacePlanner(viewModel)
         }
     }
 
@@ -355,9 +332,23 @@ private fun DashboardControls(
                         Icons.Outlined.Layers,
                         stringResource(Res.string.opt_combine_overlays),
                         options.runCombine,
-                        helperText = stringResource(Res.string.opt_combine_cleanup_helper).takeIf { options.runCombine },
+                        helperText = stringResource(
+                            when {
+                                options.keepOriginals -> Res.string.opt_combine_keep_helper
+                                usesDeviceLibrary -> Res.string.opt_combine_cleanup_helper_device
+                                else -> Res.string.opt_combine_cleanup_helper
+                            },
+                        ).takeIf { options.runCombine },
                         enabled = editable,
                     ) { options.runCombine = it }
+                    AnimatedVisibility(visible = options.runCombine) {
+                        PipelineItem(
+                            Icons.Outlined.Collections,
+                            stringResource(Res.string.opt_keep_originals),
+                            options.keepOriginals,
+                            enabled = editable,
+                        ) { options.keepOriginals = it }
+                    }
                     PipelineItem(Icons.Outlined.AutoDelete, stringResource(Res.string.opt_clean_duplicates), options.runDedupe, enabled = editable) { options.runDedupe = it }
                     // Dedupe deletes files — give it a preview mode. The helper text is not
                     // decoration: this switch governs deduplication only, and its old
@@ -1115,36 +1106,4 @@ internal fun CompactStepper(currentStep: Int, hasWarnings: Boolean, importMode: 
 @Composable
 fun StepperDivider(filled: Boolean = false) {
     Box(Modifier.width(36.dp).height(1.5.dp).background(if (filled) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant))
-}
-
-@Composable
-private fun ModeToggleButton(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-) {
-    val contentAlpha = if (enabled) 1f else 0.5f
-    Surface(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier.height(32.dp),
-        shape = RoundedCornerShape(6.dp),
-        color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f * contentAlpha) else MaterialTheme.colorScheme.surfaceContainerLowest,
-        border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f * contentAlpha) else MaterialTheme.colorScheme.outlineVariant)
-    ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (selected) {
-                    MaterialTheme.colorScheme.primary.copy(alpha = contentAlpha)
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f * contentAlpha)
-                }
-            )
-        }
-    }
 }

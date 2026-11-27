@@ -259,8 +259,7 @@ class ControlsDuringARunTest {
                 )
             }
         }
-        onNodeWithText("Legacy (HTML/JSON)").performClick()
-        onNodeWithText("memories_history.json or .html").performScrollTo().performClick()
+        onNodeWithText("Choose export file").performScrollTo().performClick()
         onNodeWithText("Choose an output folder").performScrollTo().performClick()
         onNode(hasText("Download memories") and isToggleable()).performScrollTo().performClick()
         onNodeWithText("Start run").performClick()

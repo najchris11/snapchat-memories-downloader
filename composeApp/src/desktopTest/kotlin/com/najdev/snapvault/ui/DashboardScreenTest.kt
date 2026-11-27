@@ -16,6 +16,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.v2.runComposeUiTest
 import com.najdev.snapvault.ImportMode
 import com.najdev.snapvault.PlatformPickers
@@ -24,6 +25,7 @@ import com.najdev.snapvault.viewmodel.DEFAULT_DRY_RUN
 import com.najdev.snapvault.viewmodel.DEFAULT_PIPELINE_EXPANDED
 import com.najdev.snapvault.ui.theme.SnapVaultColors
 import com.najdev.snapvault.ui.theme.SnapVaultTheme
+import okio.Path.Companion.toPath
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -33,6 +35,48 @@ import kotlin.test.assertTrue
 // destructive default, and a failure state that used to be invisible.
 @OptIn(ExperimentalTestApi::class)
 class DashboardScreenTest {
+
+    @Test
+    fun keepingOriginalsIsOptInAndChangesTheCombineDisclosure() = runComposeUiTest {
+        val viewModel = idleDashboardViewModel()
+        setContent {
+            SnapVaultTheme(darkMode = true) { DashboardScreen(viewModel, {}) }
+        }
+        // Scrolled to first: a click is dispatched at the node's position, and below the fold
+        // of the test window it lands on nothing.
+        onNodeWithText("Keep original unmerged files").performScrollTo().performClick()
+        onNodeWithText(stringResource("opt_combine_keep_helper")).assertExists()
+        onNodeWithText(stringResource("opt_combine_cleanup_helper")).assertDoesNotExist()
+        viewModel.dispose()
+    }
+
+    @Test
+    fun sourcePickerDetectsHistoryAndExplainsTheDownloadMode() = runComposeUiTest {
+        val fs = okio.fakefilesystem.FakeFileSystem()
+        fs.write("/history.json".toPath()) { writeUtf8("{}") }
+        val viewModel = com.najdev.snapvault.viewmodel.DashboardViewModel(
+            zipPipelineRunner = com.najdev.snapvault.downloader.NoOpZipPipelineRunner,
+            mediaProcessor = com.najdev.snapvault.viewmodel.FakeMediaProcessor(),
+            fileSystem = fs,
+            pickers = com.najdev.snapvault.viewmodel.FakePlatformPickers("/history.json", "/out"),
+            outputDirectoryLocker = com.najdev.snapvault.UnenforcedOutputDirectoryLocker,
+            outputFolderMemory = com.najdev.snapvault.OutputFolderMemory.None,
+        )
+        setContent { SnapVaultTheme(darkMode = true) { DashboardScreen(viewModel, {}) } }
+        onNodeWithText(stringResource("source_choose_file")).performClick()
+        waitForIdle()
+        onNodeWithText(stringResource("source_detected_history")).assertExists()
+        onNodeWithText("/history.json").assertExists()
+        viewModel.dispose()
+    }
+
+    @Test
+    fun diskPlanningIsUnavailableUntilASourceAndDestinationAreSelected() = runComposeUiTest {
+        val viewModel = idleDashboardViewModel()
+        setContent { SnapVaultTheme(darkMode = true) { DashboardScreen(viewModel, {}) } }
+        onNodeWithText("Check disk space").assertIsNotEnabled()
+        viewModel.dispose()
+    }
 
     // Regression for N3. Medium keeps the 220dp sidebar, leaving too little room for the
     // Dashboard's two-column layout and four-circle stepper. The original responsive change
@@ -67,23 +111,24 @@ class DashboardScreenTest {
             override fun pickHtmlFile(onResult: (String?) -> Unit) = onResult(null)
             override fun pickOutputFolder(onResult: (String?) -> Unit) = onResult("/library")
             override fun pickZipFolder(onResult: (String?) -> Unit) = onResult("/exports")
+            override fun inspectExportSource(path: String) = com.najdev.snapvault.ExportSource.ZipFolder(path)
             override fun pickMultipleZips(onResult: (List<String>) -> Unit) = onResult(listOf("/exports/memories.zip"))
         })
         setContent {
             SnapVaultTheme(darkMode = true) { DashboardScreen(viewModel = viewModel, onNavigateToSettings = {}) }
         }
 
-        onNodeWithText(stringResource("zip_folder_placeholder")).assertIsDisplayed()
-        onNodeWithText(stringResource("zip_files_placeholder")).assertIsDisplayed()
-        onAllNodes(hasText(stringResource("zip_files_label")) and isToggleable()).assertCountEquals(0)
+        onNodeWithText(stringResource("source_choose_folder")).assertIsDisplayed()
+        onNodeWithText(stringResource("source_choose_multiple")).assertIsDisplayed()
+        onAllNodes(hasText(stringResource("source_choose_multiple")) and isToggleable()).assertCountEquals(0)
         onNode(hasText("Start", substring = true) and hasClickAction()).assertIsNotEnabled()
 
         viewModel.pickOutputFolder()
-        onNodeWithText(stringResource("zip_files_placeholder")).performClick()
+        onNodeWithText(stringResource("source_choose_multiple")).performClick()
         waitForIdle()
         onNode(hasText("Start", substring = true) and hasClickAction()).assertIsEnabled()
 
-        onNodeWithText(stringResource("zip_folder_placeholder")).performClick()
+        onNodeWithText(stringResource("source_choose_folder")).performClick()
         waitForIdle()
         onNode(hasText("Start", substring = true) and hasClickAction()).assertIsEnabled()
         viewModel.dispose()
@@ -104,14 +149,16 @@ class DashboardScreenTest {
             SnapVaultTheme(darkMode = true) { DashboardScreen(viewModel = viewModel, onNavigateToSettings = {}) }
         }
 
-        onNodeWithText(stringResource("zip_files_placeholder")).performClick()
+        onNodeWithText(stringResource("source_choose_multiple")).performClick()
         waitForIdle()
         onNodeWithText("memories-1.zip").assertIsDisplayed()
 
         chosen = listOf("/exports/memories-1.zip", "/downloads/memories-2.zip")
-        onNodeWithText("memories-1.zip").performClick()
+        onNodeWithText(stringResource("source_choose_multiple")).performClick()
         waitForIdle()
-        onNodeWithText("2 ZIP files").assertIsDisplayed()
+        onNodeWithText("2 ZIP files selected").assertIsDisplayed()
+        onNodeWithText("memories-1.zip").assertIsDisplayed()
+        onNodeWithText("memories-2.zip").assertIsDisplayed()
         viewModel.dispose()
     }
 

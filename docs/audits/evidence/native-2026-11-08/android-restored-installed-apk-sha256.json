@@ -1,0 +1,11 @@
+{
+  "verifiedDate": "2026-11-08",
+  "device": "dedicated Android 36 QA emulator",
+  "installedMatchesLocalBuild": {
+    "com.najdev.snapvault.roadmaptest": "1b1e6adaa8c87922337591ea962c85ec01d13afc87b35bbcd008653af2b909a7",
+    "com.najdev.snapvault.roadmaptest.test": "88baee267de2b3386643afbdf985f2211b9ccd59c4292cc7f80fd55ac19492c8"
+  },
+  "mainAlsoMatchesPreMutationGolden": true,
+  "nativeRunnerResult": "OK (10 tests)",
+  "nativeRunnerLog": "android-failure-restored-suite.log"
+}

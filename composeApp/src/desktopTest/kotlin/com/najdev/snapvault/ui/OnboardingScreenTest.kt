@@ -220,8 +220,8 @@ class OnboardingScreenTest {
             onNodeWithText(stringResource("onb_folders_source_folder_title")).assertIsDisplayed()
             onNodeWithText(stringResource("onb_folders_source_files_title")).assertIsDisplayed()
         }
-        assertEquals(stringResource("zip_folder_label"), stringResource("onb_folders_source_folder_title"))
-        assertEquals(stringResource("zip_files_label"), stringResource("onb_folders_source_files_title"))
+        assertEquals(stringResource("source_choose_folder"), stringResource("onb_folders_source_folder_title"))
+        assertEquals(stringResource("source_choose_multiple"), stringResource("onb_folders_source_files_title"))
     }
 
     // The space advice promised SnapVault "offers a way through if the disk is tight". That

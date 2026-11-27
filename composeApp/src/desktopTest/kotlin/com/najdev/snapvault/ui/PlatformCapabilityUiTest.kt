@@ -15,9 +15,9 @@ import kotlin.test.Test
 class PlatformCapabilityUiTest {
 
     // Regression: replacing the Android preview with the capability banner hid the fact
-    // that ZIP import and Library scanning are still stubs (#52).
+    // the preview-specific limits on combined videos.
     @Test
-    fun androidDashboardStillSaysImportingDoesNotWork() = runComposeUiTest {
+    fun androidDashboardStillExplainsVideoOriginals() = runComposeUiTest {
         val viewModel = idleDashboardViewModel()
         setContent {
             SnapVaultTheme(darkMode = true) {
@@ -31,12 +31,12 @@ class PlatformCapabilityUiTest {
                         imageOverlayCombine = CapabilityLevel.Full,
                         videoOverlayCombine = CapabilityLevel.Unavailable,
                     ),
-                    showAndroidPreview = true,
+                    showsAndroidPreview = true,
                 )
             }
         }
 
-        onNode(hasText("Importing does not work yet", substring = true)).assertIsDisplayed()
+        onNode(hasText("Combined videos keep their originals", substring = true)).assertIsDisplayed()
         viewModel.dispose()
     }
 
@@ -55,13 +55,13 @@ class PlatformCapabilityUiTest {
                         imageOverlayCombine = CapabilityLevel.Full,
                         videoOverlayCombine = CapabilityLevel.Full,
                     ),
-                    showAndroidPreview = false,
+                    showsAndroidPreview = false,
                 )
             }
         }
 
         onNodeWithText("Limited media support").assertDoesNotExist()
-        onNode(hasText("Importing does not work yet", substring = true)).assertDoesNotExist()
+        onNode(hasText("Combined videos keep their originals", substring = true)).assertDoesNotExist()
         viewModel.dispose()
     }
 

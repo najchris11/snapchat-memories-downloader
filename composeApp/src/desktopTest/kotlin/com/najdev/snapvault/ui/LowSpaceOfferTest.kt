@@ -28,7 +28,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNull
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -132,8 +132,7 @@ class LowSpaceOfferTest {
                 override fun load() = outDir.path
                 override fun save(path: String?) = Unit
             },
-            // The offer ships disabled by default (LOW_SPACE_DELETE_ENABLED); this test verifies
-            // the mechanism itself still works, for whenever it's re-enabled.
+            // Opt in explicitly so this test isolates the confirmation mechanism.
             lowSpaceDeleteEnabled = true,
         ).apply {
             changeZipSourceMode(ZipSourceMode.MultipleFiles)
@@ -167,12 +166,10 @@ class LowSpaceOfferTest {
         viewModel.dispose()
     }
 
-    // The offer has three known safety gaps (same-sized-different-content verification,
-    // unrecognized media, an unguarded history-backup failure) not yet fixed — disabled by
-    // default for release (LOW_SPACE_DELETE_ENABLED), even in a scenario that would otherwise
-    // qualify for it.
+    // D20 is available only as a confirmation after a space refusal. Merely starting
+    // a normal run must leave the ZIP untouched, even when the verified mode would fit.
     @Test
-    fun theOfferIsDisabledByDefault() = runComposeUiTest {
+    fun verifiedCleanupRequiresConfirmationByDefault() = runComposeUiTest {
         val zip = exportZip("part1.zip", "2024-01-01_aaa-main.jpg")
         val gb = 1024L * 1024 * 1024
         val real = DesktopZipPipelineRunner(DesktopMediaProcessor())
@@ -210,11 +207,10 @@ class LowSpaceOfferTest {
         waitUntil(timeoutMillis = 20_000) { !viewModel.isRunning }
         waitForIdle()
 
-        assertNull(viewModel.lowSpaceOffer, "the offer must not be made while the feature is disabled")
-        onAllNodes(hasText("Import and delete each ZIP")).fetchSemanticsNodes().let {
-            assertTrue(it.isEmpty(), "no dialog offering deletion may appear")
-        }
-        assertTrue(zip.exists(), "nothing may be deleted when the offer never happened")
+        assertTrue(com.najdev.snapvault.viewmodel.LOW_SPACE_DELETE_ENABLED)
+        assertNotNull(viewModel.lowSpaceOffer)
+        onNodeWithText("Import and delete each ZIP").assertExists()
+        assertTrue(zip.exists(), "offering cleanup must not authorize deletion")
         viewModel.dispose()
     }
 
@@ -243,8 +239,7 @@ class LowSpaceOfferTest {
                 override fun load() = outDir.path
                 override fun save(path: String?) = Unit
             },
-            // The offer ships disabled by default (LOW_SPACE_DELETE_ENABLED); this test verifies
-            // the mechanism itself still works, for whenever it's re-enabled.
+            // Opt in explicitly so this test isolates the confirmation mechanism.
             lowSpaceDeleteEnabled = true,
         ).apply {
             changeZipSourceMode(ZipSourceMode.MultipleFiles)

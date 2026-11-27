@@ -27,7 +27,10 @@ internal fun gpsCoordinateArguments(extension: String, latitude: Double, longitu
     )
 }
 
-class DesktopMediaProcessor : MediaProcessor {
+class DesktopMediaProcessor(
+    private val gpsExiftool: () -> String? = { BinaryExtractor.checkCommand("exiftool") },
+    private val writeGpsTags: (List<String>) -> Int = { runCommand(it).exitCode },
+) : MediaProcessor {
 
     // Probed once on first use; null means videos are software-encoded (libx264).
     private val hwEncoder: String? by lazy { detectHwEncoder() }
@@ -165,7 +168,7 @@ class DesktopMediaProcessor : MediaProcessor {
         val file = File(filePath)
         if (!file.exists()) return false
 
-        val path = BinaryExtractor.checkCommand("exiftool") ?: return false
+        val path = gpsExiftool() ?: return false
 
         val args = mutableListOf(
             path,
@@ -178,9 +181,8 @@ class DesktopMediaProcessor : MediaProcessor {
         if (exifDate != null) {
             val ext = file.extension.lowercase()
             if (ext in SupportedMediaExtensions.IMAGE) {
-                args.add("-DateTimeOriginal=$exifDate")
-                args.add("-CreateDate=$exifDate")
-                args.add("-ModifyDate=$exifDate")
+                val capture = gpsCaptureTime(dateStr, latitude, longitude)
+                args += imageDateArguments(capture?.exifLocalDateTime ?: exifDate, capture?.offset)
             } else if (ext in SupportedMediaExtensions.VIDEO) {
                 args.add("-CreateDate=$exifDate")
                 args.add("-MediaCreateDate=$exifDate")
@@ -192,7 +194,7 @@ class DesktopMediaProcessor : MediaProcessor {
         args.add(filePath)
 
         return try {
-            val exitCode = runCommand(args).exitCode
+            val exitCode = writeGpsTags(args)
 
             // Apply system modification date fallback
             if (exifDate != null) {
@@ -230,7 +232,7 @@ class DesktopMediaProcessor : MediaProcessor {
         val args = mutableListOf(path, "-overwrite_original", "-q")
 
         if (ext in SupportedMediaExtensions.IMAGE) {
-            args += listOf("-DateTimeOriginal=$exifDate", "-CreateDate=$exifDate", "-ModifyDate=$exifDate")
+            args += imageDateArguments(exifDate)
         } else if (ext in SupportedMediaExtensions.VIDEO) {
             args += listOf("-CreateDate=$exifDate", "-MediaCreateDate=$exifDate", "-TrackCreateDate=$exifDate", "-ModifyDate=$exifDate")
         } else {
@@ -326,7 +328,7 @@ class DesktopMediaProcessor : MediaProcessor {
         var successCount = 0
 
         if (images.isNotEmpty()) {
-            val tagArgs = listOf("-DateTimeOriginal=$exifDate", "-CreateDate=$exifDate", "-ModifyDate=$exifDate")
+            val tagArgs = imageDateArguments(exifDate)
             val succeeded = runGroup(images, tagArgs)
             successCount += succeeded.size
             epochMs?.let { ms -> succeeded.forEach { File(it).setLastModified(ms) } }

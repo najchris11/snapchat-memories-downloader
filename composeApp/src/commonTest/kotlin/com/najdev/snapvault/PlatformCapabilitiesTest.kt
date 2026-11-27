@@ -6,8 +6,7 @@ import kotlin.test.assertNull
 
 class PlatformCapabilitiesTest {
 
-    // Regression: Android reported complete photo metadata even though its ZIP pipeline
-    // never calls the photo date writer for plain photos (#51).
+    // ZIP imports can combine supported videos. Their originals retain the verified metadata.
     @Test
     fun androidCapabilitiesMatchPipeline() {
         assertEquals(
@@ -15,7 +14,7 @@ class PlatformCapabilitiesTest {
                 imageMetadata = CapabilityLevel.Partial,
                 videoMetadata = CapabilityLevel.Unavailable,
                 imageOverlayCombine = CapabilityLevel.Full,
-                videoOverlayCombine = CapabilityLevel.Unavailable,
+                videoOverlayCombine = CapabilityLevel.Partial,
             ),
             androidMediaCapabilities,
         )
@@ -30,7 +29,7 @@ class PlatformCapabilitiesTest {
                 imageMetadata = CapabilityLevel.Full,
                 videoMetadata = CapabilityLevel.Partial,
                 imageOverlayCombine = CapabilityLevel.Full,
-                videoOverlayCombine = CapabilityLevel.Unavailable,
+                videoOverlayCombine = CapabilityLevel.Partial,
             ),
             iosMediaCapabilities,
         )

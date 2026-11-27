@@ -50,6 +50,15 @@ internal fun historyFileChooser(title: String, filterDescription: String) = JFil
 }
 
 class DesktopPickers(private val titles: PickerTitles) : PlatformPickers {
+    override fun pickExportFile(onResult: (String?) -> Unit) {
+        val dialog = FileDialog(null as Frame?, titles.historyFile, FileDialog.LOAD)
+        dialog.setFilenameFilter { _, name ->
+            name.substringAfterLast('.').lowercase() in setOf("zip", "json", "html")
+        }
+        dialog.isVisible = true
+        onResult(dialog.file?.let { java.io.File(dialog.directory, it).absolutePath })
+    }
+
     override fun pickHtmlFile(onResult: (String?) -> Unit) {
         if (!usesNativeFileDialog()) {
             val chooser = historyFileChooser(titles.historyFile, titles.historyFilter)

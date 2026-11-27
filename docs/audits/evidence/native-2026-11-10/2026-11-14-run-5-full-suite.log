@@ -1,0 +1,85 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.4.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :composeApp:kmpPartiallyResolvedDependenciesChecker
+> Task :composeApp:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :composeApp:checkIosSimulatorArm64MainComposeLibrariesCompatibility
+> Task :composeApp:downloadKotlinNativeDistribution UP-TO-DATE
+> Task :composeApp:convertXmlValueResourcesForCommonMain UP-TO-DATE
+> Task :composeApp:copyNonXmlValueResourcesForCommonMain UP-TO-DATE
+> Task :composeApp:prepareComposeResourcesTaskForCommonMain UP-TO-DATE
+> Task :composeApp:generateResourceAccessorsForCommonMain UP-TO-DATE
+> Task :composeApp:convertXmlValueResourcesForIosMain NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForIosMain NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForIosMain NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForIosMain NO-SOURCE
+> Task :composeApp:convertXmlValueResourcesForIosSimulatorArm64Main NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForIosSimulatorArm64Main NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForIosSimulatorArm64Main NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForIosSimulatorArm64Main NO-SOURCE
+> Task :composeApp:generateActualResourceCollectorsForIosSimulatorArm64Main UP-TO-DATE
+> Task :composeApp:generateBuildConfig UP-TO-DATE
+> Task :composeApp:generateComposeResClass UP-TO-DATE
+> Task :composeApp:generateExpectResourceCollectorsForCommonMain UP-TO-DATE
+
+> Task :composeApp:compileKotlinIosSimulatorArm64
+w: file:///private/tmp/snapvault-hdr-20261114/composeApp/src/commonMain/kotlin/com/najdev/snapvault/Platform.kt:13:1 'expect'/'actual' classes (including interfaces, objects, annotations, enums, and 'actual' typealiases) are in Beta. Consider using the '-Xexpect-actual-classes' flag to suppress this warning. Also see: https://youtrack.jetbrains.com/issue/KT-61573
+w: file:///private/tmp/snapvault-hdr-20261114/composeApp/src/commonMain/kotlin/com/najdev/snapvault/ui/SupportSection.kt:80:21 'val LocalClipboardManager: ProvidableCompositionLocal<ClipboardManager>' is deprecated. Use LocalClipboard instead which supports suspend functions.
+w: file:///private/tmp/snapvault-hdr-20261114/composeApp/src/iosMain/kotlin/com/najdev/snapvault/Platform.kt:39:1 'expect'/'actual' classes (including interfaces, objects, annotations, enums, and 'actual' typealiases) are in Beta. Consider using the '-Xexpect-actual-classes' flag to suppress this warning. Also see: https://youtrack.jetbrains.com/issue/KT-61573
+w: file:///private/tmp/snapvault-hdr-20261114/composeApp/src/iosMain/kotlin/com/najdev/snapvault/metadata/IosVideoOverlayExporter.kt:44:49 This cast can never succeed.
+w: file:///private/tmp/snapvault-hdr-20261114/composeApp/src/iosMain/kotlin/com/najdev/snapvault/ui/VideoPlayer.kt:37:5 'fun <T : UIViewController> UIKitViewController(factory: () -> T, modifier: Modifier, update: (T) -> Unit = ..., background: Color = ..., onRelease: (T) -> Unit = ..., onResize: (T, CValue<CGRect>) -> Unit = ..., interactive: Boolean = ..., accessibilityEnabled: Boolean = ...): Unit' is deprecated. This function was deprecated in favor of newer API.
+
+> Task :composeApp:checkIosSimulatorArm64TestComposeLibrariesCompatibility
+> Task :composeApp:convertXmlValueResourcesForCommonTest NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForCommonTest NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForCommonTest NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForCommonTest NO-SOURCE
+> Task :composeApp:convertXmlValueResourcesForIosSimulatorArm64Test NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForIosSimulatorArm64Test NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForIosSimulatorArm64Test NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForIosSimulatorArm64Test NO-SOURCE
+> Task :composeApp:convertXmlValueResourcesForIosTest NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForIosTest NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForIosTest NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForIosTest NO-SOURCE
+> Task :composeApp:iosSimulatorArm64ResolveResourcesFromDependencies UP-TO-DATE
+> Task :composeApp:assembleIosSimulatorArm64MainResources UP-TO-DATE
+> Task :composeApp:iosSimulatorArm64ResolveSelfResourcesCopyHierarchicalMultiplatformResources UP-TO-DATE
+> Task :composeApp:iosSimulatorArm64AggregateResources UP-TO-DATE
+> Task :composeApp:iosSimulatorArm64ProcessResources UP-TO-DATE
+> Task :composeApp:iosSimulatorArm64MainKlibrary
+> Task :composeApp:compileTestKotlinIosSimulatorArm64
+> Task :composeApp:assembleIosSimulatorArm64TestResources UP-TO-DATE
+> Task :composeApp:copyTestComposeResourcesForIosSimulatorArm64 UP-TO-DATE
+
+> Task :composeApp:linkDebugTestIosSimulatorArm64
+warning: could not open '/Users/najchris11/.konan/kotlin-native-prebuilt-macos-aarch64-2.3.21/klib/cache/ios_simulator_arm64-gSTATIC-system/org.jetbrains.kotlin.native.platform.posix-cache/bin/liborg.jetbrains.kotlin.native.platform.posix-cache.a(liborg.jetbrains.kotlin.native.platform.posix-cache.a.o)'
+warning: could not open '/Users/najchris11/.konan/kotlin-native-prebuilt-macos-aarch64-2.3.21/klib/cache/ios_simulator_arm64-gSTATIC-system/org.jetbrains.kotlin.native.platform.CoreFoundationBase-cache/bin/liborg.jetbrains.kotlin.native.platform.CoreFoundationBase-cache.a(liborg.jetbrains.kotlin.native.platform.CoreFoundationBase-cache.a.o)'
+warning: could not open '/Users/najchris11/.konan/kotlin-native-prebuilt-macos-aarch64-2.3.21/klib/cache/ios_simulator_arm64-gSTATIC-system/org.jetbrains.kotlin.native.platform.Foundation-cache/bin/liborg.jetbrains.kotlin.native.platform.Foundation-cache.a(liborg.jetbrains.kotlin.native.platform.Foundation-cache.a.o)'
+warning: could not open '/Users/najchris11/.konan/kotlin-native-prebuilt-macos-aarch64-2.3.21/klib/cache/ios_simulator_arm64-gSTATIC-system/org.jetbrains.kotlin.native.platform.CFCGTypes-cache/bin/liborg.jetbrains.kotlin.native.platform.CFCGTypes-cache.a(liborg.jetbrains.kotlin.native.platform.CFCGTypes-cache.a.o)'
+warning: could not open '/Users/najchris11/.konan/kotlin-native-prebuilt-macos-aarch64-2.3.21/klib/cache/ios_simulator_arm64-gSTATIC-system/org.jetbrains.kotlin.native.platform.CoreGraphics-cache/bin/liborg.jetbrains.kotlin.native.platform.CoreGraphics-cache.a(liborg.jetbrains.kotlin.native.platform.CoreGraphics-cache.a.o)'
+warning: could not open '/Users/najchris11/.konan/kotlin-native-prebuilt-macos-aarch64-2.3.21/klib/cache/ios_simulator_arm64-gSTATIC-system/org.jetbrains.kotlin.native.platform.darwin-cache/bin/liborg.jetbrains.kotlin.native.platform.darwin-cache.a(liborg.jetbrains.kotlin.native.platform.darwin-cache.a.o)'
+warning: could not open '/Users/najchris11/.konan/kotlin-native-prebuilt-macos-aarch64-2.3.21/klib/cache/ios_simulator_arm64-gSTATIC-system/org.jetbrains.kotlin.native.platform.CoreFoundation-cache/bin/liborg.jetbrains.kotlin.native.platform.CoreFoundation-cache.a(liborg.jetbrains.kotlin.native.platform.CoreFoundation-cache.a.o)'
+warning: could not open '/Users/najchris11/.konan/kotlin-native-prebuilt-macos-aarch64-2.3.21/klib/cache/ios_simulator_arm64-gSTATIC-system/org.jetbrains.kotlin.native.platform.Metal-cache/bin/liborg.jetbrains.kotlin.native.platform.Metal-cache.a(liborg.jetbrains.kotlin.native.platform.Metal-cache.a.o)'
+warning: could not open '/Users/najchris11/.konan/kotlin-native-prebuilt-macos-aarch64-2.3.21/klib/cache/ios_simulator_arm64-gSTATIC-system/org.jetbrains.kotlin.native.platform.QuartzCore-cache/bin/liborg.jetbrains.kotlin.native.platform.QuartzCore-cache.a(liborg.jetbrains.kotlin.native.platform.QuartzCore-cache.a.o)'
+warning: could not open '/Users/najchris11/.konan/kotlin-native-prebuilt-macos-aarch64-2.3.21/klib/cache/ios_simulator_arm64-gSTATIC-system/org.jetbrains.kotlin.native.platform.UIKit-cache/bin/liborg.jetbrains.kotlin.native.platform.UIKit-cache.a(liborg.jetbrains.kotlin.native.platform.UIKit-cache.a.o)'
+warning: could not open '/Users/najchris11/.konan/kotlin-native-prebuilt-macos-aarch64-2.3.21/klib/cache/ios_simulator_arm64-gSTATIC-system/org.jetbrains.kotlin.native.platform.objc-cache/bin/liborg.jetbrains.kotlin.native.platform.objc-cache.a(liborg.jetbrains.kotlin.native.platform.objc-cache.a.o)'
+warning: could not open '/Users/najchris11/.konan/kotlin-native-prebuilt-macos-aarch64-2.3.21/klib/cache/ios_simulator_arm64-gSTATIC-system/org.jetbrains.kotlin.native.platform.Security-cache/bin/liborg.jetbrains.kotlin.native.platform.Security-cache.a(liborg.jetbrains.kotlin.native.platform.Security-cache.a.o)'
+warning: could not open '/Users/najchris11/.konan/kotlin-native-prebuilt-macos-aarch64-2.3.21/klib/cache/ios_simulator_arm64-gSTATIC-system/org.jetbrains.kotlin.native.platform.CommonCrypto-cache/bin/liborg.jetbrains.kotlin.native.platform.CommonCrypto-cache.a(liborg.jetbrains.kotlin.native.platform.CommonCrypto-cache.a.o)'
+warning: could not open '/Users/najchris11/.konan/kotlin-native-prebuilt-macos-aarch64-2.3.21/klib/cache/ios_simulator_arm64-gSTATIC-system/org.jetbrains.kotlin.native.platform.zlib-cache/bin/liborg.jetbrains.kotlin.native.platform.zlib-cache.a(liborg.jetbrains.kotlin.native.platform.zlib-cache.a.o)'
+warning: could not open '/Users/najchris11/.konan/kotlin-native-prebuilt-macos-aarch64-2.3.21/klib/cache/ios_simulator_arm64-gSTATIC-system/org.jetbrains.kotlin.native.platform.CoreMedia-cache/bin/liborg.jetbrains.kotlin.native.platform.CoreMedia-cache.a(liborg.jetbrains.kotlin.native.platform.CoreMedia-cache.a.o)'
+warning: could not open '/Users/najchris11/.konan/kotlin-native-prebuilt-macos-aarch64-2.3.21/klib/cache/ios_simulator_arm64-gSTATIC-system/org.jetbrains.kotlin.native.platform.AVFoundation-cache/bin/liborg.jetbrains.kotlin.native.platform.AVFoundation-cache.a(liborg.jetbrains.kotlin.native.platform.AVFoundation-cache.a.o)'
+warning: could not open '/Users/najchris11/.konan/kotlin-native-prebuilt-macos-aarch64-2.3.21/klib/cache/ios_simulator_arm64-gSTATIC-system/stdlib-cache/bin/libstdlib-cache.a(libstdlib-cache.a.o)'
+
+> Task :composeApp:iosSimulatorArm64Test
+
+[Incubating] Problems report is available at: file:///private/tmp/snapvault-hdr-20261114/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.4.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 23s
+23 actionable tasks: 7 executed, 16 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.4.1/userguide/configuration_cache_enabling.html

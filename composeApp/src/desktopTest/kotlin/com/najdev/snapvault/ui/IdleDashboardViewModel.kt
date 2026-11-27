@@ -31,7 +31,7 @@ private object NoPickers : PlatformPickers {
     override fun pickMultipleZips(onResult: (List<String>) -> Unit) = onResult(emptyList())
 }
 
-private object IdleTools : MediaProcessor {
+internal object IdleTools : MediaProcessor {
     override fun checkExifTool() = true
     override fun checkFFmpeg() = true
     override fun writeGpsMetadata(filePath: String, latitude: Double, longitude: Double, dateStr: String?) = true
@@ -39,7 +39,7 @@ private object IdleTools : MediaProcessor {
     override fun combineVideoWithOverlay(videoPath: String, overlayPath: String, outputPath: String) = true
 }
 
-private object IdleRunner : ZipPipelineRunner {
+internal object IdleRunner : ZipPipelineRunner {
     override fun listZipFiles(folderPath: String): List<String> = emptyList()
     override suspend fun extractAll(
         itemsByZip: Map<String, List<HtmlMemoryEntry>>,

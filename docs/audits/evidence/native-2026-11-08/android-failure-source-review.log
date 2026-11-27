@@ -1,0 +1,3 @@
+PASS  1 requirements judged, 0 not checkable from a diff (process steps)
+  changes: least implemented 0.97 (fails below 0.75)   restrictions: most broken - (fails at 0.75)
+  model opted out (--jev-only)

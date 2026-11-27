@@ -1,0 +1,1114 @@
+diff --git a/composeApp/src/androidMain/kotlin/com/najdev/snapvault/downloader/AndroidZipPipelineRunner.kt b/composeApp/src/androidMain/kotlin/com/najdev/snapvault/downloader/AndroidZipPipelineRunner.kt
+index 87744df..120383f 100644
+--- a/composeApp/src/androidMain/kotlin/com/najdev/snapvault/downloader/AndroidZipPipelineRunner.kt
++++ b/composeApp/src/androidMain/kotlin/com/najdev/snapvault/downloader/AndroidZipPipelineRunner.kt
+@@ -1,58 +1,55 @@
+ package com.najdev.snapvault.downloader
+ 
++import android.system.ErrnoException
++import com.najdev.snapvault.ContextHolder
++import com.najdev.snapvault.AndroidDocumentAccess
++import com.najdev.snapvault.JvmDocumentSources
++import java.io.IOException
++import android.system.Os
++import android.system.OsConstants
++import androidx.exifinterface.media.ExifInterface
+ import com.najdev.snapvault.metadata.MediaProcessor
++import com.najdev.snapvault.metadata.exportAndroidVideoOverlay
+ import com.najdev.snapvault.parser.HtmlMemoryEntry
+-import kotlinx.coroutines.Dispatchers
+-import kotlinx.coroutines.channels.Channel
+-import kotlinx.coroutines.coroutineScope
+-import kotlinx.coroutines.launch
+-import kotlinx.coroutines.sync.Semaphore
+-import kotlinx.coroutines.sync.withPermit
+-import kotlinx.coroutines.withContext
+ import java.io.File
+ 
+ /**
+  * The ZIP pipeline on Android.
+  *
+- * Android shipped with [NoOpZipPipelineRunner] wired in, so the app could pick an export and
+- * then silently do nothing with it. This is the working runner, ported from
+- * feature/mobile-responsive-ui and rewritten against the current [ZipPipelineRunner] — that
+- * branch predates extractDownloadedArchives taking its archive list, and predates
+- * extractionBudget, availableSpace and verifyExtraction existing at all.
+- *
+- * Extraction is shared with desktop through [ZipExtractEngine] (jvmSharedMain). Only the
+- * combine step is genuinely platform-specific: desktop has ImageIO and a bundled FFmpeg,
+- * Android has neither and composites with android.graphics instead.
++ * Extraction is shared with desktop through [ZipExtractEngine] (`jvmSharedMain`), archive
++ * discovery uses [sortExportZipPaths] (`commonMain`), and image overlay compositing delegates
++ * to [StagedImageOverlayCombiner] (`jvmSharedMain`) with kernel-atomic non-overwriting publish
++ * via [Os.link] (available since API 21, safe on `minSdk = 24`) and filename-date metadata
++ * fallback callbacks (#51, #64).
+  */
+ class AndroidZipPipelineRunner(
+     private val mediaProcessor: MediaProcessor,
+ ) : ZipPipelineRunner {
+ 
+     private val extractor = ZipExtractEngine()
+-
+-    override fun listZipFiles(folderPath: String): List<String> {
+-        val numberedSuffixRegex = Regex("""-(\d+)\.zip$""")
+-        // Snapchat splits large exports into memories-1.zip … memories-10.zip, which sort
+-        // wrong as text: -10 lands between -1 and -2.
+-        val zipSorter = Comparator<File> { a, b ->
+-            val numA = numberedSuffixRegex.find(a.name)?.groupValues?.get(1)?.toIntOrNull()
+-            val numB = numberedSuffixRegex.find(b.name)?.groupValues?.get(1)?.toIntOrNull()
+-            when {
+-                numA == null && numB == null -> a.name.compareTo(b.name)
+-                numA == null -> -1
+-                numB == null -> 1
+-                else -> numA.compareTo(numB)
+-            }
+-        }
+-        return File(folderPath)
+-            .listFiles { f -> f.extension.lowercase() == "zip" }
+-            ?.sortedWith(zipSorter)
+-            ?.map { it.absolutePath }
+-            ?: emptyList()
+-    }
++    private val streaming = StreamingZipExtractor { path -> JvmDocumentSources.open?.invoke(path) ?: throw IOException("Document access is unavailable") }
++    private val combiner = StagedImageOverlayCombiner(
++        mediaProcessor = mediaProcessor,
++        publishNoOverwrite = ::androidAtomicNoOverwritePublish,
++        hasCaptureTimestamp = ::hasExifCaptureTimestamp,
++        videoEncoder = { main, overlay, staged ->
++            val context = ContextHolder.context ?: return@StagedImageOverlayCombiner false
++            exportAndroidVideoOverlay(context, main, overlay, staged)
++        },
++    )
++
++    override fun listZipFiles(folderPath: String): List<String> =
++        if (folderPath.startsWith("content://")) {
++            ContextHolder.context?.let { AndroidDocumentAccess(it).archives(folderPath) }.orEmpty()
++        } else sortExportZipPaths(
++            File(folderPath)
++                .listFiles { f -> f.isFile }
++                ?.map { it.absolutePath }
++                .orEmpty(),
++        )
+ 
+     override fun extractionBudget(itemsByZip: Map<String, List<HtmlMemoryEntry>>, outputDir: String) =
+-        extractor.extractionBudget(itemsByZip, outputDir)
++        if (itemsByZip.keys.any { it.startsWith("content://") }) null else extractor.extractionBudget(itemsByZip, outputDir)
+ 
+     override fun availableSpace(outputDir: String) = extractor.availableSpace(outputDir)
+ 
+@@ -64,7 +61,11 @@ class AndroidZipPipelineRunner(
+         outputDir: String,
+         workerCount: Int,
+         onProgress: (ExtractResult) -> Unit,
+-    ) = extractor.extractAll(itemsByZip, outputDir, workerCount, onProgress)
++    ) {
++        val (documents, local) = itemsByZip.entries.partition { it.key.startsWith("content://") }
++        if (local.isNotEmpty()) extractor.extractAll(local.associate { it.key to it.value }, outputDir, workerCount, onProgress)
++        documents.forEach { streaming.extract(it.key, it.value, outputDir, onProgress) }
++    }
+ 
+     override suspend fun extractDownloadedArchives(
+         outputDir: String,
+@@ -80,79 +81,40 @@ class AndroidZipPipelineRunner(
+         onMetaStart: (total: Int) -> Unit,
+         onMetaError: ((String) -> Unit)?,
+         onProgress: (CombineResult) -> Unit,
+-    ) = coroutineScope {
+-        val dir = File(outputDir)
+-        if (!dir.isDirectory) {
+-            onStart(0)
+-            return@coroutineScope
+-        }
+-
+-        val byName = (dir.listFiles() ?: emptyArray()).associateBy { it.name }
+-        val pairs = findOverlayPairNames(byName.keys.toList())
+-        onStart(pairs.size)
+-        if (pairs.isEmpty()) return@coroutineScope
+-
+-        // Results reach the caller on one coroutine, so onProgress never sees two threads.
+-        val channel = Channel<CombineResult>(Channel.UNLIMITED)
+-        val consumer = launch { for (result in channel) onProgress(result) }
+-
+-        // Serialised deliberately, and workerCount is ignored here as a result. Compositing
+-        // decodes the main image, the overlay and the output at full resolution at once;
+-        // running pairs concurrently multiplies that by the worker count and puts the app
+-        // over its per-process heap limit on exactly the large exports this is for.
+-        val oneAtATime = Semaphore(1)
+-
+-        for (names in pairs) {
+-            val mainFile = byName[names.mainName] ?: continue
+-            val overlayFile = byName[names.overlayName] ?: continue
+-            oneAtATime.withPermit {
+-                channel.send(combineOne(dir, names, mainFile, overlayFile, deleteOriginals))
+-            }
+-        }
+-
+-        channel.close()
+-        consumer.join()
+-    }
+-
+-    private suspend fun combineOne(
+-        dir: File,
+-        names: OverlayPairNames,
+-        mainFile: File,
+-        overlayFile: File,
+-        deleteOriginals: Boolean,
+-    ): CombineResult {
+-        val outputFile = File(dir, names.outputName)
+-        val warnings = mutableListOf<String>()
+-
+-        // Existing output, video, then animation: see overlayCombineSkipStatus, which is
+-        // where the order and each reason are tested. The output check has to happen here —
+-        // the processor is handed the final path and would replace whatever is there.
+-        val status = overlayCombineSkipStatus(names, outputExists = outputFile.exists()) ?: run {
+-            val combined = withContext(Dispatchers.IO) {
+-                mediaProcessor.combineImageWithOverlay(
+-                    mainFile.absolutePath,
+-                    overlayFile.absolutePath,
+-                    outputFile.absolutePath,
+-                    onWarning = { warnings += it },
+-                )
+-            }
+-            if (combined) OverlayCombineStatus.Combined else OverlayCombineStatus.Failed
+-        }
++    ) = combiner.combineAll(
++        outputDir = outputDir,
++        deleteOriginals = deleteOriginals,
++        onStart = onStart,
++        onMetaStart = onMetaStart,
++        onMetaError = onMetaError,
++        onProgress = onProgress,
++    )
++}
+ 
+-        // Only a confirmed combine has produced a second copy of the pixels; see
+-        // mayDeleteOriginals, which is where that rule is tested.
+-        if (mayDeleteOriginals(status, deleteOriginals)) {
+-            if (!mainFile.delete()) warnings += "could not delete original: ${mainFile.name}"
+-            if (!overlayFile.delete()) warnings += "could not delete overlay: ${overlayFile.name}"
++private fun androidAtomicNoOverwritePublish(staged: File, destination: File): PublishOutcome {
++    return try {
++        // Atomic in the kernel since API 21: fails with EEXIST if `destination` already
++        // exists, closing the mid-combine TOCTOU overwrite window (#64).
++        Os.link(staged.absolutePath, destination.absolutePath)
++        staged.delete()
++        PublishOutcome.Published
++    } catch (e: ErrnoException) {
++        when (e.errno) {
++            OsConstants.EEXIST -> PublishOutcome.AlreadyExists
++            // Emulated external / FAT / FUSE mounts often disallow hardlinks; fall back to a
++            // synchronized check-then-rename so shared storage still works cleanly.
++            OsConstants.EPERM,
++            OsConstants.EACCES,
++            OsConstants.ENOSYS,
++            OsConstants.EOPNOTSUPP,
++            OsConstants.EXDEV,
++            -> StagedImageOverlayCombiner.jvmSynchronizedNoOverwritePublish(staged, destination)
++            else -> PublishOutcome.Failed
+         }
+-
+-        return overlayCombineResult(
+-            pair = names,
+-            mainPath = mainFile.absolutePath,
+-            overlayPath = overlayFile.absolutePath,
+-            outputPath = outputFile.absolutePath,
+-            status = status,
+-            warnings = warnings,
+-        )
+     }
+ }
++
++private fun hasExifCaptureTimestamp(filePath: String): Boolean =
++    runCatching {
++        !ExifInterface(filePath).getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL).isNullOrBlank()
++    }.getOrDefault(false)
+diff --git a/composeApp/src/iosMain/kotlin/com/najdev/snapvault/downloader/IosZipPipelineRunner.kt b/composeApp/src/iosMain/kotlin/com/najdev/snapvault/downloader/IosZipPipelineRunner.kt
+index a64b7e8..df31c59 100644
+--- a/composeApp/src/iosMain/kotlin/com/najdev/snapvault/downloader/IosZipPipelineRunner.kt
++++ b/composeApp/src/iosMain/kotlin/com/najdev/snapvault/downloader/IosZipPipelineRunner.kt
+@@ -1,6 +1,7 @@
+ package com.najdev.snapvault.downloader
+ 
+ import com.najdev.snapvault.metadata.MediaProcessor
++import com.najdev.snapvault.metadata.exportIosVideoOverlay
+ import com.najdev.snapvault.parser.HtmlMemoryEntry
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.IO
+@@ -29,13 +30,11 @@ class IosZipPipelineRunner(
+         val fileSystem = FileSystem.SYSTEM
+         if (!fileSystem.exists(folder)) return emptyList()
+ 
+-        return fileSystem.list(folder)
+-            .filter { path ->
+-                val name = path.name.lowercase()
+-                name.startsWith("mydata~") && name.endsWith(".zip")
+-            }
+-            .map { it.toString() }
+-            .sorted()
++        return sortExportZipPaths(
++            fileSystem.list(folder)
++                .filter { path -> fileSystem.metadataOrNull(path)?.isRegularFile == true }
++                .map { it.toString() },
++        )
+     }
+ 
+     override suspend fun extractAll(
+@@ -300,21 +299,23 @@ class IosZipPipelineRunner(
+         // Existing output, video, then animation: see overlayCombineSkipStatus, which is
+         // where the order and each reason are tested. The output check has to happen here —
+         // the processor is handed the final path and would replace whatever is there.
+-        val status = overlayCombineSkipStatus(names, outputExists = fileSystem.exists(outputPath)) ?: run {
++        val status = overlayCombineSkipStatus(names, outputExists = fileSystem.exists(outputPath), supportsVideo = supportsNativeVideoOverlayContainer(names.outputName)) ?: run {
+             val combined = withContext(Dispatchers.IO) {
+-                mediaProcessor.combineImageWithOverlay(
++                if (names.isVideo) exportIosVideoOverlay(mainPath.toString(), overlayPath.toString(), outputPath.toString())
++                else mediaProcessor.combineImageWithOverlay(
+                     mainPath.toString(),
+                     overlayPath.toString(),
+                     outputPath.toString(),
+                     onWarning = { warnings += it },
+                 )
+             }
++            if (combined && names.isVideo) warnings += VIDEO_METADATA_NOT_VERIFIED_WARNING
+             if (combined) OverlayCombineStatus.Combined else OverlayCombineStatus.Failed
+         }
+ 
+         // Only a confirmed combine has produced a second copy of the pixels; see
+         // mayDeleteOriginals, which is where that rule is tested.
+-        if (mayDeleteOriginals(status, deleteOriginals)) {
++        if (mayDeleteOriginals(status, deleteOriginals) && !names.isVideo) {
+             runCatching { fileSystem.delete(mainPath) }
+                 .onFailure { warnings += "could not delete original: ${names.mainName}" }
+             runCatching { fileSystem.delete(overlayPath) }
+diff --git a/composeApp/src/jvmSharedMain/kotlin/com/najdev/snapvault/downloader/StagedImageOverlayCombiner.kt b/composeApp/src/jvmSharedMain/kotlin/com/najdev/snapvault/downloader/StagedImageOverlayCombiner.kt
+new file mode 100644
+--- /dev/null
++++ b/composeApp/src/jvmSharedMain/kotlin/com/najdev/snapvault/downloader/StagedImageOverlayCombiner.kt
+@@ -0,0 +1,210 @@
++package com.najdev.snapvault.downloader
++
++import com.najdev.snapvault.metadata.MediaProcessor
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.ensureActive
++import kotlinx.coroutines.withContext
++import java.io.File
++import java.util.concurrent.atomic.AtomicLong
++import kotlin.coroutines.coroutineContext
++
++enum class PublishOutcome {
++    Published,
++    AlreadyExists,
++    Failed,
++}
++
++/**
++ * Staged image-overlay combiner shared on JVM targets and used by `AndroidZipPipelineRunner`.
++ *
++ * Addresses two Android data-safety and UX gaps while keeping the orchestration unit-testable
++ * under `:composeApp:desktopTest`:
++ * - **Issue #64**: Composites into `.snapvault-staging` first and publishes via [publishNoOverwrite]
++ *   (backed on Android by `android.system.Os.link` since API 21) so a destination created
++ *   mid-combine is never overwritten and its source `-main` / `-overlay` pair is preserved.
++ * - **Issue #51**: Tracks combined outputs whose EXIF tags still lack a capture timestamp,
++ *   calls `onMetaStart(count)`, and batches `YYYY-MM-DD` filename fallback writes through
++ *   [MediaProcessor.writeDateMetadataBatch] with `onMetaError` wired.
++ */
++class StagedImageOverlayCombiner(
++    private val mediaProcessor: MediaProcessor,
++    private val publishNoOverwrite: (staged: File, destination: File) -> PublishOutcome = ::jvmSynchronizedNoOverwritePublish,
++    private val hasCaptureTimestamp: (filePath: String) -> Boolean = { true },
++    /**
++     * Burns an overlay into an MP4 video, writing to the staged path it is given. Null keeps
++     * videos skipped. A combined video never deletes its originals and never claims to carry
++     * their metadata: nothing verifies that the encoder preserved it.
++     */
++    private val videoEncoder: (suspend (main: String, overlay: String, stagedOutput: String) -> Boolean)? = null,
++) {
++
++    suspend fun combineAll(
++        outputDir: String,
++        deleteOriginals: Boolean,
++        onStart: (total: Int) -> Unit = {},
++        onMetaStart: (total: Int) -> Unit = {},
++        onMetaError: ((String) -> Unit)? = null,
++        onProgress: (CombineResult) -> Unit,
++    ): Unit = withContext(Dispatchers.IO) {
++        val dir = File(outputDir)
++        if (!dir.isDirectory) {
++            onStart(0)
++            return@withContext
++        }
++
++        val byName = (dir.listFiles() ?: emptyArray()).filter { it.isFile }.associateBy { it.name }
++        val pairs = findOverlayPairNames(byName.keys.toList())
++        onStart(pairs.size)
++        if (pairs.isEmpty()) return@withContext
++
++        val stagingDir = openStaging(dir)
++        val needsDateFallback = ArrayList<Pair<File, String>>()
++        try {
++            // Sequential by design on Android: two simultaneous full-resolution ARGB_8888
++            // decodes + mutable canvas copy would push ~150 MB of bitmap heap against mobile
++            // limits.
++            for (pair in pairs) {
++                coroutineContext.ensureActive()
++                val mainFile = byName[pair.mainName] ?: continue
++                val overlayFile = byName[pair.overlayName] ?: continue
++                val outputFile = File(dir, pair.outputName)
++                val result = combineOne(
++                    pair = pair,
++                    mainFile = mainFile,
++                    overlayFile = overlayFile,
++                    outputFile = outputFile,
++                    stagingDir = stagingDir,
++                    deleteOriginals = deleteOriginals,
++                )
++                // ExifInterface cannot write MP4, so videos are left out of the date fallback.
++                if (result.status == "combined" && !pair.isVideo && !hasCaptureTimestamp(outputFile.absolutePath)) {
++                    DATE_PREFIX_REGEX.find(mainFile.name)?.groupValues?.get(1)?.let { date ->
++                        needsDateFallback += outputFile to date
++                    }
++                }
++                onProgress(result)
++            }
++        } finally {
++            closeStaging(stagingDir)
++        }
++
++        if (needsDateFallback.isNotEmpty()) {
++            onMetaStart(needsDateFallback.size)
++            for ((date, items) in needsDateFallback.groupBy({ it.second }, { it.first.absolutePath })) {
++                coroutineContext.ensureActive()
++                mediaProcessor.writeDateMetadataBatch(items, date, onMetaError)
++            }
++        }
++    }
++
++    private suspend fun combineOne(
++        pair: OverlayPairNames,
++        mainFile: File,
++        overlayFile: File,
++        outputFile: File,
++        stagingDir: File,
++        deleteOriginals: Boolean,
++    ): CombineResult {
++        val warnings = mutableListOf<String>()
++        val preflightSkip = overlayCombineSkipStatus(
++            pair,
++            outputExists = outputFile.exists(),
++            supportsVideo = videoEncoder != null && supportsMp4VideoOverlayContainer(pair.outputName),
++        )
++        if (preflightSkip != null) {
++            return overlayCombineResult(
++                pair = pair,
++                mainPath = mainFile.absolutePath,
++                overlayPath = overlayFile.absolutePath,
++                outputPath = outputFile.absolutePath,
++                status = preflightSkip,
++                warnings = warnings,
++            )
++        }
++
++        val stagedFile = File(stagingDir, "combine-${stagingCounter.incrementAndGet()}-${outputFile.name}")
++        val encoded = try {
++            if (pair.isVideo) {
++                val encode = checkNotNull(videoEncoder)
++                encode(mainFile.absolutePath, overlayFile.absolutePath, stagedFile.absolutePath)
++            } else {
++                mediaProcessor.combineImageWithOverlay(
++                    mainPath = mainFile.absolutePath,
++                    overlayPath = overlayFile.absolutePath,
++                    outputPath = stagedFile.absolutePath,
++                    onWarning = { warnings += it },
++                )
++            }
++        } catch (e: CancellationException) {
++            stagedFile.delete()
++            throw e
++        } catch (e: Exception) {
++            stagedFile.delete()
++            warnings += "Could not combine overlay for ${mainFile.name}: ${e.message}"
++            false
++        }
++
++        val status = if (!encoded || !stagedFile.isFile || stagedFile.length() == 0L) {
++            stagedFile.delete()
++            OverlayCombineStatus.Failed
++        } else {
++            when (publishNoOverwrite(stagedFile, outputFile)) {
++                PublishOutcome.Published -> OverlayCombineStatus.Combined
++                PublishOutcome.AlreadyExists -> {
++                    stagedFile.delete()
++                    OverlayCombineStatus.SkippedExistingOutput
++                }
++                PublishOutcome.Failed -> {
++                    stagedFile.delete()
++                    warnings += "Could not publish combined file ${outputFile.name}"
++                    OverlayCombineStatus.Failed
++                }
++            }
++        }
++
++        if (status == OverlayCombineStatus.Combined && pair.isVideo) warnings += VIDEO_METADATA_NOT_VERIFIED_WARNING
++
++        val provisional = overlayCombineResult(
++            pair = pair,
++            mainPath = mainFile.absolutePath,
++            overlayPath = overlayFile.absolutePath,
++            outputPath = outputFile.absolutePath,
++            status = status,
++            warnings = warnings,
++        )
++
++        // Never delete originals if metadata failed to carry onto the composite, or the user
++        // permanently loses the source's GPS/date tags.
++        if (mayDeleteOriginals(status, deleteOriginals) && provisional.metadataCarried && !pair.isVideo) {
++            val postWarnings = provisional.warnings.toMutableList()
++            if (!mainFile.delete()) postWarnings += "could not delete original: ${mainFile.name}"
++            if (!overlayFile.delete()) postWarnings += "could not delete overlay: ${overlayFile.name}"
++            return provisional.copy(warnings = postWarnings)
++        }
++
++        return provisional
++    }
++
++    companion object {
++        private val DATE_PREFIX_REGEX = Regex("""^(\d{4}-\d{2}-\d{2})""")
++        private val stagingCounter = AtomicLong(0L)
++        private val fallbackPublishLock = Any()
++
++        fun jvmSynchronizedNoOverwritePublish(staged: File, destination: File): PublishOutcome =
++            synchronized(fallbackPublishLock) {
++                if (destination.exists()) return PublishOutcome.AlreadyExists
++                if (staged.renameTo(destination)) return PublishOutcome.Published
++                return try {
++                    staged.copyTo(destination, overwrite = false)
++                    staged.delete()
++                    PublishOutcome.Published
++                } catch (_: FileAlreadyExistsException) {
++                    PublishOutcome.AlreadyExists
++                } catch (_: Exception) {
++                    if (destination.exists() && destination.length() == 0L) destination.delete()
++                    PublishOutcome.Failed
++                }
++            }
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/najdev/snapvault/downloader/VideoOverlayExport.kt b/composeApp/src/commonMain/kotlin/com/najdev/snapvault/downloader/VideoOverlayExport.kt
+new file mode 100644
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/najdev/snapvault/downloader/VideoOverlayExport.kt
+@@ -0,0 +1,50 @@
++package com.najdev.snapvault.downloader
++
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.currentCoroutineContext
++import kotlinx.coroutines.ensureActive
++
++/** Filesystem boundary; publish must atomically refuse an existing destination. */
++interface VideoOverlayFiles {
++    fun exists(path: String): Boolean
++    fun stage(output: String): String
++    fun publish(stage: String, output: String): Boolean
++    fun discard(stage: String)
++}
++
++suspend fun exportVideoOverlay(
++    main: String,
++    overlay: String,
++    output: String,
++    files: VideoOverlayFiles,
++    encode: suspend (String, String, String) -> Boolean,
++): Boolean {
++    if (!files.exists(main) || !files.exists(overlay) || files.exists(output)) return false
++    val stage = files.stage(output)
++    return try {
++        if (!encode(main, overlay, stage)) return false
++        currentCoroutineContext().ensureActive()
++        files.publish(stage, output)
++    } catch (e: CancellationException) {
++        throw e
++    } catch (_: Exception) {
++        false
++    } finally {
++        files.discard(stage)
++    }
++}
++
++/** Containers the AVFoundation exporter can publish without disguising MPEG-4 bytes. */
++fun supportsNativeVideoOverlayContainer(path: String): Boolean =
++    path.substringAfterLast('.', "").lowercase() in setOf("mp4", "mov", "m4v")
++
++/** Containers an MP4-only muxer (Media3 on Android) can publish without disguising its bytes. */
++fun supportsMp4VideoOverlayContainer(path: String): Boolean =
++    path.substringAfterLast('.', "").lowercase() in setOf("mp4", "m4v")
++
++/**
++ * Attached to every combined video. It contains [METADATA_NOT_CARRIED_MARKER], so the result
++ * reports metadataCarried = false and the Library does not claim the source's GPS or date.
++ */
++const val VIDEO_METADATA_NOT_VERIFIED_WARNING =
++    "Video export could not carry its metadata with verified fidelity; originals retained"
+diff --git a/composeApp/src/androidMain/kotlin/com/najdev/snapvault/metadata/AndroidVideoOverlayExporter.kt b/composeApp/src/androidMain/kotlin/com/najdev/snapvault/metadata/AndroidVideoOverlayExporter.kt
+new file mode 100644
+--- /dev/null
++++ b/composeApp/src/androidMain/kotlin/com/najdev/snapvault/metadata/AndroidVideoOverlayExporter.kt
+@@ -0,0 +1,111 @@
++package com.najdev.snapvault.metadata
++
++import android.content.Context
++import android.graphics.Bitmap
++import android.graphics.BitmapFactory
++import android.media.MediaMetadataRetriever
++import android.net.Uri
++import android.os.Handler
++import android.os.HandlerThread
++import android.util.Log
++import androidx.annotation.OptIn
++import androidx.media3.common.MediaItem
++import androidx.media3.common.util.UnstableApi
++import androidx.media3.effect.BitmapOverlay
++import androidx.media3.effect.OverlayEffect
++import androidx.media3.transformer.Composition
++import androidx.media3.transformer.EditedMediaItem
++import androidx.media3.transformer.Effects
++import androidx.media3.transformer.ExportException
++import androidx.media3.transformer.ExportResult
++import androidx.media3.transformer.Transformer
++import kotlinx.coroutines.CompletableDeferred
++import kotlinx.coroutines.NonCancellable
++import kotlinx.coroutines.suspendCancellableCoroutine
++import kotlinx.coroutines.withContext
++import java.io.File
++import kotlin.coroutines.resume
++
++/**
++ * Burns a Snapchat caption/sticker PNG into an MP4 with Media3 Transformer, writing to
++ * [output] (a staged path; the caller publishes it). Audio is kept.
++ *
++ * The overlay is drawn at its pixel size, so it is first scaled to the displayed frame — the
++ * encoded size with a 90°/270° rotation swapped — which is what Snapchat's overlay covers.
++ *
++ * Transformer must be driven from one Looper thread. Cancelling the coroutine posts
++ * [Transformer.cancel] there and then waits for it to have run, so the muxer has released
++ * [output] before the caller's staging cleanup deletes it (the same drain the iOS exporter does).
++ */
++@OptIn(UnstableApi::class)
++internal suspend fun exportAndroidVideoOverlay(context: Context, main: String, overlay: String, output: String): Boolean {
++    val (width, height) = displaySize(main) ?: return false
++    val decoded = BitmapFactory.decodeFile(overlay) ?: return false
++    val scaled = Bitmap.createScaledBitmap(decoded, width, height, true)
++    if (scaled !== decoded) decoded.recycle()
++
++    val edited = EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(File(main))))
++        .setEffects(Effects(emptyList(), listOf(OverlayEffect(listOf(BitmapOverlay.createStaticBitmapOverlay(scaled))))))
++        .build()
++
++    val thread = HandlerThread("snapvault-video-overlay").apply { start() }
++    val handler = Handler(thread.looper)
++    val stopped = CompletableDeferred<Unit>()
++    var transformer: Transformer? = null
++    return try {
++        suspendCancellableCoroutine { continuation ->
++            continuation.invokeOnCancellation {
++                handler.post {
++                    transformer?.cancel()
++                    stopped.complete(Unit)
++                }
++            }
++            handler.post {
++                if (!continuation.isActive) {
++                    stopped.complete(Unit)
++                    return@post
++                }
++                try {
++                    transformer = Transformer.Builder(context)
++                        .setLooper(thread.looper)
++                        .addListener(object : Transformer.Listener {
++                            override fun onCompleted(composition: Composition, exportResult: ExportResult) {
++                                stopped.complete(Unit)
++                                if (continuation.isActive) continuation.resume(true)
++                            }
++
++                            override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {
++                                stopped.complete(Unit)
++                                if (continuation.isActive) continuation.resume(false)
++                            }
++                        })
++                        .build()
++                        .also { it.start(edited, output) }
++                } catch (e: Exception) {
++                    Log.w("SnapVault", "Video overlay export could not start", e)
++                    stopped.complete(Unit)
++                    if (continuation.isActive) continuation.resume(false)
++                }
++            }
++        }
++    } finally {
++        withContext(NonCancellable) { stopped.await() }
++        thread.quitSafely()
++        scaled.recycle()
++    }
++}
++
++private fun displaySize(path: String): Pair<Int, Int>? {
++    val retriever = MediaMetadataRetriever()
++    return try {
++        retriever.setDataSource(path)
++        val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: return null
++        val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: return null
++        val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
++        if (width <= 0 || height <= 0) null else if (rotation % 180 != 0) height to width else width to height
++    } catch (_: Exception) {
++        null
++    } finally {
++        retriever.release()
++    }
++}
+diff --git a/composeApp/src/desktopTest/kotlin/com/najdev/snapvault/downloader/StagedVideoOverlayCombinerTest.kt b/composeApp/src/desktopTest/kotlin/com/najdev/snapvault/downloader/StagedVideoOverlayCombinerTest.kt
+new file mode 100644
+--- /dev/null
++++ b/composeApp/src/desktopTest/kotlin/com/najdev/snapvault/downloader/StagedVideoOverlayCombinerTest.kt
+@@ -0,0 +1,149 @@
++package com.najdev.snapvault.downloader
++
++import com.najdev.snapvault.metadata.MediaProcessor
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.CompletableDeferred
++import kotlinx.coroutines.async
++import kotlinx.coroutines.awaitCancellation
++import kotlinx.coroutines.runBlocking
++import java.io.File
++import kotlin.test.AfterTest
++import kotlin.test.BeforeTest
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFailsWith
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++
++/**
++ * Android used to skip every video/overlay pair. The shared combiner now accepts a video
++ * encoder (Media3 on Android) and must give videos the same staging and no-overwrite safety
++ * as images, while never deleting a video's originals: unlike the image path, nothing proves
++ * the encoded video carried its metadata, so the originals are the only verified copy.
++ */
++class StagedVideoOverlayCombinerTest {
++    private lateinit var dir: File
++    private val dateBatches = mutableListOf<List<String>>()
++
++    private val processor = object : MediaProcessor {
++        override fun checkExifTool() = false
++        override fun checkFFmpeg() = false
++        override fun writeGpsMetadata(filePath: String, latitude: Double, longitude: Double, dateStr: String?) = false
++        override fun writeDateMetadata(filePath: String, dateTimeUtc: String) = false
++        override fun combineVideoWithOverlay(videoPath: String, overlayPath: String, outputPath: String) = false
++        override fun writeDateMetadataBatch(filePaths: List<String>, dateOnly: String, onError: ((String) -> Unit)?): Int {
++            dateBatches += filePaths
++            return filePaths.size
++        }
++    }
++
++    @BeforeTest fun setUp() { dir = kotlin.io.path.createTempDirectory("video-combine").toFile() }
++    @AfterTest fun tearDown() { dir.deleteRecursively() }
++
++    private fun pair(stem: String, ext: String = "mp4"): Pair<File, File> =
++        File(dir, "$stem-main.$ext").apply { writeText("video") } to File(dir, "$stem-overlay.png").apply { writeText("png") }
++
++    private fun run(encoder: (suspend (String, String, String) -> Boolean)?, deleteOriginals: Boolean = true): List<CombineResult> {
++        val results = mutableListOf<CombineResult>()
++        runBlocking {
++            StagedImageOverlayCombiner(processor, hasCaptureTimestamp = { false }, videoEncoder = encoder)
++                .combineAll(dir.absolutePath, deleteOriginals, onProgress = { results += it })
++        }
++        return results
++    }
++
++    @Test
++    fun withoutAnEncoderVideosAreStillSkipped() {
++        val (main, overlay) = pair("2024-01-02_a")
++        val results = run(encoder = null)
++        assertTrue(results.single().status.startsWith("skipped: video"))
++        assertTrue(main.exists() && overlay.exists())
++        assertFalse(File(dir, "2024-01-02_a.mp4").exists())
++    }
++
++    @Test
++    fun anEncodedVideoIsStagedPublishedAndKeepsItsOriginals() {
++        val (main, overlay) = pair("2024-01-02_a")
++        var stagedPath = ""
++        val results = run(encoder = { m, o, out ->
++            assertEquals(main.absolutePath, m); assertEquals(overlay.absolutePath, o)
++            stagedPath = out
++            File(out).writeText("encoded"); true
++        })
++        assertTrue(STAGING_DIR_NAME in stagedPath, "the encoder must write into staging, got $stagedPath")
++        val result = results.single()
++        assertEquals("combined", result.status)
++        assertEquals("encoded", File(dir, "2024-01-02_a.mp4").readText())
++        assertFalse(result.metadataCarried, "an encoded video must not claim its source's metadata")
++        assertTrue(main.exists() && overlay.exists(), "video originals are never deleted, even with deleteOriginals")
++        assertTrue(dateBatches.isEmpty(), "ExifInterface cannot write MP4; videos are excluded from the date fallback")
++        assertFalse(File(dir, STAGING_DIR_NAME).exists())
++    }
++
++    @Test
++    fun aMovPairIsSkippedBecauseTheEncoderOnlyWritesMp4() {
++        pair("2024-01-02_m", ext = "mov")
++        var called = false
++        val results = run(encoder = { _, _, out -> called = true; File(out).writeText("x"); true })
++        assertFalse(called)
++        assertTrue(results.single().status.startsWith("skipped: video"))
++    }
++
++    @Test
++    fun aFailingOrThrowingEncoderLeavesNothingBehind() {
++        val (main, overlay) = pair("2024-01-02_f")
++        val (main2, overlay2) = pair("2024-01-02_g")
++        val results = run(encoder = { m, _, out ->
++            File(out).writeText("partial")
++            if (m.contains("_f")) false else error("codec died")
++        })
++        assertEquals(listOf("error: could not combine the overlay", "error: could not combine the overlay"), results.map { it.status })
++        assertFalse(File(dir, "2024-01-02_f.mp4").exists())
++        assertFalse(File(dir, "2024-01-02_g.mp4").exists())
++        assertTrue(main.exists() && overlay.exists() && main2.exists() && overlay2.exists())
++        assertFalse(File(dir, STAGING_DIR_NAME).exists(), "no staged leftovers")
++    }
++
++    @Test
++    fun anExistingOutputIsNeitherEncodedNorTouched() {
++        val (main, _) = pair("2024-01-02_e")
++        val existing = File(dir, "2024-01-02_e.mp4").apply { writeText("user edit") }
++        var called = false
++        val results = run(encoder = { _, _, _ -> called = true; true })
++        assertFalse(called)
++        assertEquals("skipped: output already exists", results.single().status)
++        assertEquals("user edit", existing.readText())
++        assertTrue(main.exists())
++    }
++
++    @Test
++    fun aDestinationCreatedDuringEncodingIsNotOverwritten() {
++        val (main, overlay) = pair("2024-01-02_r")
++        val results = run(encoder = { _, _, out ->
++            File(dir, "2024-01-02_r.mp4").writeText("someone else")
++            File(out).writeText("encoded"); true
++        })
++        assertEquals("skipped: output already exists", results.single().status)
++        assertEquals("someone else", File(dir, "2024-01-02_r.mp4").readText())
++        assertTrue(main.exists() && overlay.exists())
++    }
++
++    @Test
++    fun cancellingDuringEncodingPropagatesAndLeavesNoOutput() = runBlocking {
++        pair("2024-01-02_c")
++        val started = CompletableDeferred<Unit>()
++        val job = async {
++            StagedImageOverlayCombiner(processor, videoEncoder = { _, _, out ->
++                File(out).writeText("partial")
++                started.complete(Unit)
++                awaitCancellation()
++            }).combineAll(dir.absolutePath, true, onProgress = {})
++        }
++        // Bounded so a combiner that never calls the encoder fails instead of hanging the suite.
++        kotlinx.coroutines.withTimeout(10_000) { started.await() }
++        job.cancel()
++        assertFailsWith<CancellationException> { job.await() }
++        assertFalse(File(dir, "2024-01-02_c.mp4").exists())
++        assertFalse(File(dir, STAGING_DIR_NAME).exists(), "the partial staged video must be removed")
++    }
++}
+diff --git a/composeApp/src/androidInstrumentedTest/kotlin/com/najdev/snapvault/AndroidVideoOverlayExporterTest.kt b/composeApp/src/androidInstrumentedTest/kotlin/com/najdev/snapvault/AndroidVideoOverlayExporterTest.kt
+new file mode 100644
+--- /dev/null
++++ b/composeApp/src/androidInstrumentedTest/kotlin/com/najdev/snapvault/AndroidVideoOverlayExporterTest.kt
+@@ -0,0 +1,171 @@
++package com.najdev.snapvault
++
++import android.graphics.Bitmap
++import android.graphics.Color
++import android.media.MediaExtractor
++import android.media.MediaFormat
++import android.media.MediaMetadataRetriever
++import androidx.test.ext.junit.runners.AndroidJUnit4
++import androidx.test.platform.app.InstrumentationRegistry
++import com.najdev.snapvault.metadata.exportAndroidVideoOverlay
++import kotlinx.coroutines.CoroutineStart
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.async
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.runBlocking
++import org.junit.After
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Before
++import org.junit.Test
++import org.junit.runner.RunWith
++import java.io.File
++
++/**
++ * Real Media3 export on the device. Fixtures (shared with the iOS exporter tests): `source.mp4`
++ * is a 120×160 test pattern with AAC audio, `rotated.mp4` is the same stream with a 90° display
++ * matrix, and `overlay.png` is 120×160 with its top 24 rows red (alpha 230), transparent below.
++ */
++@RunWith(AndroidJUnit4::class)
++class AndroidVideoOverlayExporterTest {
++    private val context = InstrumentationRegistry.getInstrumentation().targetContext
++    private lateinit var dir: File
++
++    @Before fun setUp() { dir = File(context.cacheDir, "video-overlay-test-${System.nanoTime()}").apply { mkdirs() } }
++    @After fun tearDown() { dir.deleteRecursively() }
++
++    private fun fixture(name: String) = File(dir, name).also { file ->
++        requireNotNull(javaClass.classLoader!!.getResourceAsStream("video-overlay/$name")) { "missing fixture $name" }
++            .use { input -> file.outputStream().use { input.copyTo(it) } }
++    }
++
++    private fun tracks(file: File): List<String> {
++        val extractor = MediaExtractor()
++        return try {
++            extractor.setDataSource(file.path)
++            (0 until extractor.trackCount).map { extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME).orEmpty() }
++        } finally { extractor.release() }
++    }
++
++    private fun frame(file: File): Bitmap {
++        val retriever = MediaMetadataRetriever()
++        return try {
++            retriever.setDataSource(file.path)
++            requireNotNull(retriever.getFrameAtTime(1_000_000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)) { "no frame" }
++        } finally { retriever.release() }
++    }
++
++    private fun isOverlayRed(pixel: Int) = Color.red(pixel) > 180 && Color.green(pixel) < 90 && Color.blue(pixel) < 90
++
++    private fun exportAndCheck(sourceName: String, displayWidth: Int, displayHeight: Int) = runBlocking {
++        val source = fixture(sourceName)
++        val overlay = fixture("overlay.png")
++        val output = File(dir, "out.mp4")
++        assertTrue("export must complete", exportAndroidVideoOverlay(context, source.path, overlay.path, output.path))
++        assertTrue(source.exists() && overlay.exists())
++        val mimes = tracks(output)
++        assertEquals("one video and one audio track: $mimes", 1, mimes.count { it.startsWith("video/") })
++        assertEquals("one video and one audio track: $mimes", 1, mimes.count { it.startsWith("audio/") })
++
++        val exported = frame(output)
++        val original = frame(source)
++        assertEquals(displayWidth, exported.width)
++        assertEquals(displayHeight, exported.height)
++        // The overlay covers the top ~15% of the displayed frame. Across a row inside it, every
++        // column where the source is not already red must be red after export (the columns where
++        // the source is red are the negative control's exclusions, so the test pattern cannot
++        // produce a pass). A row in the transparent part must look like the source.
++        val y = displayHeight * 5 / 160
++        val columns = (2 until displayWidth - 2 step 4).filter { !isOverlayRed(original.getPixel(it, y)) }
++        assertTrue("negative control: enough non-red source columns at y=$y (${columns.size})", columns.size >= displayWidth / 8)
++        val missing = columns.filter { !isOverlayRed(exported.getPixel(it, y)) }
++        assertTrue("overlay must be burned in across y=$y; not red at x=$missing", missing.isEmpty())
++        val below = displayHeight * 3 / 4
++        val falseRed = (2 until displayWidth - 2 step 4).filter { isOverlayRed(exported.getPixel(it, below)) && !isOverlayRed(original.getPixel(it, below)) }
++        assertTrue("the overlay is transparent at y=$below, but red appeared at x=$falseRed", falseRed.isEmpty())
++    }
++
++    @Test(timeout = 120_000)
++    fun anOverlayIsBurnedIntoTheVideoAndAudioIsKept() = exportAndCheck("source.mp4", 120, 160)
++
++    @Test(timeout = 120_000)
++    fun aRotatedClipGetsTheOverlayAcrossItsDisplayedFrame() = exportAndCheck("rotated.mp4", 160, 120)
++
++    @Test(timeout = 120_000)
++    fun cancellingStopsTheEncoderBeforeReturning() = runBlocking {
++        val source = fixture("source.mp4")
++        val overlay = fixture("overlay.png")
++        val output = File(dir, "cancelled.mp4")
++        val job = async(Dispatchers.Default, start = CoroutineStart.UNDISPATCHED) {
++            exportAndroidVideoOverlay(context, source.path, overlay.path, output.path)
++        }
++        delay(50)
++        job.cancel()
++        runCatching { job.await() }
++        assertTrue(job.isCancelled)
++        // The exporter only returns once Transformer has stopped, so deleting the stage now is
++        // final: nothing may recreate it afterwards.
++        output.delete()
++        delay(1_000)
++        assertFalse("no late write after cancellation returned", output.exists())
++        assertTrue(source.exists() && overlay.exists())
++    }
++
++    // The ZIP pipeline must actually hand videos to the exporter: the combiner tests use a fake
++    // encoder and the cases above call the exporter directly, so only this case covers the
++    // runner's wiring, the staged `combine-N-<name>.mp4` path and the real publish step.
++    @Test(timeout = 120_000)
++    fun theZipPipelineBurnsAVideoOverlayAndKeepsTheOriginals() = runBlocking {
++        val previous = ContextHolder.context
++        ContextHolder.context = context // MainActivity sets this in the app
++        try {
++            val main = File(dir, "2024-01-02_vid-main.mp4").also { f -> fixture("source.mp4").renameTo(f) }
++            val overlay = File(dir, "2024-01-02_vid-overlay.png").also { f -> fixture("overlay.png").renameTo(f) }
++            val results = mutableListOf<com.najdev.snapvault.downloader.CombineResult>()
++            com.najdev.snapvault.downloader.AndroidZipPipelineRunner(com.najdev.snapvault.metadata.AndroidMediaProcessor())
++                .combineAll(dir.path, deleteOriginals = true, workerCount = 1, onStart = {}, onMetaStart = {}, onMetaError = null) { results += it }
++            val result = results.single()
++            assertEquals("combined", result.status)
++            assertFalse("a combined video must not claim its source's metadata", result.metadataCarried)
++            val output = File(dir, "2024-01-02_vid.mp4")
++            assertTrue(output.isFile)
++            assertEquals(1, tracks(output).count { it.startsWith("video/") })
++            assertTrue("video originals are kept even with deleteOriginals", main.exists() && overlay.exists())
++            assertFalse(File(dir, ".snapvault-staging").exists())
++        } finally {
++            ContextHolder.context = previous
++        }
++    }
++
++    // Characterisation (not a pass/fail claim about HDR support): records what Media3 does with
++    // HLG/PQ sources on this device. A completed export must not silently lose HDR; see below.
++    @Test(timeout = 180_000)
++    fun hdrSourcesAreNotSilentlyDowngraded() = runBlocking {
++        val observed = mutableListOf<String>()
++        for (name in listOf("hdr-hlg.mp4", "hdr-pq.mp4")) {
++            val source = fixture(name)
++            val overlay = fixture("overlay.png")
++            val output = File(dir, "out-$name")
++            val completed = exportAndroidVideoOverlay(context, source.path, overlay.path, output.path)
++            val format = if (completed && output.exists()) colour(output) else null
++            observed += "$name completed=$completed source=${colour(source)} output=$format"
++            if (completed) {
++                assertEquals("$name: a completed export kept the HDR transfer (${observed.last()})", colour(source).second, format?.second)
++            }
++        }
++        InstrumentationRegistry.getInstrumentation().sendStatus(0, android.os.Bundle().apply { putString("hdr", observed.joinToString(" | ")) })
++        println("HDR-ANDROID ${observed.joinToString(" | ")}")
++    }
++
++    private fun colour(file: File): Pair<String, Int?> {
++        val extractor = MediaExtractor()
++        return try {
++            extractor.setDataSource(file.path)
++            val format = (0 until extractor.trackCount).map { extractor.getTrackFormat(it) }
++                .first { it.getString(MediaFormat.KEY_MIME).orEmpty().startsWith("video/") }
++            val transfer = if (format.containsKey(MediaFormat.KEY_COLOR_TRANSFER)) format.getInteger(MediaFormat.KEY_COLOR_TRANSFER) else null
++            format.getString(MediaFormat.KEY_MIME).orEmpty() to transfer
++        } finally { extractor.release() }
++    }
++}
+diff --git a/composeApp/src/desktopTest/kotlin/com/najdev/snapvault/ui/DeviceLibraryUiTest.kt b/composeApp/src/desktopTest/kotlin/com/najdev/snapvault/ui/DeviceLibraryUiTest.kt
+new file mode 100644
+--- /dev/null
++++ b/composeApp/src/desktopTest/kotlin/com/najdev/snapvault/ui/DeviceLibraryUiTest.kt
+@@ -0,0 +1,46 @@
++package com.najdev.snapvault.ui
++
++import androidx.compose.ui.test.ExperimentalTestApi
++import androidx.compose.ui.test.onNodeWithText
++import androidx.compose.ui.test.v2.runComposeUiTest
++import com.najdev.snapvault.ui.theme.SnapVaultTheme
++import kotlin.test.Test
++
++@OptIn(ExperimentalTestApi::class)
++class DeviceLibraryUiTest {
++    @Test
++    fun dashboardExplainsTheOnDeviceLibraryInsteadOfPromisingAFolderPicker() = runComposeUiTest {
++        val vm = idleDashboardViewModel()
++        setContent { SnapVaultTheme(darkMode = true) { DashboardScreen(vm, {}, usesDeviceLibrary = true) } }
++        onNodeWithText("Use on-device library").assertExists()
++        // Android now burns video overlays in (Media3); the banner used to say they stay separate.
++        onNodeWithText("ZIP imports and photo and video overlays are available in this preview.", substring = true).assertExists()
++        onNodeWithText("Combined videos keep their originals", substring = true).assertExists()
++        onNodeWithText("remain separate", substring = true).assertDoesNotExist()
++        onNodeWithText("Choose an output folder").assertDoesNotExist()
++        onNodeWithText("Imports are processed in SnapVault’s own on-device library.", substring = true).assertExists()
++        vm.dispose()
++    }
++    @Test
++    fun anEmptyOnDeviceLibraryOffersRefreshRatherThanAnUnavailableFolderChange() = runComposeUiTest {
++        setContent {
++            SnapVaultTheme(darkMode = true) {
++                LibraryEmptyState(LibraryEmptyReason.NoMedia, "/private/library", {}, {}, {}, usesDeviceLibrary = true)
++            }
++        }
++        onNodeWithText("Change output folder").assertDoesNotExist()
++        onNodeWithText("/private/library").assertDoesNotExist()
++        onNodeWithText("Refresh").assertExists()
++    }
++    @Test
++    fun settingsDoNotOfferToChangeAnAppOwnedWorkingLibrary() = runComposeUiTest {
++        setContent { SnapVaultTheme(darkMode = true) {
++            SettingsScreen(true, true, {}, "/private/library", {}, {}, com.najdev.snapvault.ThemeMode.DARK, {},
++                com.najdev.snapvault.LayoutOverride.Auto, {}, usesDeviceLibrary = true)
++        } }
++        onNodeWithText("/private/library").assertDoesNotExist()
++        onNodeWithText("Change").assertDoesNotExist()
++        onNodeWithText("Use on-device library").assertDoesNotExist()
++        onNodeWithText("On-device SnapVault library").assertExists()
++    }
++}
+diff --git a/docs/audits/evidence/android-video-2026-11-14/README.md b/docs/audits/evidence/android-video-2026-11-14/README.md
+new file mode 100644
+--- /dev/null
++++ b/docs/audits/evidence/android-video-2026-11-14/README.md
+@@ -0,0 +1,23 @@
++# Android video overlay burn-in — 2026-11-14
++
++Android used to skip every video/overlay pair. It now burns the caption/sticker PNG into `.mp4`/`.m4v` videos with Media3 Transformer 1.11.1 (`media3-transformer`, `-effect`, `-common`).
++
++## Design
++- `StagedImageOverlayCombiner` (jvmSharedMain) takes an optional suspend `videoEncoder`. Without one, videos are still `SkippedVideo`. With one, the encoder writes into `.snapvault-staging`, and the result is published through the same non-overwriting publish as images.
++- A combined video **never deletes its originals**, even with "delete originals" on. It reports `metadataCarried = false` through the shared `VIDEO_METADATA_NOT_VERIFIED_WARNING` (moved to commonMain; iOS now uses the same constant, same text). Videos are left out of the EXIF date fallback because ExifInterface cannot write MP4.
++- `.mov` stays `SkippedVideo` on Android (Media3 muxes MP4 only; no disguised bytes).
++- `exportAndroidVideoOverlay` scales the overlay to the displayed frame (encoded size, swapped for 90°/270°), runs Transformer on its own `HandlerThread`, and on cancellation posts `cancel()` and waits for it before returning. Transformer chooses the output codec; HDR handling on Android is unverified.
++
++## Evidence
++- Desktop, failing first: `StagedVideoOverlayCombinerTest` (7 cases). With the parameter stubbed, 4 failed for behavioural reasons. The 3 that passed pin unchanged behaviour (no encoder → skip, `.mov` skip, existing output untouched). All 7 pass after the change, and the image-path `JvmSharedAndroidParityTest` passes unchanged.
++- Native, QA emulator `SnapVault_QA_t3_24e5c88e` (Android 16, isolated `roadmaptest` build): `AndroidVideoOverlayExporterTest`, 3 cases. Portrait export; 90° rotated export (display 160×120); one video and one audio track; red overlay pixels across a top row in every column where the source is not already red (negative control), and no new red in the transparent area; cancellation returns with no late write.
++  - `native-video-1.log`: first run, 1 failure. The test's single sample point was red in the source pattern itself (a test flaw); the check was changed to a whole row with per-column negative control.
++  - `native-video-2.log`: **OK (3)**.
++  - `native-video-mutant.log`: app built with the overlay effect removed. **Both pixel tests failed** (no red across the band); cancellation passed, as expected.
++  - `native-video-restored.log`: restored source (byte-identical, `cmp`), rebuilt: **OK (3)**.
++- UI copy: `banner_android_preview_body` no longer says video overlays stay separate. `DeviceLibraryUiTest` failed on the old copy first.
++
++## Limits
++- Emulator only, 2-second synthetic 120×160 H.264 clips. Not verified: physical devices and their hardware encoders, long or high-resolution clips, HEVC/HDR sources, memory use at 1080p+, and app-level end-to-end import through the UI.
++- The cancellation case cannot tell the drain from no drain (it only proves no late write after return). No mutant targets it.
++- Media3 adds to the APK size (not measured). The Dashboard "delete originals" helper text still says the original "photo or video" is deleted; on mobile, videos are always kept (the safe direction).
+diff --git a/composeApp/build.gradle.kts b/composeApp/build.gradle.kts
+--- a/composeApp/build.gradle.kts
++++ b/composeApp/build.gradle.kts
+@@ -1,0 +1,3 @@
++                implementation("androidx.media3:media3-transformer:1.11.1")
++                implementation("androidx.media3:media3-effect:1.11.1")
++                implementation("androidx.media3:media3-common:1.11.1")
+diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
+--- a/composeApp/src/commonMain/composeResources/values/strings.xml
++++ b/composeApp/src/commonMain/composeResources/values/strings.xml
+@@ -1,0 +1,1 @@
++    <string name="banner_android_preview_body">ZIP imports and photo and video overlays are available in this preview. Combined videos keep their originals, because their metadata cannot be verified. Save copies to your gallery to keep them outside SnapVault’s working library.</string>
+diff --git a/docs/GROWTH_CHECKLIST.md b/docs/GROWTH_CHECKLIST.md
+--- a/docs/GROWTH_CHECKLIST.md
++++ b/docs/GROWTH_CHECKLIST.md
+@@ -1,0 +1,1 @@
++  - [x] Android video overlay burn-in (Media3 Transformer): `.mp4`/`.m4v` pairs are staged and published without overwriting; video originals are always kept and metadata is not claimed; `.mov` still skipped. Desktop tests 7/7 (4 failed first); native emulator 3/3, overlay-removed mutant failed both pixel tests. Emulator and synthetic clips only. See [evidence](audits/evidence/android-video-2026-11-14/README.md).
+diff --git a/docs/PROGRESS_LOG.md b/docs/PROGRESS_LOG.md
+--- a/docs/PROGRESS_LOG.md
++++ b/docs/PROGRESS_LOG.md
+@@ -1,0 +1,6 @@
++## Android video overlay burn-in (2026-11-14)
++
++- Android no longer skips video overlays. `StagedImageOverlayCombiner` takes an optional video encoder; Android wires `exportAndroidVideoOverlay` (Media3 Transformer 1.11.1, static bitmap overlay scaled to the displayed frame, own HandlerThread, cancellation drain). Videos use the same staging and non-overwriting publish as images, never delete originals, report `metadataCarried = false` via a shared commonMain constant (iOS switched to it, same text), and skip the EXIF date fallback. `.mov` stays skipped.
++- Tests: `StagedVideoOverlayCombinerTest` 7/7 (4 failed against the stubbed parameter first); `AndroidVideoOverlayExporterTest` on the QA emulator 3/3 (portrait, 90° rotated, cancellation). An overlay-removed mutant failed both pixel tests, and the restored build passed 3/3. Banner copy updated, with `DeviceLibraryUiTest` failing first. Local: detekt clean, 558/558 desktop tests, desktop/Android/iOS compiles.
++- Process note: the plan review (`agent-verify --plan`) first timed out at 15 min. The retry had not returned when building started, so this slice was built **before** its plan review came back. Its result is recorded in the evidence directory when available.
++- Limits: emulator and 2-second synthetic clips only. Physical devices, long or high-resolution clips, HEVC/HDR sources, APK size impact and an app-level UI import of a video pair are unverified. Evidence: `docs/audits/evidence/android-video-2026-11-14/`. Nothing committed.
+diff --git a/docs/MOBILE_PLAN.md b/docs/MOBILE_PLAN.md
+--- a/docs/MOBILE_PLAN.md
++++ b/docs/MOBILE_PLAN.md
+@@ -1,0 +1,5 @@
++| Video overlay combine | ✅ FFmpeg | ✅ Media3 MP4 burn-in (emulator, synthetic clips); originals retained; `.mov` skipped | ✅ simulator import/rotation/audio/safety/synthetic HLG+PQ HDR; device QA pending |
++unless `videoPath` changed (remember the last path). Longer term: Media3
++  set file mtime (and record a TODO for real MP4 tags — `mp4parser` or Media3
++  with Media3 `Transformer` + overlay effect after launch.
++- **Video overlay combine:** Since 2026-11-14 Android burns overlays into `.mp4`/`.m4v` with Media3 Transformer, staged and published without overwriting; video originals are kept and metadata fidelity is not claimed (emulator-verified with synthetic clips; physical devices pending). The iOS ZIP pipeline now uses an asynchronous AVFoundation exporter, source-derived video composition and audio, staged publication and cancellation drain. Video originals are retained and metadata fidelity is not claimed. A native exporter regression and synthetic UI import/pixel/audio/Photos smoke passed on 2026-11-08 after replacing the crashing Core Animation renderer with Core Image. A verified 90° fixture now passes native dimension/audio tests and actual UI pixel checks. On 2026-11-14 a native HDR test found HLG/PQ sources silently exported as H.264 Rec.709 SDR; HDR sources now use `AVAssetExportPresetHEVCHighestQuality` and keep HEVC, BT.2020 and their transfer function (simulator, stream tags only). Physical-device coverage and caption appearance over HDR frames remain pending.
+

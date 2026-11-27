@@ -1,6 +1,7 @@
 package com.najdev.snapvault.downloader
 
 import com.najdev.snapvault.metadata.MediaProcessor
+import com.najdev.snapvault.metadata.exportIosVideoOverlay
 import com.najdev.snapvault.parser.HtmlMemoryEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -29,13 +30,11 @@ class IosZipPipelineRunner(
         val fileSystem = FileSystem.SYSTEM
         if (!fileSystem.exists(folder)) return emptyList()
 
-        return fileSystem.list(folder)
-            .filter { path ->
-                val name = path.name.lowercase()
-                name.startsWith("mydata~") && name.endsWith(".zip")
-            }
-            .map { it.toString() }
-            .sorted()
+        return sortExportZipPaths(
+            fileSystem.list(folder)
+                .filter { path -> fileSystem.metadataOrNull(path)?.isRegularFile == true }
+                .map { it.toString() },
+        )
     }
 
     override suspend fun extractAll(
@@ -300,21 +299,23 @@ class IosZipPipelineRunner(
         // Existing output, video, then animation: see overlayCombineSkipStatus, which is
         // where the order and each reason are tested. The output check has to happen here —
         // the processor is handed the final path and would replace whatever is there.
-        val status = overlayCombineSkipStatus(names, outputExists = fileSystem.exists(outputPath)) ?: run {
+        val status = overlayCombineSkipStatus(names, outputExists = fileSystem.exists(outputPath), supportsVideo = supportsNativeVideoOverlayContainer(names.outputName)) ?: run {
             val combined = withContext(Dispatchers.IO) {
-                mediaProcessor.combineImageWithOverlay(
+                if (names.isVideo) exportIosVideoOverlay(mainPath.toString(), overlayPath.toString(), outputPath.toString())
+                else mediaProcessor.combineImageWithOverlay(
                     mainPath.toString(),
                     overlayPath.toString(),
                     outputPath.toString(),
                     onWarning = { warnings += it },
                 )
             }
+            if (combined && names.isVideo) warnings += VIDEO_METADATA_NOT_VERIFIED_WARNING
             if (combined) OverlayCombineStatus.Combined else OverlayCombineStatus.Failed
         }
 
         // Only a confirmed combine has produced a second copy of the pixels; see
         // mayDeleteOriginals, which is where that rule is tested.
-        if (mayDeleteOriginals(status, deleteOriginals)) {
+        if (mayDeleteOriginals(status, deleteOriginals) && !names.isVideo) {
             runCatching { fileSystem.delete(mainPath) }
                 .onFailure { warnings += "could not delete original: ${names.mainName}" }
             runCatching { fileSystem.delete(overlayPath) }

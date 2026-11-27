@@ -97,7 +97,19 @@ kotlin {
                 implementation("androidx.appcompat:appcompat:1.7.1")
                 implementation("androidx.core:core-ktx:1.18.0")
                 implementation("androidx.exifinterface:exifinterface:1.4.2")
+                implementation("androidx.documentfile:documentfile:1.1.0")
+                // Video overlay burn-in (Transformer + OverlayEffect); MP4 output only.
+                implementation("androidx.media3:media3-transformer:1.11.1")
+                implementation("androidx.media3:media3-effect:1.11.1")
+                implementation("androidx.media3:media3-common:1.11.1")
                 implementation("io.ktor:ktor-client-okhttp:3.5.0")
+            }
+        }
+
+        val androidInstrumentedTest by getting {
+            dependencies {
+                implementation("androidx.test:runner:1.7.0")
+                implementation("androidx.test.ext:junit:1.3.0")
             }
         }
 
@@ -108,6 +120,7 @@ kotlin {
                 implementation(compose.desktop.currentOs)
                 implementation(compose.foundation)
                 implementation("io.ktor:ktor-client-cio:3.5.0")
+                implementation("net.iakovlev:timeshape:2026b.29")
             }
         }
         
@@ -118,6 +131,9 @@ kotlin {
             }
         }
         
+        val iosTest by creating { dependsOn(commonTest) }
+        val iosArm64Test by getting { dependsOn(iosTest) }
+        val iosSimulatorArm64Test by getting { dependsOn(iosTest) }
         val iosArm64Main by getting { dependsOn(iosMain) }
         val iosSimulatorArm64Main by getting { dependsOn(iosMain) }
     }
@@ -131,7 +147,8 @@ android {
         applicationId = "com.najdev.snapvault"
         minSdk = 24
         targetSdk = 37
-        versionCode = 15
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        versionCode = 16
         versionName = appVersion
     }
     sourceSets["main"].manifest.srcFile("src/androidMain/AndroidManifest.xml")
@@ -170,6 +187,9 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "SnapVault"
             packageVersion = packageSemVer
+            description = "Offline Snapchat Memories Downloader, Metadata Restorer, and Library Viewer"
+            vendor = "NajDev"
+            licenseFile.set(rootProject.file("LICENSE"))
             // jlink's module trimming is static-bytecode-only (jdeps), so it can't see the
             // modules Skiko/Netty/etc. reach via reflection or JNI at runtime. Without these,
             // the packaged binary aborts on launch with "pure virtual method called" — a
@@ -178,13 +198,26 @@ compose.desktop {
             // Confirmed via `./gradlew :composeApp:suggestRuntimeModules`.
             modules("java.instrument", "java.management", "java.prefs", "jdk.unsupported")
             macOS {
+                bundleID = "com.najdev.snapvault"
                 iconFile.set(project.file("src/desktopMain/resources/AppIcon.icns"))
             }
             windows {
                 iconFile.set(project.file("src/desktopMain/resources/AppIcon.ico"))
+                // Fixed UUID for com.najdev.snapvault — must never change across versions so
+                // Windows Installer upgrades existing installations in place instead of
+                // leaving side-by-side copies in Add/Remove Programs.
+                upgradeUuid = "9f639140-8696-5e27-b687-736738e04e32"
+                perUserInstall = true
+                dirChooser = true
+                menuGroup = "SnapVault"
+                shortcut = true
             }
             linux {
                 iconFile.set(project.file("src/desktopMain/resources/AppIcon.png"))
+                debMaintainer = "support@naj-dev.com"
+                menuGroup = "Utility"
+                appCategory = "Graphics"
+                shortcut = true
             }
         }
     }
@@ -208,10 +241,55 @@ tasks.named<Test>("desktopTest") {
     inputs.dir(rootProject.file(".githooks")).withPropertyName("gitHooks")
 }
 
+// Each OS/arch installer only needs its own `bin/<platform>/` archives (~0–48 MB), not all
+// ~115 MB of foreign-OS executables committed under `src/desktopMain/resources/bin/`.
+// However, `:composeApp:desktopTest` intentionally verifies every committed archive on any
+// runner (`ShippedToolBundlesTest`, `ShippedToolManifestTest`), so filtering activates only
+// when `-PbundleTargetPlatform=<platform>` is supplied (as in release.yml) or when a native
+// distribution task runs without test tasks in the same Gradle invocation.
+val allBundledBinPlatforms = listOf("darwin-arm64", "darwin-x64", "windows-x64", "linux-x64")
+
+fun detectHostBinPlatform(): String {
+    val os = System.getProperty("os.name").lowercase()
+    val arch = System.getProperty("os.arch").lowercase()
+    return when {
+        os.contains("mac") || os.contains("darwin") ->
+            if (arch.contains("aarch64") || arch.contains("arm64")) "darwin-arm64" else "darwin-x64"
+        os.contains("win") -> "windows-x64"
+        else -> "linux-x64"
+    }
+}
+
+val requestedTasks = gradle.startParameter.taskNames
+val isPackagingInvocation = requestedTasks.any { task ->
+    val leaf = task.substringAfterLast(':')
+    leaf.startsWith("package") || leaf.contains("Distributable")
+}
+val isTestInvocation = requestedTasks.any { task ->
+    val leaf = task.substringAfterLast(':')
+    leaf == "check" || leaf.contains("Test", ignoreCase = true)
+}
+
+val bundleTargetPlatform: String? = (project.findProperty("bundleTargetPlatform") as? String)
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?.also { explicit ->
+        require(explicit in allBundledBinPlatforms) {
+            "Unknown -PbundleTargetPlatform='$explicit' (expected one of $allBundledBinPlatforms)"
+        }
+    }
+    ?: if (isPackagingInvocation && !isTestInvocation) detectHostBinPlatform() else null
+
 // Ship the third-party license notices inside the app (classpath root), so every
 // installer carries the ExifTool/FFmpeg license information it is required to include.
 tasks.named<ProcessResources>("desktopProcessResources") {
+    inputs.property("bundleTargetPlatform", bundleTargetPlatform ?: "all")
     from(rootProject.file("THIRD_PARTY_LICENSES.md"))
+    if (bundleTargetPlatform != null) {
+        allBundledBinPlatforms
+            .filter { it != bundleTargetPlatform }
+            .forEach { otherPlatform -> exclude("bin/$otherPlatform/**") }
+    }
 }
 
 val generateBuildConfig by tasks.registering {
@@ -346,4 +424,11 @@ tasks.register<Exec>("runIosSimulator") {
         xcrun simctl launch "${'$'}BOOTED" "${'$'}BUNDLE_ID"
         echo "==> Done. Check the Simulator window."
     """.trimIndent())
+}
+
+// Native simulator tests read deterministic media fixtures from the host checkout.
+tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeSimulatorTest>().configureEach {
+    inputs.dir(project.file("src/iosTest/resources")).withPropertyName("nativeMediaFixtures")
+    environment("SIMCTL_CHILD_SNAPVAULT_TEST_RESOURCES", project.file("src/iosTest/resources").absolutePath)
+    environment("SIMCTL_CHILD_SNAPVAULT_TEST_OUTPUTS", layout.buildDirectory.dir("native-test-artifacts").get().asFile.absolutePath)
 }

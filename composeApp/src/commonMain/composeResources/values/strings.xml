@@ -17,13 +17,9 @@
 
     <!-- Dashboard Screen -->
     <string name="dash_source_title">Source &amp; destination</string>
-    <string name="dash_history_label">History file</string>
-    <string name="dash_history_placeholder">memories_history.json or .html</string>
     <string name="dash_output_label">Output folder</string>
     <string name="dash_output_placeholder">Choose an output folder</string>
     <string name="browse_btn">Browse</string>
-    <string name="opt_mode_zip">ZIP import</string>
-    <string name="opt_mode_legacy">Legacy (HTML/JSON)</string>
     <string name="dash_pipeline_title">Run options</string>
     <string name="opt_download_memories">Download memories</string>
     <!-- Two labels because the ZIP switch writes a location only while precise matching is on.
@@ -46,6 +42,8 @@
     <string name="lowspace_confirm">Import and delete each ZIP</string>
     <string name="lowspace_cancel">Not now</string>
     <string name="opt_combine_overlays">Combine photo and video overlays</string>
+    <!-- On-device library (mobile): the pipeline never deletes a video's originals there. -->
+    <string name="opt_combine_cleanup_helper_device">Once a photo overlay is combined and the metadata copied, the original photo and its overlay are permanently deleted. Videos always keep their originals.</string>
     <string name="opt_combine_cleanup_helper">Once an overlay is combined and the metadata copied, the original photo or video and its overlay are permanently deleted.</string>
     <string name="opt_clean_duplicates">Clean duplicate files</string>
     <string name="opt_dedupe_dry_run">Preview duplicate removal</string>
@@ -75,7 +73,7 @@
 
     <!-- Dashboard banners -->
     <string name="banner_android_preview_title">Android preview</string>
-    <string name="banner_android_preview_body">SnapVault on Android is an early preview. Importing does not work yet, so nothing will appear in your Library.</string>
+    <string name="banner_android_preview_body">ZIP imports and photo and video overlays are available in this preview. Combined videos keep their originals, because their metadata cannot be verified. Save copies to your gallery to keep them outside SnapVault’s working library.</string>
     <string name="banner_capabilities_title">Limited media support</string>
     <string name="banner_capability_image_metadata_full">Date and location metadata are written to photos.</string>
     <string name="banner_capability_image_metadata_partial">Some image metadata cannot be written on this build.</string>
@@ -158,16 +156,16 @@
     </plurals>
 
     <!-- ZIP import -->
-    <string name="zip_folder_label">Folder of ZIPs</string>
-    <string name="zip_folder_placeholder">Choose a folder</string>
-    <string name="zip_files_label">ZIP files</string>
-    <string name="zip_files_placeholder">Choose one or more ZIPs</string>
     <string name="zip_source_missing_error">Choose a ZIP folder or file before starting.</string>
+    <plurals name="zip_files_selected">
+        <item quantity="one">%1$d ZIP file selected</item>
+        <item quantity="other">%1$d ZIP files selected</item>
+    </plurals>
 
     <!-- Desktop file dialog titles -->
-    <string name="picker_history_title">Choose memories_history.json or .html</string>
+    <string name="picker_history_title">Choose Snapchat export file (ZIP, JSON, or HTML)</string>
     <string name="picker_output_title">Choose an output folder</string>
-    <string name="picker_zip_folder_title">Choose the folder that holds your Snapchat ZIPs</string>
+    <string name="picker_zip_folder_title">Choose a Snapchat export folder</string>
     <string name="picker_zip_files_title">Choose your Snapchat ZIP files</string>
     <string name="picker_zip_files_filter">ZIP archives</string>
     <string name="picker_history_filter">Snapchat history (JSON or HTML)</string>
@@ -311,9 +309,9 @@
     <!-- Step 3 -->
     <string name="onb_folders_title">Point SnapVault at the ZIPs</string>
     <string name="onb_folders_body">On the Dashboard you choose two things: the source, which is where your ZIP files are, and the output folder, where the finished library is written. There are two ways to choose the source.</string>
-    <string name="onb_folders_source_folder_title">Folder of ZIPs</string>
+    <string name="onb_folders_source_folder_title">Choose export folder</string>
     <string name="onb_folders_source_folder_body">Pick the folder and SnapVault imports every ZIP inside it. Best when you saved all of the downloads in one place.</string>
-    <string name="onb_folders_source_files_title">ZIP files</string>
+    <string name="onb_folders_source_files_title">Choose multiple ZIPs</string>
     <string name="onb_folders_source_files_body">Pick the archives themselves, and select as many as you need in one go: hold Ctrl or Shift on desktop, or tap each one on a phone. Best when they are spread across different folders.</string>
     <string name="onb_folders_space">Leave at least as much free space in the output folder as your ZIP files take up — every photo and video is written out in full before anything is cleaned up. SnapVault checks before it starts, and stops without writing anything if there is not enough room.</string>
     <string name="onb_folders_resume">You can stop a run and start it again later. Finished files are recorded, so a second run picks up where the first left off rather than starting over.</string>
@@ -434,4 +432,66 @@
         <item quantity="one">%1$d duplicate file</item>
         <item quantity="other">%1$d duplicate files</item>
     </plurals>
+    <string name="opt_keep_originals">Keep original unmerged files</string>
+    <string name="opt_combine_keep_helper">Combined copies are added alongside the original photo or video and overlay. Duplicate cleanup is controlled separately.</string>
+    <string name="source_choose_file">Choose export file</string>
+    <string name="source_choose_folder">Choose export folder</string>
+    <string name="source_choose_multiple">Choose multiple ZIPs</string>
+    <string name="source_detected_zip_folder">Detected ZIP folder — archives will be imported locally.</string>
+    <string name="source_detected_zip">Detected ZIP archive</string>
+    <string name="source_detected_history">Detected memories history — media will be downloaded from Snapchat.</string>
+    <string name="source_unsupported">Could not read a supported export. Choose a ZIP, a folder containing ZIPs or memories_history.json / .html, or a history file. The previous selection is unchanged.</string>
+    <string name="set_update_privacy">Checks GitHub for the latest stable release only when you click. No automatic checks or installations.</string>
+    <string name="set_update_check">Check for updates</string>
+    <string name="set_update_checking">Checking for updates…</string>
+    <string name="set_update_current">You are using the latest version.</string>
+    <string name="set_update_failed">Could not check for updates. Check your connection and try again.</string>
+    <string name="set_update_available">Update available: %1$s</string>
+    <string name="set_update_download">View release and downloads</string>
+    <string name="space_check">Check disk space</string>
+    <string name="space_checking">Checking disk space…</string>
+    <string name="space_estimate">Extraction needs about %1$s, plus %2$s of processing reserve. Available: %3$s.</string>
+    <string name="space_fits">The extraction estimate fits. Combined copies and retained originals may need more room; space is checked again when you start.</string>
+    <string name="space_shortfall">This import may not fit. Free space or choose another output folder. A verified archive-by-archive option may be offered when you start.</string>
+    <string name="space_unavailable">Could not estimate this source on this device. Choose a readable ZIP export and an output folder.</string>
+    <string name="map_title">Offline Memories map</string>
+    <string name="map_privacy">Pan or zoom to explore; tap a marker or choose a memory below. Locations stay on this device.</string>
+    <string name="map_empty">No mapped memories yet. Import again with precise GPS matching to save known coordinates. Missing locations are never guessed.</string>
+    <string name="map_canvas">Offline world map with memory locations</string>
+    <string name="map_zoom_in">Zoom in</string>
+    <string name="map_zoom_out">Zoom out</string>
+    <string name="map_reset">Reset view</string>
+    <string name="map_memory">%1$s — %2$s</string>
+    <string name="map_attribution">Land outlines: Natural Earth (public domain). No map tiles are downloaded.</string>
+    <string name="map_close">Close map</string>
+    <plurals name="map_count"><item quantity="one">%1$d memory with known coordinates</item><item quantity="other">%1$d memories with known coordinates</item></plurals>
+    <string name="stitch_title">Stitch split videos</string>
+    <string name="stitch_helper">Choose clips in playback order. Compatible video and audio streams are required. FFmpeg and FFprobe must be available. A new video is created; original clips are always kept.</string>
+    <string name="stitch_add">Add %1$s</string>
+    <string name="stitch_order_title">Playback order</string>
+    <string name="stitch_order">%1$d. %2$s</string>
+    <string name="stitch_up">Move up</string>
+    <string name="stitch_remove">Remove</string>
+    <string name="stitch_run">Stitch selected clips</string>
+    <string name="stitch_working">Stitching…</string>
+    <string name="stitch_cancel">Cancel stitching</string>
+    <string name="stitch_close">Close</string>
+    <string name="stitch_complete">New stitched video added to the library. Original clips were kept.</string>
+    <string name="stitch_tools_missing">Stitching needs FFmpeg and FFprobe. Install both tools and try again.</string>
+    <string name="stitch_incompatible">These clips have different video or audio streams. Choose compatible clips from the same recording.</string>
+    <string name="stitch_invalid">Choose at least two different, readable video clips and a library folder.</string>
+    <string name="stitch_failed">Could not create a verified stitched video. Originals were kept. Try another output folder or compatible clips.</string>
+    <string name="android_use_library">Use on-device library</string>
+    <string name="android_library_selected">On-device SnapVault library</string>
+    <string name="android_library_helper">Imports are processed in SnapVault’s own on-device library. Uninstalling the app removes it. Save copies to your photo library to keep them outside the app. Selected ZIP documents are streamed and kept unchanged.</string>
+    <string name="gallery_save">Save to gallery</string>
+    <string name="gallery_saving">Saving copy…</string>
+    <string name="gallery_saved">Saved to gallery</string>
+    <string name="gallery_failed">Could not save this copy. The library file is unchanged; try again.</string>
+    <string name="gallery_unsupported">Gallery export is available for supported images and videos on Android 10 or newer.</string>
+    <string name="android_library_label">Working library</string>
+    <string name="android_library_prompt">Use SnapVault’s on-device library, then choose an export on the Dashboard.</string>
+    <string name="android_library_empty">Import an export from the Dashboard to fill your on-device library.</string>
+    <string name="photos_save">Save to Apple Photos</string>
+    <string name="photos_saved">Saved to Apple Photos</string>
 </resources>

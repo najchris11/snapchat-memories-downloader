@@ -20,6 +20,15 @@ class OverlayCombineOutcomeTest {
         isVideo = false,
     )
 
+    @Test
+    fun aCapableVideoExporterAttemptsVideosButStillProtectsExistingOutputs() {
+        val video = pair.copy(isVideo = true)
+        assertEquals(null, overlayCombineSkipStatus(video, false, supportsVideo = true))
+        assertEquals(OverlayCombineStatus.SkippedVideo, overlayCombineSkipStatus(video, false))
+        assertEquals(OverlayCombineStatus.SkippedExistingOutput,
+            overlayCombineSkipStatus(video, true, supportsVideo = true))
+    }
+
     // The one that loses data if it is wrong: a failed combine leaves no output, so deleting
     // the main file would destroy the only copy of the photo.
     @Test

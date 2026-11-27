@@ -230,16 +230,15 @@ class DownloadEngineTest {
     @Test
     fun aRepeatedExportRowIsDownloadedOnceAndCommittedIntact() = runTest {
         val fs = FakeFileSystem()
-        var requests = 0
-        val client = HttpClient(MockEngine {
-            requests++
+        val server = MockEngine {
             respond("photo-bytes", headers = headersOf(HttpHeaders.ContentType, "image/jpeg"))
-        })
+        }
+        val client = HttpClient(server)
         val row = photoRow("https://media.com/photo.jpg?mid=abc-123")
 
         val results = testEngine(client, fs).downloadAll(listOf(row, row), "/output", workers = 4)
 
-        assertEquals(1, requests, "a row repeated in the export is one file, not two downloads")
+        assertEquals(1, server.requestHistory.size, "a row repeated in the export is one file, not two downloads")
         assertEquals(
             listOf(photoName),
             fs.list("/output".toPath()).map { it.name },
@@ -263,19 +262,19 @@ class DownloadEngineTest {
     @Test
     fun twoRowsWithOneIdentityButDifferentLinksDoNotSilentlyPickAWinner() = runTest {
         val fs = FakeFileSystem()
-        val served = mutableListOf<String>()
-        val client = HttpClient(MockEngine { request ->
-            served += request.url.toString()
+        val server = MockEngine { request ->
             respond(
                 "bytes-for-${request.url.parameters["v"]}",
                 headers = headersOf(HttpHeaders.ContentType, "image/jpeg"),
             )
-        })
+        }
+        val client = HttpClient(server)
         val first = photoRow("https://media.com/photo.jpg?mid=abc-123&v=1")
         val second = photoRow("https://media.com/photo.jpg?mid=abc-123&v=2")
 
         val results = testEngine(client, fs).downloadAll(listOf(first, second), "/output", workers = 4)
 
+        val served = server.requestHistory.map { it.url.toString() }
         assertEquals(1, served.size, "the conflicting row must not be fetched at all, got: $served")
         assertEquals("downloaded", results[0].status)
         assertTrue(
@@ -315,14 +314,20 @@ class DownloadEngineTest {
     }
 
     // Companion case: grouping by destination must not start collapsing distinct memories.
+    //
+    // Regression (CI flake): the request count used to be a plain `var` bumped inside the
+    // MockEngine handler. MockEngine runs handlers on its own dispatcher (Dispatchers.IO), so
+    // the three downloads' handlers ran on different threads at once and `requests++` lost
+    // updates — about 1 run in 400 counted 2 requests although all 3 files were written.
+    // The count now comes from the engine's request history, which MockEngine appends under
+    // its own lock.
     @Test
     fun rowsForDifferentMemoriesAreAllStillDownloaded() = runTest {
         val fs = FakeFileSystem()
-        var requests = 0
-        val client = HttpClient(MockEngine {
-            requests++
+        val server = MockEngine {
             respond("bytes", headers = headersOf(HttpHeaders.ContentType, "image/jpeg"))
-        })
+        }
+        val client = HttpClient(server)
         val items = listOf(
             MemoryItem(id = "aaa", url = "https://media.com/a.jpg?mid=aaa", isGet = true, dateStr = "2023-10-12 15:30:00 UTC"),
             MemoryItem(id = "bbb", url = "https://media.com/b.jpg?mid=bbb", isGet = true, dateStr = "2023-10-12 15:30:00 UTC"),
@@ -332,7 +337,7 @@ class DownloadEngineTest {
 
         val results = testEngine(client, fs).downloadAll(items, "/output", workers = 4)
 
-        assertEquals(3, requests)
+        assertEquals(3, server.requestHistory.size)
         assertEquals(listOf("downloaded", "downloaded", "downloaded"), results.map { it.status })
         assertEquals(3, fs.list("/output".toPath()).size)
     }

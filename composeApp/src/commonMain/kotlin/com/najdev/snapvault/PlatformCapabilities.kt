@@ -12,15 +12,12 @@ data class MediaCapabilities(
 expect val platformMediaCapabilities: MediaCapabilities
 
 internal val androidMediaCapabilities = MediaCapabilities(
-    // #51: AndroidZipPipelineRunner has no own plain-photo date pass; DashboardViewModel
-    // has a separate pass, but Android ZIP reading is still stubbed (#52).
+    // ExifInterface writes metadata for supported image formats.
     imageMetadata = CapabilityLevel.Partial,
-    // AndroidMediaProcessor has no video metadata writer.
     videoMetadata = CapabilityLevel.Unavailable,
-    // AndroidMediaProcessor composites photo overlays with Canvas.
     imageOverlayCombine = CapabilityLevel.Full,
-    // AndroidZipPipelineRunner deliberately skips video overlay pairs.
-    videoOverlayCombine = CapabilityLevel.Unavailable,
+    // Media3 combines supported videos and retains originals for their metadata.
+    videoOverlayCombine = CapabilityLevel.Partial,
 )
 
 internal val iosMediaCapabilities = MediaCapabilities(
@@ -30,8 +27,8 @@ internal val iosMediaCapabilities = MediaCapabilities(
     videoMetadata = CapabilityLevel.Partial,
     // IosZipPipelineRunner combines photo overlays through IosMediaProcessor (#47).
     imageOverlayCombine = CapabilityLevel.Full,
-    // IosMediaProcessor.combineVideoWithOverlay returns false.
-    videoOverlayCombine = CapabilityLevel.Unavailable,
+    // AVFoundation combines supported videos and retains originals for their metadata.
+    videoOverlayCombine = CapabilityLevel.Partial,
 )
 
 internal val desktopMediaCapabilities = MediaCapabilities(

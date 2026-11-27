@@ -27,4 +27,6 @@ data class FileMeta(
     val hasOverlay: Boolean,
     val favorited: Boolean = false,
     val combined: Boolean = false,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
 )

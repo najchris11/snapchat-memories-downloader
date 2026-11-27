@@ -5,6 +5,10 @@ import kotlinx.coroutines.CoroutineDispatcher
 expect val isAndroidBuild: Boolean
 expect val isIosBuild: Boolean
 
+// Mobile imports go into a library the app owns (Android external files, iOS Documents) rather
+// than a folder the user picks: neither platform keeps a picked folder usable as a plain path.
+expect val usesAppOwnedLibrary: Boolean
+
 // Dispatchers.IO is JVM/Native-specific and not visible from common code; this is the
 // platform's blocking-I/O dispatcher for file and process work.
 expect val ioDispatcher: CoroutineDispatcher

@@ -1,6 +1,17 @@
 pluginManagement {
     repositories {
-        google()
+        // Only Google's own plugins (AGP) live here. Unfiltered, every plugin marker -
+        // foojay, Kotlin, Compose, detekt - is looked up on dl.google.com before the
+        // portal. Gradle falls through only on a clean 404; any other error from a listed
+        // repository aborts resolution, so each extra host is another way to fail a cold
+        // build.
+        google {
+            content {
+                includeGroupByRegex("com\\.android.*")
+                includeGroupByRegex("com\\.google.*")
+                includeGroupByRegex("androidx.*")
+            }
+        }
         mavenCentral()
         gradlePluginPortal()
     }

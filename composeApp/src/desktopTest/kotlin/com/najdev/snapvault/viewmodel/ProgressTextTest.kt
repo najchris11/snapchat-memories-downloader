@@ -13,11 +13,9 @@ import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
 import io.ktor.http.headersOf
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import okio.ForwardingFileSystem
 import okio.FileSystem
@@ -60,10 +58,18 @@ class ProgressTextTest {
         writeObserver?.dispose()
     }
 
+    // sample() runs on whichever thread is doing the work: download workers stream on the IO
+    // dispatcher while the progress consumer writes state on Default, so two calls can overlap.
+    // The read-compare-append has to be one step, or both see the same last sample and the
+    // list gets a duplicate (or loses an append inside ArrayList).
+    private val seenLock = Any()
+
     private fun sample() {
         if (::viewModel.isInitialized) {
-            val text = viewModel.progressText
-            if (seen.lastOrNull() != text) seen += text
+            synchronized(seenLock) {
+                val text = viewModel.progressText
+                if (seen.lastOrNull() != text) seen += text
+            }
         }
     }
 
@@ -320,10 +326,7 @@ class ProgressTextTest {
     fun terminalStatesUsePlainWording() {
         // Cancelled and Stopping… share a path: stop a run that is hanging in the extractor.
         val started = CompletableDeferred<Unit>()
-        // Cancellation is held open until the test has looked at "Stopping…". Without this the
-        // cancel runs on another thread and can finish, and set "Cancelled", before the
-        // assertion reads the text, so the test failed on CI about one run in a few.
-        val finishCancelling = CompletableDeferred<Unit>()
+        val textWhileStopping = CompletableDeferred<String>()
         val runner = SamplingRunner(sample = ::sample)
         val hanging = object : ZipPipelineRunner by runner {
             override suspend fun extractDownloadedArchives(
@@ -335,7 +338,12 @@ class ProgressTextTest {
                 try {
                     awaitCancellation()
                 } finally {
-                    withContext(NonCancellable) { finishCancelling.await() }
+                    // Read "Stopping…" here, not on the test thread after stopSync(): the run
+                    // lives on Dispatchers.Default, so a worker can unwind the cancellation and
+                    // write "Cancelled" before the test thread looks — that raced and failed
+                    // on CI. This finally runs after stopSync() has written the text and before
+                    // the ViewModel's catch overwrites it, so the read is deterministic.
+                    textWhileStopping.complete(viewModel.progressText)
                 }
             }
         }
@@ -351,10 +359,9 @@ class ProgressTextTest {
         )
         runBlocking { withTimeout(30_000) { started.await() } }
         viewModel.stopSync()
-        assertEquals("Stopping…", viewModel.progressText)
-        finishCancelling.complete(Unit)
         awaitCompletion()
 
+        assertEquals("Stopping…", runBlocking { textWhileStopping.await() })
         assertEquals("Cancelled", viewModel.progressText)
     }
 
